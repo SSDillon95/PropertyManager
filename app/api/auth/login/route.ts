@@ -1,11 +1,6 @@
 import { jsonError, jsonOk } from "@/lib/api-helpers";
-import {
-  createSessionToken,
-  MASTER_USERNAME,
-  SESSION_COOKIE,
-  SESSION_MAX_AGE,
-  validateCredentials,
-} from "@/lib/auth";
+import { createSessionToken, SESSION_COOKIE, SESSION_MAX_AGE } from "@/lib/auth";
+import { authenticateAppUser } from "@/lib/db";
 
 export async function POST(request: Request) {
   try {
@@ -17,12 +12,16 @@ export async function POST(request: Request) {
       return jsonError("Username and password are required.", 400);
     }
 
-    if (!validateCredentials(username, password)) {
+    const user = await authenticateAppUser(username, password);
+    if (!user) {
       return jsonError("Invalid username or password.", 401);
     }
 
-    const token = await createSessionToken();
-    const response = jsonOk({ username: MASTER_USERNAME });
+    const token = await createSessionToken(user.username, user.role);
+    const response = jsonOk({
+      username: user.username,
+      role: user.role,
+    });
     response.cookies.set(SESSION_COOKIE, token, {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",

@@ -1,7 +1,7 @@
+import type { SessionUser, UserRole } from "./types";
+
 export const SESSION_COOKIE = "hop2it_session";
 export const SESSION_MAX_AGE = 60 * 60 * 24 * 7;
-export const MASTER_USERNAME = "Hop2it";
-export const MASTER_PASSWORD = "legroom";
 
 function getSecret(): string {
   return process.env.AUTH_SECRET ?? "hop2it-dev-session-secret";
@@ -31,30 +31,57 @@ async function hmacSha256(secret: string, message: string): Promise<string> {
     .join("");
 }
 
-export function validateCredentials(username: string, password: string): boolean {
-  return (
-    username.trim().toLowerCase() === MASTER_USERNAME.toLowerCase() &&
-    password === MASTER_PASSWORD
-  );
+function encodeUsername(username: string): string {
+  const bytes = new TextEncoder().encode(username);
+  let binary = "";
+  for (const byte of bytes) binary += String.fromCharCode(byte);
+  return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
 }
 
-export async function createSessionToken(): Promise<string> {
+function decodeUsername(encoded: string): string | null {
+  try {
+    const base64 = encoded.replace(/-/g, "+").replace(/_/g, "/");
+    const padded = base64 + "=".repeat((4 - (base64.length % 4)) % 4);
+    const binary = atob(padded);
+    const bytes = Uint8Array.from(binary, (char) => char.charCodeAt(0));
+    return new TextDecoder().decode(bytes);
+  } catch {
+    return null;
+  }
+}
+
+function sessionPayload(username: string, role: UserRole, expires: number): string {
+  return `hop2it:${encodeUsername(username)}:${role}:${expires}`;
+}
+
+export async function createSessionToken(username: string, role: UserRole): Promise<string> {
   const expires = Date.now() + SESSION_MAX_AGE * 1000;
-  const payload = `hop2it:${expires}`;
+  const payload = sessionPayload(username, role, expires);
   const signature = await hmacSha256(getSecret(), payload);
-  return `${expires}.${signature}`;
+  return `${expires}.${encodeUsername(username)}.${role}.${signature}`;
+}
+
+export async function parseSessionToken(token: string | undefined): Promise<SessionUser | null> {
+  if (!token) return null;
+
+  const parts = token.split(".");
+  if (parts.length !== 4) return null;
+
+  const [expiresStr, usernameEncoded, rolePart, signature] = parts;
+  const expires = Number(expiresStr);
+  if (!Number.isFinite(expires) || Date.now() > expires) return null;
+  if (rolePart !== "admin" && rolePart !== "standard") return null;
+
+  const username = decodeUsername(usernameEncoded);
+  if (!username) return null;
+
+  const payload = sessionPayload(username, rolePart, expires);
+  const expected = await hmacSha256(getSecret(), payload);
+  if (!safeEqual(signature, expected)) return null;
+
+  return { username, role: rolePart };
 }
 
 export async function verifySessionToken(token: string | undefined): Promise<boolean> {
-  if (!token) return false;
-
-  const [expiresStr, signature] = token.split(".");
-  if (!expiresStr || !signature) return false;
-
-  const expires = Number(expiresStr);
-  if (!Number.isFinite(expires) || Date.now() > expires) return false;
-
-  const payload = `hop2it:${expires}`;
-  const expected = await hmacSha256(getSecret(), payload);
-  return safeEqual(signature, expected);
+  return (await parseSessionToken(token)) != null;
 }

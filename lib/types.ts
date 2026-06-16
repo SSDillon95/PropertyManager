@@ -10,7 +10,23 @@ export type SheetTab =
   | "communication"
   | "investors"
   | "investor_payout"
-  | "reports";
+  | "reports"
+  | "users";
+
+export type UserRole = "admin" | "standard";
+
+export interface SessionUser {
+  username: string;
+  role: UserRole;
+}
+
+export interface AppUser {
+  id: number;
+  username: string;
+  role: UserRole;
+  status: string;
+  created_at: string;
+}
 
 export interface Business {
   id: number;

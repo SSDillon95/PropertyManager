@@ -14,6 +14,7 @@ import type {
   ReportKind,
   VendorPayoutReport,
 } from "@/lib/reports";
+import { requireAdminOrForbidden } from "@/lib/session";
 import type { InvestorPayout } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
@@ -70,6 +71,8 @@ const BUILDERS: Record<
 };
 
 export async function POST(request: Request) {
+  const forbidden = await requireAdminOrForbidden();
+  if (forbidden) return forbidden;
   try {
     const body = (await request.json()) as PdfRequest;
     const builder = BUILDERS[body.kind];

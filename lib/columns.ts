@@ -29,6 +29,7 @@ export const MANAGEMENT_TABS: { id: SheetTab; label: string }[] = [
 export const SETTINGS_TABS: { id: SheetTab; label: string }[] = [
   { id: "businesses", label: "Business" },
   { id: "investors", label: "Investor" },
+  { id: "users", label: "User Setup" },
 ];
 
 export const NAV_TABS_BEFORE_MANAGEMENT: { id: SheetTab; label: string }[] = [
@@ -54,7 +55,9 @@ export function isManagementTab(tab: SheetTab): boolean {
 }
 
 export function isSettingsTab(tab: SheetTab): boolean {
-  return SETTINGS_TABS.some((item) => item.id === tab);
+  return (
+    tab === "businesses" || tab === "investors" || tab === "users"
+  );
 }
 
 export const BUSINESS_COLUMNS: ColumnDef[] = [
@@ -345,6 +348,26 @@ export const INVESTOR_PAYOUT_COLUMNS: ColumnDef[] = [
   { key: "notes", label: "Notes", type: "text", width: "200px" },
 ];
 
+export const USER_COLUMNS: ColumnDef[] = [
+  { key: "username", label: "Username", type: "text", required: true, width: "160px" },
+  {
+    key: "role",
+    label: "Role",
+    type: "select",
+    options: ["Admin", "Standard"],
+    required: true,
+    width: "120px",
+  },
+  {
+    key: "status",
+    label: "Status",
+    type: "select",
+    options: ["Active", "Inactive"],
+    required: true,
+    width: "110px",
+  },
+];
+
 export function getColumnsForTab(tab: SheetTab): ColumnDef[] {
   switch (tab) {
     case "businesses":
@@ -365,6 +388,8 @@ export function getColumnsForTab(tab: SheetTab): ColumnDef[] {
       return INVESTOR_COLUMNS;
     case "investor_payout":
       return INVESTOR_PAYOUT_COLUMNS;
+    case "users":
+      return USER_COLUMNS;
     default:
       return [];
   }

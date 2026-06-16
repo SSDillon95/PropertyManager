@@ -1,4 +1,6 @@
+import { hashPassword, verifyPassword } from "./password";
 import type {
+  AppUser,
   Business,
   DashboardSummary,
   Expense,
@@ -10,6 +12,7 @@ import type {
   RentPayment,
   SmsMessage,
   Tenant,
+  UserRole,
 } from "./types";
 
 function getPostgresUrl(): string | undefined {
@@ -232,6 +235,15 @@ const SQLITE_SCHEMA = `
     related_id INTEGER,
     related_type TEXT,
     error_message TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+
+  CREATE TABLE IF NOT EXISTS app_users (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    username TEXT NOT NULL UNIQUE COLLATE NOCASE,
+    password_hash TEXT NOT NULL,
+    role TEXT NOT NULL DEFAULT 'standard',
+    status TEXT NOT NULL DEFAULT 'Active',
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
   );
 `;
@@ -482,6 +494,17 @@ async function initSchema(): Promise<void> {
         created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
       )
     `;
+    await sql`
+      CREATE TABLE IF NOT EXISTS app_users (
+        id SERIAL PRIMARY KEY,
+        username TEXT NOT NULL UNIQUE,
+        password_hash TEXT NOT NULL,
+        role TEXT NOT NULL DEFAULT 'standard',
+        status TEXT NOT NULL DEFAULT 'Active',
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `;
+    await ensureDefaultAdmin();
     return;
   }
 
@@ -561,7 +584,23 @@ async function initSchema(): Promise<void> {
       )
     `);
   }
+  const usersTable = db
+    .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='app_users'")
+    .get();
+  if (!usersTable) {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS app_users (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        username TEXT NOT NULL UNIQUE COLLATE NOCASE,
+        password_hash TEXT NOT NULL,
+        role TEXT NOT NULL DEFAULT 'standard',
+        status TEXT NOT NULL DEFAULT 'Active',
+        created_at TEXT NOT NULL DEFAULT (datetime('now'))
+      )
+    `);
+  }
   db.close();
+  await ensureDefaultAdmin();
 }
 
 async function getSqliteDb() {
@@ -2070,5 +2109,236 @@ export async function getDashboardSummary(): Promise<DashboardSummary> {
     monthly_rent_collected,
     open_maintenance,
     monthly_expenses,
+  };
+}
+
+function normalizeUserRole(role: string): UserRole {
+  return role.trim().toLowerCase() === "admin" ? "admin" : "standard";
+}
+
+function roleLabel(role: UserRole): string {
+  return role === "admin" ? "Admin" : "Standard";
+}
+
+function mapAppUser(row: Record<string, unknown>): AppUser {
+  const role = normalizeUserRole(String(row.role ?? "standard"));
+  return {
+    id: Number(row.id),
+    username: String(row.username),
+    role,
+    status: String(row.status ?? "Active"),
+    created_at: String(row.created_at),
+  };
+}
+
+export async function ensureDefaultAdmin(): Promise<void> {
+  const existing = await getAppUserByUsername("Hop2it");
+  if (existing) return;
+  await createAppUser({
+    username: "Hop2it",
+    password: "legroom",
+    role: "admin",
+    status: "Active",
+  });
+}
+
+export async function listAppUsers(): Promise<AppUser[]> {
+  await ensureSchema();
+  if (usePostgres) {
+    const sql = await getPostgresSql();
+    const rows = await sql`SELECT id, username, role, status, created_at FROM app_users ORDER BY username`;
+    return rows.map((r) => mapAppUser(r as Record<string, unknown>));
+  }
+  const db = await getSqliteDb();
+  const rows = db
+    .prepare("SELECT id, username, role, status, created_at FROM app_users ORDER BY username")
+    .all();
+  db.close();
+  return rows.map((r) => mapAppUser(r as Record<string, unknown>));
+}
+
+export async function getAppUserByUsername(username: string): Promise<AppUser | null> {
+  await ensureSchema();
+  if (usePostgres) {
+    const sql = await getPostgresSql();
+    const rows = await sql`
+      SELECT id, username, role, status, created_at
+      FROM app_users
+      WHERE LOWER(username) = LOWER(${username})
+      LIMIT 1
+    `;
+    if (!rows[0]) return null;
+    return mapAppUser(rows[0] as Record<string, unknown>);
+  }
+  const db = await getSqliteDb();
+  const row = db
+    .prepare(
+      "SELECT id, username, role, status, created_at FROM app_users WHERE username = ? COLLATE NOCASE"
+    )
+    .get(username);
+  db.close();
+  return row ? mapAppUser(row as Record<string, unknown>) : null;
+}
+
+async function getAppUserPasswordHash(username: string): Promise<string | null> {
+  await ensureSchema();
+  if (usePostgres) {
+    const sql = await getPostgresSql();
+    const rows = await sql`
+      SELECT password_hash FROM app_users WHERE LOWER(username) = LOWER(${username}) LIMIT 1
+    `;
+    return rows[0] ? String((rows[0] as Record<string, unknown>).password_hash) : null;
+  }
+  const db = await getSqliteDb();
+  const row = db
+    .prepare("SELECT password_hash FROM app_users WHERE username = ? COLLATE NOCASE")
+    .get(username) as { password_hash: string } | undefined;
+  db.close();
+  return row?.password_hash ?? null;
+}
+
+export async function authenticateAppUser(
+  username: string,
+  password: string
+): Promise<AppUser | null> {
+  const user = await getAppUserByUsername(username);
+  if (!user || user.status !== "Active") return null;
+  const hash = await getAppUserPasswordHash(user.username);
+  if (!hash || !(await verifyPassword(password, hash))) return null;
+  return user;
+}
+
+export async function createAppUser(input: {
+  username: string;
+  password: string;
+  role: UserRole | string;
+  status?: string;
+}): Promise<AppUser> {
+  await ensureSchema();
+  const username = input.username.trim();
+  if (!username) throw new Error("Username is required.");
+  if (!input.password) throw new Error("Password is required.");
+  const passwordHash = await hashPassword(input.password);
+  const role = normalizeUserRole(String(input.role));
+  const status = input.status?.trim() || "Active";
+
+  if (usePostgres) {
+    const sql = await getPostgresSql();
+    const rows = await sql`
+      INSERT INTO app_users (username, password_hash, role, status)
+      VALUES (${username}, ${passwordHash}, ${role}, ${status})
+      RETURNING id, username, role, status, created_at
+    `;
+    return mapAppUser(rows[0] as Record<string, unknown>);
+  }
+
+  const db = await getSqliteDb();
+  try {
+    const row = db
+      .prepare(
+        `INSERT INTO app_users (username, password_hash, role, status)
+         VALUES (@username, @password_hash, @role, @status)
+         RETURNING id, username, role, status, created_at`
+      )
+      .get({
+        username,
+        password_hash: passwordHash,
+        role,
+        status,
+      });
+    db.close();
+    return mapAppUser(row as Record<string, unknown>);
+  } catch (error) {
+    db.close();
+    if (String(error).includes("UNIQUE")) throw new Error("Username already exists.");
+    throw error;
+  }
+}
+
+export async function updateAppUser(
+  id: number,
+  input: {
+    username: string;
+    role: UserRole | string;
+    status: string;
+    password?: string;
+  }
+): Promise<AppUser> {
+  await ensureSchema();
+  const username = input.username.trim();
+  if (!username) throw new Error("Username is required.");
+  const role = normalizeUserRole(String(input.role));
+  const status = input.status.trim() || "Active";
+  const passwordHash = input.password?.trim()
+    ? await hashPassword(input.password)
+    : null;
+
+  if (usePostgres) {
+    const sql = await getPostgresSql();
+    const rows = passwordHash
+      ? await sql`
+          UPDATE app_users
+          SET username = ${username}, role = ${role}, status = ${status}, password_hash = ${passwordHash}
+          WHERE id = ${id}
+          RETURNING id, username, role, status, created_at
+        `
+      : await sql`
+          UPDATE app_users
+          SET username = ${username}, role = ${role}, status = ${status}
+          WHERE id = ${id}
+          RETURNING id, username, role, status, created_at
+        `;
+    if (!rows[0]) throw new Error("User not found.");
+    return mapAppUser(rows[0] as Record<string, unknown>);
+  }
+
+  const db = await getSqliteDb();
+  const row = passwordHash
+    ? db
+        .prepare(
+          `UPDATE app_users
+           SET username = @username, role = @role, status = @status, password_hash = @password_hash
+           WHERE id = @id
+           RETURNING id, username, role, status, created_at`
+        )
+        .get({ id, username, role, status, password_hash: passwordHash })
+    : db
+        .prepare(
+          `UPDATE app_users
+           SET username = @username, role = @role, status = @status
+           WHERE id = @id
+           RETURNING id, username, role, status, created_at`
+        )
+        .get({ id, username, role, status });
+  db.close();
+  if (!row) throw new Error("User not found.");
+  return mapAppUser(row as Record<string, unknown>);
+}
+
+export async function deactivateAppUser(id: number): Promise<void> {
+  await ensureSchema();
+  if (usePostgres) {
+    const sql = await getPostgresSql();
+    const rows = await sql`
+      UPDATE app_users SET status = 'Inactive' WHERE id = ${id} RETURNING id
+    `;
+    if (!rows[0]) throw new Error("User not found.");
+    return;
+  }
+  const db = await getSqliteDb();
+  const row = db
+    .prepare("UPDATE app_users SET status = 'Inactive' WHERE id = ? RETURNING id")
+    .get(id);
+  db.close();
+  if (!row) throw new Error("User not found.");
+}
+
+export function appUserToRow(user: AppUser): Record<string, unknown> {
+  return {
+    id: user.id,
+    username: user.username,
+    role: roleLabel(user.role),
+    status: user.status,
+    created_at: user.created_at,
   };
 }

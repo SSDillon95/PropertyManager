@@ -12,15 +12,20 @@ import {
   parseArchivedParam,
   parseIdParam,
 } from "@/lib/api-helpers";
+import { requireAdminOrForbidden } from "@/lib/session";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(request: Request) {
+  const forbidden = await requireAdminOrForbidden();
+  if (forbidden) return forbidden;
   const archived = parseArchivedParam(request);
   return handleRoute(() => listInvestors(archived));
 }
 
 export async function POST(request: Request) {
+  const forbidden = await requireAdminOrForbidden();
+  if (forbidden) return forbidden;
   try {
     const body = await request.json();
     if (!body.investor_id || !body.investor_name) {
@@ -52,6 +57,8 @@ export async function POST(request: Request) {
 }
 
 export async function PUT(request: Request) {
+  const forbidden = await requireAdminOrForbidden();
+  if (forbidden) return forbidden;
   try {
     const id = parseIdParam(request);
     if (!id) return jsonError("Investor id is required.");
@@ -85,6 +92,8 @@ export async function PUT(request: Request) {
 }
 
 export async function DELETE(request: Request) {
+  const forbidden = await requireAdminOrForbidden();
+  if (forbidden) return forbidden;
   try {
     const id = parseIdParam(request);
     if (!id) return jsonError("Investor id is required.");
@@ -96,6 +105,8 @@ export async function DELETE(request: Request) {
 }
 
 export async function PATCH(request: Request) {
+  const forbidden = await requireAdminOrForbidden();
+  if (forbidden) return forbidden;
   try {
     const id = parseIdParam(request);
     if (!id) return jsonError("Investor id is required.");

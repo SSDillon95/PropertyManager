@@ -13,6 +13,7 @@ import {
   parseIdParam,
 } from "@/lib/api-helpers";
 import { loanSummaryFromPayout } from "@/lib/investor-payout-summary";
+import { requireAdminOrForbidden } from "@/lib/session";
 import type { InvestorPayout } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
@@ -83,11 +84,15 @@ function parsePayoutBody(
 }
 
 export async function GET(request: Request) {
+  const forbidden = await requireAdminOrForbidden();
+  if (forbidden) return forbidden;
   const archived = parseArchivedParam(request);
   return handleRoute(() => listInvestorPayouts(archived));
 }
 
 export async function POST(request: Request) {
+  const forbidden = await requireAdminOrForbidden();
+  if (forbidden) return forbidden;
   try {
     const body = await request.json();
     if (!body.payout_id || !body.date || !body.property_name || !body.investor_name || !body.payout_type) {
@@ -101,6 +106,8 @@ export async function POST(request: Request) {
 }
 
 export async function PUT(request: Request) {
+  const forbidden = await requireAdminOrForbidden();
+  if (forbidden) return forbidden;
   try {
     const id = parseIdParam(request);
     if (!id) return jsonError("Investor payout id is required.");
@@ -116,6 +123,8 @@ export async function PUT(request: Request) {
 }
 
 export async function DELETE(request: Request) {
+  const forbidden = await requireAdminOrForbidden();
+  if (forbidden) return forbidden;
   try {
     const id = parseIdParam(request);
     if (!id) return jsonError("Investor payout id is required.");
@@ -127,6 +136,8 @@ export async function DELETE(request: Request) {
 }
 
 export async function PATCH(request: Request) {
+  const forbidden = await requireAdminOrForbidden();
+  if (forbidden) return forbidden;
   try {
     const id = parseIdParam(request);
     if (!id) return jsonError("Investor payout id is required.");

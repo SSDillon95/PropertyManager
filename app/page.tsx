@@ -13,12 +13,15 @@ import {
   isManagementTab,
   isSettingsTab,
   MANAGEMENT_TABS,
-  NAV_TABS_AFTER_MANAGEMENT,
   NAV_TABS_BEFORE_MANAGEMENT,
-  SETTINGS_TABS,
   SHEET_TABS,
   type ColumnDef,
 } from "@/lib/columns";
+import {
+  canAccessTab,
+  navTabsAfterManagementForRole,
+  settingsTabsForRole,
+} from "@/lib/permissions";
 import { formatCurrency, todayIso } from "@/lib/format";
 import { requestReportPdf } from "@/lib/pdf-client";
 import { propertyProfitability } from "@/lib/profitability";
@@ -33,6 +36,7 @@ import type {
   MaintenanceRecord,
   Property,
   RentPayment,
+  SessionUser,
   SheetTab,
   Tenant,
 } from "@/lib/types";
@@ -53,6 +57,7 @@ const API_MAP: Record<DataTab, string> = {
   maintenance: "/api/maintenance",
   investors: "/api/investors",
   investor_payout: "/api/investor-payouts",
+  users: "/api/users",
 };
 
 function emptyForm(columns: ColumnDef[]): Record<string, string> {
@@ -143,6 +148,17 @@ export default function PropertyManagerApp() {
   const [investorPayoutRows, setInvestorPayoutRows] = useState<InvestorPayout[]>([]);
   const [profitabilityProperty, setProfitabilityProperty] = useState<Property | null>(null);
   const [expandedProperty, setExpandedProperty] = useState<Property | null>(null);
+  const [sessionUser, setSessionUser] = useState<SessionUser | null>(null);
+
+  const userRole = sessionUser?.role ?? "standard";
+  const visibleSettingsTabs = useMemo(
+    () => settingsTabsForRole(userRole),
+    [userRole]
+  );
+  const visibleNavAfterManagement = useMemo(
+    () => navTabsAfterManagementForRole(userRole),
+    [userRole]
+  );
 
   const columns = useMemo(() => getColumnsForTab(tab), [tab]);
   const investorPayoutFormSummary = useMemo(() => {
@@ -196,6 +212,12 @@ export default function PropertyManagerApp() {
     setMessage({ type, text });
     setTimeout(() => setMessage(null), 4000);
   };
+
+  const loadSession = useCallback(async () => {
+    const res = await apiFetch("/api/auth/me");
+    const json = await res.json();
+    if (json.success) setSessionUser(json.data);
+  }, []);
 
   const loadDashboard = useCallback(async () => {
     const res = await apiFetch("/api/summary");
@@ -387,17 +409,29 @@ export default function PropertyManagerApp() {
   const refresh = useCallback(async () => {
     setLoading(true);
     try {
+      await loadSession();
       await Promise.all([loadDashboard(), loadTabData(tab, showArchived)]);
     } catch {
       showMessage("error", "Failed to load data.");
     } finally {
       setLoading(false);
     }
-  }, [loadDashboard, loadTabData, tab, showArchived]);
+  }, [loadDashboard, loadSession, loadTabData, tab, showArchived]);
 
   useEffect(() => {
     refresh();
   }, [refresh]);
+
+  useEffect(() => {
+    if (!sessionUser) return;
+    if (!canAccessTab(sessionUser.role, tab)) {
+      setTab("dashboard");
+      setLoading(true);
+      loadTabData("dashboard", false)
+        .then(() => loadDashboard())
+        .finally(() => setLoading(false));
+    }
+  }, [sessionUser, tab, loadDashboard, loadTabData]);
 
   const updateManagementMenuPosition = useCallback(() => {
     if (!managementButtonRef.current) return;
@@ -523,18 +557,25 @@ export default function PropertyManagerApp() {
     setEditingId(null);
     const nextForm = emptyForm(columns);
     if (tab === "investor_payout") nextForm.days_in_year = "365";
+    if (tab === "users") nextForm.password = "";
     setForm(nextForm);
     setFormOpen(true);
   };
 
   const openEditForm = (row: Record<string, unknown>) => {
     setEditingId(Number(row.id));
-    setForm(rowToForm(row, columns));
+    const nextForm = rowToForm(row, columns);
+    if (tab === "users") nextForm.password = "";
+    setForm(nextForm);
     setFormOpen(true);
     setExpandedProperty(null);
   };
 
   const handleTabChange = async (next: SheetTab) => {
+    if (!canAccessTab(userRole, next)) {
+      showMessage("error", "You do not have access to that section.");
+      return;
+    }
     setShowArchived(false);
     setFormOpen(false);
     setExpandedProperty(null);
@@ -579,10 +620,19 @@ export default function PropertyManagerApp() {
       const endpoint = API_MAP[tab];
       const isEdit = editingId != null;
       const url = isEdit ? `${endpoint}?id=${editingId}` : endpoint;
+      let payload: Record<string, unknown> = payloadFromForm(form, columns);
+      if (tab === "users") {
+        if (!isEdit && !form.password?.trim()) {
+          showMessage("error", "Password is required for new users.");
+          setSaving(false);
+          return;
+        }
+        if (form.password?.trim()) payload.password = form.password.trim();
+      }
       const res = await apiFetch(url, {
         method: isEdit ? "PUT" : "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payloadFromForm(form, columns)),
+        body: JSON.stringify(payload),
       });
       const json = await res.json();
       if (!json.success) throw new Error(json.error || "Save failed");
@@ -799,7 +849,7 @@ export default function PropertyManagerApp() {
                 ▼
               </span>
             </button>
-            {NAV_TABS_AFTER_MANAGEMENT.map((sheet) => (
+            {visibleNavAfterManagement.map((sheet) => (
               <button
                 key={sheet.id}
                 type="button"
@@ -885,7 +935,7 @@ export default function PropertyManagerApp() {
             left: settingsMenuPosition.left,
           }}
         >
-          {SETTINGS_TABS.map((sheet) => (
+          {visibleSettingsTabs.map((sheet) => (
             <button
               key={sheet.id}
               type="button"
@@ -962,6 +1012,12 @@ export default function PropertyManagerApp() {
                       Selecting a property auto-fills address and investor. Enter loan amount,
                       12-month rate (e.g. 0.12 = 12%), loan date, and sell estimate — payout
                       amount is calculated automatically.
+                    </p>
+                  )}
+                  {tab === "users" && (
+                    <p className="text-xs text-zinc-400 mt-1">
+                      Create admin or standard users. Standard users cannot access Investor,
+                      Investor Payout, or Reports.
                     </p>
                   )}
                 </div>
@@ -1105,6 +1161,24 @@ export default function PropertyManagerApp() {
                       )}
                     </label>
                   ))}
+                  {tab === "users" && (
+                    <label className="block">
+                      <span className="text-xs font-semibold uppercase tracking-wide text-amber-400 mb-1 block">
+                        Password{editingId ? "" : " *"}
+                      </span>
+                      <input
+                        type="password"
+                        value={form.password ?? ""}
+                        onChange={(e) =>
+                          setForm((prev) => ({ ...prev, password: e.target.value }))
+                        }
+                        className="form-field"
+                        placeholder={editingId ? "Leave blank to keep current password" : "Enter password"}
+                        required={!editingId}
+                        autoComplete="new-password"
+                      />
+                    </label>
+                  )}
                 </div>
                 <button
                   type="submit"
@@ -1166,17 +1240,19 @@ export default function PropertyManagerApp() {
                       Add Row
                     </button>
                   )}
-                  <button
-                    type="button"
-                    onClick={toggleArchiveView}
-                    className={`text-xs px-3 py-1.5 rounded-lg border ${
-                      showArchived
-                        ? "border-emerald-600/60 bg-emerald-950/40 text-emerald-300 hover:bg-emerald-900/50"
-                        : "border-zinc-600 bg-zinc-700/80 text-zinc-200 hover:bg-zinc-700"
-                    }`}
-                  >
-                    {showArchived ? "Back to Active" : "View Archive"}
-                  </button>
+                  {tab !== "users" && (
+                    <button
+                      type="button"
+                      onClick={toggleArchiveView}
+                      className={`text-xs px-3 py-1.5 rounded-lg border ${
+                        showArchived
+                          ? "border-emerald-600/60 bg-emerald-950/40 text-emerald-300 hover:bg-emerald-900/50"
+                          : "border-zinc-600 bg-zinc-700/80 text-zinc-200 hover:bg-zinc-700"
+                      }`}
+                    >
+                      {showArchived ? "Back to Active" : "View Archive"}
+                    </button>
+                  )}
                 </div>
               </div>
               {tab === "properties" && expandedProperty && (
