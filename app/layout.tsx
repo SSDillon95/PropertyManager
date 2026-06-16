@@ -17,7 +17,7 @@ export const metadata: Metadata = {
   description:
     "HOP2IT rental property management with spreadsheet-format tabs for properties, tenants, leases, rent, expenses, and maintenance.",
   icons: {
-    icon: "/hop2it-logo.jpg",
+    icon: "/hop2it-logo.png",
   },
 };
 

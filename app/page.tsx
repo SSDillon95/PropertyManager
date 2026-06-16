@@ -257,10 +257,10 @@ export default function PropertyManagerApp() {
         <div className="max-w-[1600px] mx-auto px-4 sm:px-6 py-3 min-h-[9rem] sm:min-h-[11rem] flex items-center justify-between gap-4">
           <div className="flex items-center min-w-0">
             <Image
-              src="/hop2it-logo.jpg"
+              src="/hop2it-logo.png"
               alt="HOP2IT Property Manager"
-              width={660}
-              height={168}
+              width={800}
+              height={300}
               className="h-[7.5rem] sm:h-[9rem] w-auto object-contain"
               priority
             />
