@@ -547,29 +547,6 @@ export default function PropertyManagerApp() {
       return;
     }
     const business = businesses.find((item) => item.business_name === businessName);
-    const businessProperties = properties.filter(
-      (property) => property.business_name === businessName
-    );
-    if (businessProperties.length === 1) {
-      const property = businessProperties[0];
-      const propertyAddress = [property.address, property.city, property.state, property.zip]
-        .filter(Boolean)
-        .join(", ");
-      const linkedInvestor = investors.find(
-        (investor) =>
-          investor.property_name === property.property_name &&
-          investor.status === "Active"
-      );
-      setForm((prev) => ({
-        ...prev,
-        business_name: businessName,
-        business_address: business ? formatBusinessAddress(business) : "",
-        property_name: property.property_name,
-        property_address: propertyAddress,
-        investor_name: linkedInvestor?.investor_name ?? "",
-      }));
-      return;
-    }
     setForm((prev) => ({
       ...prev,
       business_name: businessName,
