@@ -13,9 +13,12 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "PropertyManager",
+  title: "HOP2IT Property Manager",
   description:
-    "Rental property management app with spreadsheet-format tabs for properties, tenants, leases, rent, expenses, and maintenance.",
+    "HOP2IT rental property management with spreadsheet-format tabs for properties, tenants, leases, rent, expenses, and maintenance.",
+  icons: {
+    icon: "/hop2it-logo.jpg",
+  },
 };
 
 export default function RootLayout({

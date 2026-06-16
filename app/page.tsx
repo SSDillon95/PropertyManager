@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import SpreadsheetTable from "@/components/SpreadsheetTable";
 import { getColumnsForTab, SHEET_TABS, type ColumnDef } from "@/lib/columns";
@@ -254,26 +255,15 @@ export default function PropertyManagerApp() {
     <div className="min-h-screen bg-zinc-950 text-white font-sans flex flex-col">
       <header className="border-b border-white/10 bg-zinc-950/95 backdrop-blur sticky top-0 z-50">
         <div className="max-w-[1600px] mx-auto px-4 sm:px-6 h-16 flex items-center justify-between gap-4">
-          <div className="flex items-center gap-3 min-w-0">
-            <svg width="36" height="36" viewBox="0 0 36 36" className="flex-shrink-0" aria-hidden>
-              <rect width="36" height="36" rx="8" fill="#0a0a0a" stroke="#3b82f6" strokeWidth="1.5" />
-              <path
-                d="M18 8 L28 16 L28 28 L8 28 L8 16 Z"
-                fill="none"
-                stroke="#3b82f6"
-                strokeWidth="2"
-                strokeLinejoin="round"
-              />
-              <rect x="14" y="20" width="8" height="8" fill="#3b82f6" opacity="0.4" />
-            </svg>
-            <div className="min-w-0">
-              <div className="font-semibold text-xl sm:text-2xl tracking-tighter truncate">
-                PropertyManager
-              </div>
-              <div className="text-[10px] text-blue-400 -mt-1 hidden sm:block">
-                RENTAL PROPERTY SPREADSHEET
-              </div>
-            </div>
+          <div className="flex items-center min-w-0">
+            <Image
+              src="/hop2it-logo.jpg"
+              alt="HOP2IT Property Manager"
+              width={220}
+              height={56}
+              className="h-10 sm:h-12 w-auto object-contain"
+              priority
+            />
           </div>
           <div className="flex items-center gap-2">
             {tab !== "dashboard" && rows.length > 0 && (
@@ -463,8 +453,8 @@ export default function PropertyManagerApp() {
       </main>
 
       <footer className="border-t border-white/10 py-4 text-center text-xs text-zinc-600">
-        PropertyManager — spreadsheet-format tabs: Properties, Tenants, Leases, Rent Ledger,
-        Expenses, Maintenance
+        HOP2IT Property Manager — Properties, Tenants, Leases, Rent Ledger, Expenses,
+        Maintenance
       </footer>
     </div>
   );
