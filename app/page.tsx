@@ -108,6 +108,9 @@ export default function PropertyManagerApp() {
     if (activeTab === "rent_ledger") {
       await Promise.all([loadProperties(), loadTenants(), loadLeases()]);
     }
+    if (activeTab === "expenses") {
+      await loadProperties();
+    }
     const endpoint = API_MAP[activeTab];
     const res = await fetch(endpoint);
     const json = await res.json();

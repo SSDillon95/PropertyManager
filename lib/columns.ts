@@ -136,7 +136,7 @@ export const RENT_LEDGER_COLUMNS: ColumnDef[] = [
 
 export const EXPENSE_COLUMNS: ColumnDef[] = [
   { key: "date", label: "Date", type: "date", required: true, width: "110px" },
-  { key: "property_name", label: "Property", type: "text", required: true, width: "150px" },
+  { key: "property_name", label: "Property", type: "property", required: true, width: "150px" },
   {
     key: "category",
     label: "Category",
