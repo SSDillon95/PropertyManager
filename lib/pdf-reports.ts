@@ -31,8 +31,7 @@ function logoDisplayHeight(): number {
   return LOGO_WIDTH * (logoNaturalHeight / logoNaturalWidth);
 }
 
-function recolorWhiteToGreen(imageData: ImageData): void {
-  const { data } = imageData;
+function recolorWhiteToGreenPixels(data: Uint8ClampedArray): void {
   for (let i = 0; i < data.length; i += 4) {
     const r = data[i];
     const g = data[i + 1];
@@ -70,17 +69,38 @@ async function loadLogoFromBrowser(): Promise<string> {
 
   ctx.drawImage(img, 0, 0);
   const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-  recolorWhiteToGreen(imageData);
+  recolorWhiteToGreenPixels(imageData.data);
   ctx.putImageData(imageData, 0, 0);
 
   return canvas.toDataURL("image/png");
 }
 
 async function loadLogoFromServer(): Promise<string> {
-  const { readFileSync } = await import("fs");
   const { join } = await import("path");
-  const buffer = readFileSync(join(process.cwd(), "public", "hop2it-logo.png"));
-  return `data:image/png;base64,${buffer.toString("base64")}`;
+  const sharp = (await import("sharp")).default;
+  const logoPath = join(process.cwd(), "public", "hop2it-logo.png");
+  const { data, info } = await sharp(logoPath)
+    .ensureAlpha()
+    .raw()
+    .toBuffer({ resolveWithObject: true });
+
+  logoNaturalWidth = info.width;
+  logoNaturalHeight = info.height;
+
+  const pixels = new Uint8ClampedArray(data.buffer, data.byteOffset, data.byteLength);
+  recolorWhiteToGreenPixels(pixels);
+
+  const processed = await sharp(Buffer.from(pixels), {
+    raw: {
+      width: info.width,
+      height: info.height,
+      channels: info.channels,
+    },
+  })
+    .png()
+    .toBuffer();
+
+  return `data:image/png;base64,${processed.toString("base64")}`;
 }
 
 async function loadLogoDataUrl(): Promise<string> {
