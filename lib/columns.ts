@@ -173,7 +173,7 @@ export const EXPENSE_COLUMNS: ColumnDef[] = [
 
 export const MAINTENANCE_COLUMNS: ColumnDef[] = [
   { key: "date_reported", label: "Date Reported", type: "date", required: true, width: "120px" },
-  { key: "property_name", label: "Property", type: "text", required: true, width: "150px" },
+  { key: "property_name", label: "Property", type: "property", required: true, width: "150px" },
   { key: "unit", label: "Unit", type: "text", width: "80px" },
   {
     key: "category",
