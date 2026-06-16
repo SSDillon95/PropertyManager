@@ -1,7 +1,9 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import InvestorPayoutSummaryPanel from "@/components/InvestorPayoutSummaryPanel";
 import { formatCurrency } from "@/lib/format";
+import { formatMoneyPrecise } from "@/lib/investor-payout-summary";
 import { requestReportPdf } from "@/lib/pdf-client";
 import {
   buildExpenseReport,
@@ -413,6 +415,39 @@ export default function ReportsView({
                 </table>
               </div>
             )}
+          </div>
+        )}
+
+        {reportKind === "investor_payout" && investorPayoutReport.loanSummaries.length > 0 && (
+          <div className="mt-6 space-y-4">
+            <h3 className="text-sm font-semibold text-emerald-300">
+              Payout Calculator Summary
+            </h3>
+            {investorPayoutReport.loanSummaries.map((summary, index) => (
+              <InvestorPayoutSummaryPanel
+                key={`${summary.investor_name}-${summary.loan_date}-${index}`}
+                input={{
+                  property_address: summary.property_address,
+                  loan_date: summary.loan_date,
+                  sell_estimate_date: summary.sell_estimate_date,
+                  investor_name: summary.investor_name,
+                  attorney: summary.attorney,
+                  amount_loaned: summary.amount_loaned,
+                  annual_interest_rate: summary.annual_interest_rate,
+                  kicker: summary.kicker,
+                  days_in_year: summary.days_in_year,
+                }}
+                title={`${summary.investor_name || "Investor"} · ${summary.property_address || "Property"}`}
+              />
+            ))}
+            <div className="rounded-lg border border-emerald-700/50 bg-emerald-950/20 p-4 flex items-center justify-between">
+              <span className="text-sm font-semibold text-emerald-200">
+                Calculated Total Payouts
+              </span>
+              <span className="text-lg font-semibold text-emerald-300">
+                {formatMoneyPrecise(investorPayoutReport.calculatedTotalPayouts)}
+              </span>
+            </div>
           </div>
         )}
       </section>

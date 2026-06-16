@@ -180,7 +180,15 @@ const SQLITE_SCHEMA = `
     payout_id TEXT NOT NULL UNIQUE,
     date TEXT NOT NULL,
     property_name TEXT NOT NULL,
+    property_address TEXT,
+    loan_date TEXT,
+    sell_estimate_date TEXT,
     investor_name TEXT NOT NULL,
+    attorney TEXT,
+    amount_loaned REAL,
+    annual_interest_rate REAL,
+    kicker REAL,
+    days_in_year INTEGER DEFAULT 365,
     payout_type TEXT NOT NULL,
     payout_amount REAL NOT NULL,
     payment_method TEXT,
@@ -367,7 +375,15 @@ async function initSchema(): Promise<void> {
         payout_id TEXT NOT NULL UNIQUE,
         date TEXT NOT NULL,
         property_name TEXT NOT NULL,
+        property_address TEXT,
+        loan_date TEXT,
+        sell_estimate_date TEXT,
         investor_name TEXT NOT NULL,
+        attorney TEXT,
+        amount_loaned REAL,
+        annual_interest_rate REAL,
+        kicker REAL,
+        days_in_year INTEGER DEFAULT 365,
         payout_type TEXT NOT NULL,
         payout_amount REAL NOT NULL,
         payment_method TEXT,
@@ -378,6 +394,14 @@ async function initSchema(): Promise<void> {
         created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
       )
     `;
+    await sql`ALTER TABLE investor_payouts ADD COLUMN IF NOT EXISTS property_address TEXT`;
+    await sql`ALTER TABLE investor_payouts ADD COLUMN IF NOT EXISTS loan_date TEXT`;
+    await sql`ALTER TABLE investor_payouts ADD COLUMN IF NOT EXISTS sell_estimate_date TEXT`;
+    await sql`ALTER TABLE investor_payouts ADD COLUMN IF NOT EXISTS attorney TEXT`;
+    await sql`ALTER TABLE investor_payouts ADD COLUMN IF NOT EXISTS amount_loaned REAL`;
+    await sql`ALTER TABLE investor_payouts ADD COLUMN IF NOT EXISTS annual_interest_rate REAL`;
+    await sql`ALTER TABLE investor_payouts ADD COLUMN IF NOT EXISTS kicker REAL`;
+    await sql`ALTER TABLE investor_payouts ADD COLUMN IF NOT EXISTS days_in_year INTEGER DEFAULT 365`;
     await sql`ALTER TABLE properties ADD COLUMN IF NOT EXISTS archived BOOLEAN NOT NULL DEFAULT FALSE`;
     await sql`ALTER TABLE tenants ADD COLUMN IF NOT EXISTS archived BOOLEAN NOT NULL DEFAULT FALSE`;
     await sql`ALTER TABLE leases ADD COLUMN IF NOT EXISTS archived BOOLEAN NOT NULL DEFAULT FALSE`;
@@ -414,6 +438,32 @@ async function initSchema(): Promise<void> {
     if (!cols.some((c) => c.name === "archived")) {
       db.exec(`ALTER TABLE ${table} ADD COLUMN archived INTEGER NOT NULL DEFAULT 0`);
     }
+  }
+  const payoutCols = db.pragma("table_info(investor_payouts)") as { name: string }[];
+  const hasPayoutCol = (name: string) => payoutCols.some((c) => c.name === name);
+  if (!hasPayoutCol("property_address")) {
+    db.exec("ALTER TABLE investor_payouts ADD COLUMN property_address TEXT");
+  }
+  if (!hasPayoutCol("loan_date")) {
+    db.exec("ALTER TABLE investor_payouts ADD COLUMN loan_date TEXT");
+  }
+  if (!hasPayoutCol("sell_estimate_date")) {
+    db.exec("ALTER TABLE investor_payouts ADD COLUMN sell_estimate_date TEXT");
+  }
+  if (!hasPayoutCol("attorney")) {
+    db.exec("ALTER TABLE investor_payouts ADD COLUMN attorney TEXT");
+  }
+  if (!hasPayoutCol("amount_loaned")) {
+    db.exec("ALTER TABLE investor_payouts ADD COLUMN amount_loaned REAL");
+  }
+  if (!hasPayoutCol("annual_interest_rate")) {
+    db.exec("ALTER TABLE investor_payouts ADD COLUMN annual_interest_rate REAL");
+  }
+  if (!hasPayoutCol("kicker")) {
+    db.exec("ALTER TABLE investor_payouts ADD COLUMN kicker REAL");
+  }
+  if (!hasPayoutCol("days_in_year")) {
+    db.exec("ALTER TABLE investor_payouts ADD COLUMN days_in_year INTEGER DEFAULT 365");
   }
   db.close();
 }
@@ -599,7 +649,15 @@ function mapInvestorPayout(row: Record<string, unknown>): InvestorPayout {
     payout_id: String(row.payout_id),
     date: String(row.date),
     property_name: String(row.property_name),
+    property_address: str(row.property_address),
+    loan_date: str(row.loan_date),
+    sell_estimate_date: str(row.sell_estimate_date),
     investor_name: String(row.investor_name),
+    attorney: str(row.attorney),
+    amount_loaned: num(row.amount_loaned),
+    annual_interest_rate: num(row.annual_interest_rate),
+    kicker: num(row.kicker),
+    days_in_year: num(row.days_in_year) != null ? Number(row.days_in_year) : null,
     payout_type: String(row.payout_type),
     payout_amount: Number(row.payout_amount),
     payment_method: str(row.payment_method),
@@ -1226,10 +1284,13 @@ export async function createInvestorPayout(
     const sql = await getPostgresSql();
     const rows = await sql`
       INSERT INTO investor_payouts (
-        payout_id, date, property_name, investor_name, payout_type, payout_amount,
-        payment_method, payment_date, tax_year, status, notes
+        payout_id, date, property_name, property_address, loan_date, sell_estimate_date,
+        investor_name, attorney, amount_loaned, annual_interest_rate, kicker, days_in_year,
+        payout_type, payout_amount, payment_method, payment_date, tax_year, status, notes
       ) VALUES (
-        ${data.payout_id}, ${data.date}, ${data.property_name}, ${data.investor_name},
+        ${data.payout_id}, ${data.date}, ${data.property_name}, ${data.property_address},
+        ${data.loan_date}, ${data.sell_estimate_date}, ${data.investor_name}, ${data.attorney},
+        ${data.amount_loaned}, ${data.annual_interest_rate}, ${data.kicker}, ${data.days_in_year},
         ${data.payout_type}, ${data.payout_amount}, ${data.payment_method},
         ${data.payment_date}, ${data.tax_year}, ${data.status}, ${data.notes}
       ) RETURNING *
@@ -1240,11 +1301,13 @@ export async function createInvestorPayout(
   const row = db
     .prepare(
       `INSERT INTO investor_payouts (
-        payout_id, date, property_name, investor_name, payout_type, payout_amount,
-        payment_method, payment_date, tax_year, status, notes
+        payout_id, date, property_name, property_address, loan_date, sell_estimate_date,
+        investor_name, attorney, amount_loaned, annual_interest_rate, kicker, days_in_year,
+        payout_type, payout_amount, payment_method, payment_date, tax_year, status, notes
       ) VALUES (
-        @payout_id, @date, @property_name, @investor_name, @payout_type, @payout_amount,
-        @payment_method, @payment_date, @tax_year, @status, @notes
+        @payout_id, @date, @property_name, @property_address, @loan_date, @sell_estimate_date,
+        @investor_name, @attorney, @amount_loaned, @annual_interest_rate, @kicker, @days_in_year,
+        @payout_type, @payout_amount, @payment_method, @payment_date, @tax_year, @status, @notes
       ) RETURNING *`
     )
     .get(data);
@@ -1580,7 +1643,11 @@ export async function updateInvestorPayout(
     const rows = await sql`
       UPDATE investor_payouts SET
         payout_id = ${data.payout_id}, date = ${data.date}, property_name = ${data.property_name},
-        investor_name = ${data.investor_name}, payout_type = ${data.payout_type},
+        property_address = ${data.property_address}, loan_date = ${data.loan_date},
+        sell_estimate_date = ${data.sell_estimate_date}, investor_name = ${data.investor_name},
+        attorney = ${data.attorney}, amount_loaned = ${data.amount_loaned},
+        annual_interest_rate = ${data.annual_interest_rate}, kicker = ${data.kicker},
+        days_in_year = ${data.days_in_year}, payout_type = ${data.payout_type},
         payout_amount = ${data.payout_amount}, payment_method = ${data.payment_method},
         payment_date = ${data.payment_date}, tax_year = ${data.tax_year},
         status = ${data.status}, notes = ${data.notes}
@@ -1594,7 +1661,11 @@ export async function updateInvestorPayout(
     .prepare(
       `UPDATE investor_payouts SET
         payout_id = @payout_id, date = @date, property_name = @property_name,
-        investor_name = @investor_name, payout_type = @payout_type, payout_amount = @payout_amount,
+        property_address = @property_address, loan_date = @loan_date,
+        sell_estimate_date = @sell_estimate_date, investor_name = @investor_name,
+        attorney = @attorney, amount_loaned = @amount_loaned,
+        annual_interest_rate = @annual_interest_rate, kicker = @kicker,
+        days_in_year = @days_in_year, payout_type = @payout_type, payout_amount = @payout_amount,
         payment_method = @payment_method, payment_date = @payment_date, tax_year = @tax_year,
         status = @status, notes = @notes
       WHERE id = @id RETURNING *`

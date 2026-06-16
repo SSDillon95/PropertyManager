@@ -1,3 +1,7 @@
+import {
+  loanSummaryFromPayout,
+  type InvestorPayoutLoanSummary,
+} from "./investor-payout-summary";
 import type {
   Expense,
   InvestorPayout,
@@ -355,6 +359,7 @@ export interface InvestorPayoutReportLine {
   date: string;
   payout_id: string;
   property_name: string;
+  property_address: string;
   investor_name: string;
   payout_type: string;
   payout_amount: number;
@@ -362,6 +367,7 @@ export interface InvestorPayoutReportLine {
   payment_date: string;
   tax_year: string;
   status: string;
+  loanSummary: InvestorPayoutLoanSummary | null;
 }
 
 export interface InvestorPayoutReportSummary {
@@ -371,6 +377,8 @@ export interface InvestorPayoutReportSummary {
   byProperty: { property_name: string; total: number }[];
   byPayoutType: { payout_type: string; total: number }[];
   totalPayouts: number;
+  calculatedTotalPayouts: number;
+  loanSummaries: InvestorPayoutLoanSummary[];
 }
 
 export function buildInvestorPayoutReport(
@@ -384,18 +392,23 @@ export function buildInvestorPayoutReport(
         matchesProperty(p.property_name, filters.propertyName) &&
         matchesInvestor(p.investor_name, filters.investorName)
     )
-    .map((p) => ({
-      date: p.date,
-      payout_id: p.payout_id,
-      property_name: p.property_name,
-      investor_name: p.investor_name,
-      payout_type: p.payout_type,
-      payout_amount: n(p.payout_amount),
-      payment_method: p.payment_method ?? "",
-      payment_date: p.payment_date ?? "",
-      tax_year: p.tax_year != null ? String(p.tax_year) : "",
-      status: p.status,
-    }))
+    .map((p) => {
+      const loanSummary = loanSummaryFromPayout(p);
+      return {
+        date: p.date,
+        payout_id: p.payout_id,
+        property_name: p.property_name,
+        property_address: p.property_address ?? "",
+        investor_name: p.investor_name,
+        payout_type: p.payout_type,
+        payout_amount: n(p.payout_amount),
+        payment_method: p.payment_method ?? "",
+        payment_date: p.payment_date ?? "",
+        tax_year: p.tax_year != null ? String(p.tax_year) : "",
+        status: p.status,
+        loanSummary,
+      };
+    })
     .sort((a, b) => b.date.localeCompare(a.date));
 
   const investorTotals = new Map<string, { total: number; count: number }>();
@@ -434,5 +447,12 @@ export function buildInvestorPayoutReport(
       .map(([payout_type, total]) => ({ payout_type, total }))
       .sort((a, b) => b.total - a.total),
     totalPayouts: lines.reduce((sum, l) => sum + l.payout_amount, 0),
+    calculatedTotalPayouts: lines.reduce(
+      (sum, l) => sum + (l.loanSummary?.total_payout ?? l.payout_amount),
+      0
+    ),
+    loanSummaries: lines
+      .map((l) => l.loanSummary)
+      .filter((summary): summary is InvestorPayoutLoanSummary => summary != null),
   };
 }

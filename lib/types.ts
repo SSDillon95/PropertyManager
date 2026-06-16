@@ -148,7 +148,15 @@ export interface InvestorPayout {
   payout_id: string;
   date: string;
   property_name: string;
+  property_address: string | null;
+  loan_date: string | null;
+  sell_estimate_date: string | null;
   investor_name: string;
+  attorney: string | null;
+  amount_loaned: number | null;
+  annual_interest_rate: number | null;
+  kicker: number | null;
+  days_in_year: number | null;
   payout_type: string;
   payout_amount: number;
   payment_method: string | null;

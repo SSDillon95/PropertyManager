@@ -2,9 +2,11 @@
 
 import Image from "next/image";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import InvestorPayoutSummaryPanel from "@/components/InvestorPayoutSummaryPanel";
 import PropertyDetailPanel from "@/components/PropertyDetailPanel";
 import ReportsView from "@/components/ReportsView";
 import SpreadsheetTable from "@/components/SpreadsheetTable";
+import { loanSummaryFromPayout } from "@/lib/investor-payout-summary";
 import { getColumnsForTab, SHEET_TABS, type ColumnDef } from "@/lib/columns";
 import { formatCurrency, todayIso } from "@/lib/format";
 import { requestReportPdf } from "@/lib/pdf-client";
@@ -114,6 +116,32 @@ export default function PropertyManagerApp() {
   const [expandedProperty, setExpandedProperty] = useState<Property | null>(null);
 
   const columns = useMemo(() => getColumnsForTab(tab), [tab]);
+  const investorPayoutFormSummary = useMemo(() => {
+    if (tab !== "investor_payout" || !formOpen) return null;
+    return {
+      property_address: form.property_address || null,
+      loan_date: form.loan_date || null,
+      sell_estimate_date: form.sell_estimate_date || null,
+      investor_name: form.investor_name || null,
+      attorney: form.attorney || null,
+      amount_loaned: form.amount_loaned ? Number(form.amount_loaned) : null,
+      annual_interest_rate: form.annual_interest_rate
+        ? Number(form.annual_interest_rate)
+        : null,
+      kicker: form.kicker ? Number(form.kicker) : null,
+      days_in_year: form.days_in_year ? Number(form.days_in_year) : 365,
+    };
+  }, [tab, formOpen, form]);
+  const investorPayoutTableSummaries = useMemo(
+    () =>
+      investorPayoutRows
+        .map((payout) => ({
+          payout,
+          summary: loanSummaryFromPayout(payout),
+        }))
+        .filter((entry) => entry.summary != null),
+    [investorPayoutRows]
+  );
   const profitability = useMemo(
     () => (profitabilityProperty ? propertyProfitability(profitabilityProperty) : null),
     [profitabilityProperty]
@@ -270,10 +298,17 @@ export default function PropertyManagerApp() {
         setForm((prev) => ({
           ...prev,
           property_name: "",
+          property_address: "",
           investor_name: "",
         }));
         return;
       }
+      const property = properties.find((item) => item.property_name === propertyName);
+      const propertyAddress = property
+        ? [property.address, property.city, property.state, property.zip]
+            .filter(Boolean)
+            .join(", ")
+        : "";
       const linkedInvestor = investors.find(
         (investor) =>
           investor.property_name === propertyName && investor.status === "Active"
@@ -281,6 +316,7 @@ export default function PropertyManagerApp() {
       setForm((prev) => ({
         ...prev,
         property_name: propertyName,
+        property_address: propertyAddress || prev.property_address,
         investor_name: linkedInvestor?.investor_name ?? prev.investor_name,
       }));
       return;
@@ -319,7 +355,9 @@ export default function PropertyManagerApp() {
 
   const openEntryForm = () => {
     setEditingId(null);
-    setForm(emptyForm(columns));
+    const nextForm = emptyForm(columns);
+    if (tab === "investor_payout") nextForm.days_in_year = "365";
+    setForm(nextForm);
     setFormOpen(true);
   };
 
@@ -428,7 +466,15 @@ export default function PropertyManagerApp() {
           payout_id: payout.payout_id,
           date: payout.date,
           property_name: payout.property_name,
+          property_address: payout.property_address,
+          loan_date: payout.loan_date,
+          sell_estimate_date: payout.sell_estimate_date,
           investor_name: payout.investor_name,
+          attorney: payout.attorney,
+          amount_loaned: payout.amount_loaned,
+          annual_interest_rate: payout.annual_interest_rate,
+          kicker: payout.kicker,
+          days_in_year: payout.days_in_year,
           payout_type: payout.payout_type,
           payout_amount: payout.payout_amount,
           payment_method: payout.payment_method,
@@ -601,7 +647,9 @@ export default function PropertyManagerApp() {
                   )}
                   {tab === "investor_payout" && (
                     <p className="text-xs text-zinc-400 mt-1">
-                      Selecting a property auto-fills the investor linked on the Investor tab.
+                      Selecting a property auto-fills address and investor. Enter loan amount,
+                      12-month rate (e.g. 0.12 = 12%), loan date, and sell estimate — payout
+                      amount is calculated automatically.
                     </p>
                   )}
                 </div>
@@ -733,6 +781,14 @@ export default function PropertyManagerApp() {
                   {saving ? "Saving..." : editingId ? "Update" : "Save"}
                 </button>
               </form>
+              {tab === "investor_payout" && investorPayoutFormSummary && (
+                <div className="mt-5">
+                  <InvestorPayoutSummaryPanel
+                    input={investorPayoutFormSummary}
+                    title="Payout Calculator Preview"
+                  />
+                </div>
+              )}
             </section>
             )}
 
@@ -794,6 +850,30 @@ export default function PropertyManagerApp() {
                 onEdit={openEditForm}
                 editingId={editingId}
               />
+              {tab === "investor_payout" && !showArchived && investorPayoutTableSummaries.length > 0 && (
+                <div className="mt-5 space-y-3">
+                  <h3 className="text-sm font-semibold text-emerald-300">
+                    Payout Calculator Summary
+                  </h3>
+                  {investorPayoutTableSummaries.map(({ payout, summary }) => (
+                    <InvestorPayoutSummaryPanel
+                      key={payout.id}
+                      input={{
+                        property_address: summary?.property_address,
+                        loan_date: summary?.loan_date,
+                        sell_estimate_date: summary?.sell_estimate_date,
+                        investor_name: summary?.investor_name,
+                        attorney: summary?.attorney,
+                        amount_loaned: summary?.amount_loaned,
+                        annual_interest_rate: summary?.annual_interest_rate,
+                        kicker: summary?.kicker,
+                        days_in_year: summary?.days_in_year,
+                      }}
+                      title={`${payout.payout_id} · ${payout.investor_name}`}
+                    />
+                  ))}
+                </div>
+              )}
             </section>
           </div>
         )}

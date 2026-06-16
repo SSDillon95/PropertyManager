@@ -8,6 +8,11 @@ import type {
   ReportKind,
   VendorPayoutReport,
 } from "./reports";
+import {
+  formatRate,
+  loanSummaryFromPayout,
+  type InvestorPayoutLoanSummary,
+} from "./investor-payout-summary";
 import type { InvestorPayout } from "./types";
 
 const LOGO_PATH = "/hop2it-logo.png";
@@ -108,6 +113,107 @@ function money(value: number): string {
     minimumFractionDigits: 0,
     maximumFractionDigits: 0,
   }).format(value);
+}
+
+function moneyPrecise(value: number): string {
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "USD",
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(value);
+}
+
+function formatPdfDate(value: string): string {
+  if (!value) return "—";
+  const parsed = new Date(`${value}T12:00:00`);
+  if (Number.isNaN(parsed.getTime())) return value;
+  return parsed.toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
+}
+
+function renderLoanSummaryTable(
+  doc: jsPDF,
+  summary: InvestorPayoutLoanSummary,
+  startY: number,
+  heading?: string
+): number {
+  let y = startY;
+  if (heading) {
+    drawBodyText(doc, heading, y, {
+      fontSize: 10,
+      bold: true,
+      color: [REPORT_GREEN.r, REPORT_GREEN.g, REPORT_GREEN.b],
+    });
+    y += 8;
+  }
+
+  autoTable(doc, {
+    startY: y,
+    head: [["Field", "Value"]],
+    body: [
+      ["Address", summary.property_address || "—"],
+      ["Loan Date", formatPdfDate(summary.loan_date)],
+      ["Sell Estimate", formatPdfDate(summary.sell_estimate_date)],
+      ["Investor", summary.investor_name || "—"],
+      ["Attorney", summary.attorney || "—"],
+    ],
+    styles: { fontSize: 9, cellPadding: 3 },
+    headStyles: { fillColor: [245, 245, 245], textColor: [30, 30, 30] },
+    columnStyles: {
+      0: { fontStyle: "bold", cellWidth: 42 },
+      1: { cellWidth: "auto" },
+    },
+    theme: "plain",
+  });
+
+  const infoEnd =
+    (doc as jsPDF & { lastAutoTable?: { finalY: number } }).lastAutoTable?.finalY ?? y;
+
+  autoTable(doc, {
+    startY: infoEnd + 6,
+    head: [
+      ["Amount Loaned", "12-Mo Rate", "Total Interest (12 mo)", "Days in Year", "Interest / Day"],
+    ],
+    body: [
+      [
+        money(summary.amount_loaned),
+        formatRate(summary.annual_interest_rate),
+        money(summary.total_interest_12_months),
+        String(summary.days_in_year),
+        moneyPrecise(summary.interest_cost_per_day),
+      ],
+    ],
+    styles: { fontSize: 8, cellPadding: 2.5 },
+    headStyles: { fillColor: REPORT_GREEN_RGB, textColor: [255, 255, 255] },
+  });
+
+  const calcStart =
+    (doc as jsPDF & { lastAutoTable?: { finalY: number } }).lastAutoTable?.finalY ?? infoEnd;
+
+  autoTable(doc, {
+    startY: calcStart + 4,
+    head: [["Days Held", "Interest w/o Kicker", "Kicker", "Interest + Kicker", "Total Payout"]],
+    body: [
+      [
+        String(summary.days_held),
+        moneyPrecise(summary.interest_without_kicker),
+        money(summary.kicker),
+        moneyPrecise(summary.interest_and_kicker_total),
+        moneyPrecise(summary.total_payout),
+      ],
+    ],
+    styles: { fontSize: 8, cellPadding: 2.5 },
+    headStyles: { fillColor: [251, 191, 36], textColor: [24, 24, 27] },
+    footStyles: { fillColor: [230, 230, 230], fontStyle: "bold" },
+  });
+
+  return (
+    (doc as jsPDF & { lastAutoTable?: { finalY: number } }).lastAutoTable?.finalY ?? calcStart
+  );
 }
 
 function displayField(value: string | number | null | undefined): string {
@@ -499,6 +605,45 @@ export async function buildInvestorPayoutReportPdf(
     });
   }
 
+  if (report.loanSummaries.length > 0) {
+    let loanY =
+      ((doc as jsPDF & { lastAutoTable?: { finalY: number } }).lastAutoTable?.finalY ??
+        summaryY) + 16;
+
+    drawBodyText(doc, "Payout Calculator Summary", loanY, {
+      fontSize: 11,
+      bold: true,
+      color: [REPORT_GREEN.r, REPORT_GREEN.g, REPORT_GREEN.b],
+    });
+    loanY += 10;
+
+    for (const [index, summary] of report.loanSummaries.entries()) {
+      if (loanY > doc.internal.pageSize.getHeight() - 70) {
+        doc.addPage();
+        loanY = PAGE_MARGIN + 10;
+      }
+      loanY = renderLoanSummaryTable(
+        doc,
+        summary,
+        loanY,
+        report.loanSummaries.length > 1
+          ? `${summary.investor_name || "Investor"} · ${summary.property_address || summary.investor_name}`
+          : undefined
+      );
+      if (index < report.loanSummaries.length - 1) loanY += 10;
+    }
+
+    const totalsY = loanY + 8;
+    autoTable(doc, {
+      startY: totalsY,
+      head: [["Calculated Total Payouts", moneyPrecise(report.calculatedTotalPayouts)]],
+      body: [],
+      styles: { fontSize: 10, cellPadding: 4 },
+      headStyles: { fillColor: [230, 230, 230], textColor: [30, 30, 30], fontStyle: "bold" },
+      theme: "plain",
+    });
+  }
+
   return finishPdf(doc, `hop2it-investor_payout-report-${startDate}-to-${endDate}.pdf`);
 }
 
@@ -514,7 +659,15 @@ export async function buildInvestorPayoutPdf(
     | "payout_id"
     | "date"
     | "property_name"
+    | "property_address"
+    | "loan_date"
+    | "sell_estimate_date"
     | "investor_name"
+    | "attorney"
+    | "amount_loaned"
+    | "annual_interest_rate"
+    | "kicker"
+    | "days_in_year"
     | "payout_type"
     | "payout_amount"
     | "payment_method"
@@ -563,22 +716,37 @@ export async function buildInvestorPayoutPdf(
   const tableEnd =
     (doc as jsPDF & { lastAutoTable?: { finalY: number } }).lastAutoTable?.finalY ?? contentStartY;
 
-  doc.setDrawColor(REPORT_GREEN.r, REPORT_GREEN.g, REPORT_GREEN.b);
-  doc.setLineWidth(0.6);
-  doc.roundedRect(14, tableEnd + 10, 182, 22, 2, 2);
+  const loanSummary = loanSummaryFromPayout(payout);
+  let footerY = tableEnd + 12;
 
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(11);
-  doc.setTextColor(REPORT_GREEN.r, REPORT_GREEN.g, REPORT_GREEN.b);
-  doc.text("Total Payout Amount", 20, tableEnd + 22);
+  drawBodyText(doc, "Payout Calculator Summary", footerY, {
+    fontSize: 11,
+    bold: true,
+    color: [REPORT_GREEN.r, REPORT_GREEN.g, REPORT_GREEN.b],
+  });
+  footerY += 8;
 
-  doc.setFontSize(14);
-  doc.text(money(payout.payout_amount), 20, tableEnd + 30);
+  if (loanSummary) {
+    footerY = renderLoanSummaryTable(doc, loanSummary, footerY);
+  } else {
+    doc.setDrawColor(REPORT_GREEN.r, REPORT_GREEN.g, REPORT_GREEN.b);
+    doc.setLineWidth(0.6);
+    doc.roundedRect(14, footerY, 182, 22, 2, 2);
+
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(11);
+    doc.setTextColor(REPORT_GREEN.r, REPORT_GREEN.g, REPORT_GREEN.b);
+    doc.text("Total Payout Amount", 20, footerY + 12);
+
+    doc.setFontSize(14);
+    doc.text(money(payout.payout_amount), 20, footerY + 20);
+    footerY += 30;
+  }
 
   drawBodyText(
     doc,
     "This document confirms investor payout details recorded in HOP2IT Property Manager.",
-    tableEnd + 42,
+    footerY + 10,
     { fontSize: 8, color: [100, 100, 100] }
   );
 
@@ -592,7 +760,15 @@ export async function downloadInvestorPayoutPdf(
     | "payout_id"
     | "date"
     | "property_name"
+    | "property_address"
+    | "loan_date"
+    | "sell_estimate_date"
     | "investor_name"
+    | "attorney"
+    | "amount_loaned"
+    | "annual_interest_rate"
+    | "kicker"
+    | "days_in_year"
     | "payout_type"
     | "payout_amount"
     | "payment_method"
