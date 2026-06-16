@@ -550,16 +550,35 @@ export default function PropertyManagerApp() {
       return;
     }
     const business = businesses.find((item) => item.business_name === businessName);
-    const selectedProperty = form.property_name
-      ? properties.find((property) => property.property_name === form.property_name)
-      : undefined;
-    const propertyMatchesBusiness = selectedProperty?.business_name === businessName;
+    const businessProperties = properties.filter(
+      (property) => property.business_name === businessName
+    );
+    if (businessProperties.length === 1) {
+      const property = businessProperties[0];
+      const propertyAddress = [property.address, property.city, property.state, property.zip]
+        .filter(Boolean)
+        .join(", ");
+      const linkedInvestor = investors.find(
+        (investor) =>
+          investor.property_name === property.property_name &&
+          investor.status === "Active"
+      );
+      setForm((prev) => ({
+        ...prev,
+        business_name: businessName,
+        business_address: business ? formatBusinessAddress(business) : "",
+        property_name: property.property_name,
+        property_address: propertyAddress,
+        investor_name: linkedInvestor?.investor_name ?? prev.investor_name,
+      }));
+      return;
+    }
     setForm((prev) => ({
       ...prev,
       business_name: businessName,
       business_address: business ? formatBusinessAddress(business) : "",
-      property_name: propertyMatchesBusiness ? prev.property_name : "",
-      property_address: propertyMatchesBusiness ? prev.property_address : "",
+      property_name: "",
+      property_address: "",
     }));
   };
 
@@ -1338,8 +1357,8 @@ export default function PropertyManagerApp() {
                   {tab === "investor_capital" && (
                     <p className="text-xs text-zinc-400 mt-1">
                       Select the business and property for this capital investment. Capital ID is
-                      assigned automatically. Business address is filled from the Business tab and
-                      cannot be edited here.
+                      assigned automatically. Property and addresses are populated from your
+                      selections and cannot be edited here.
                     </p>
                   )}
                   {tab === "investor_payout" && (
@@ -1375,9 +1394,15 @@ export default function PropertyManagerApp() {
                         <select
                           value={form[col.key] ?? ""}
                           onChange={(e) => handlePropertySelect(e.target.value, col.key)}
-                          disabled={tab === "investor_payout"}
+                          disabled={
+                            tab === "investor_payout" ||
+                            (tab === "investor_capital" &&
+                              (editingId != null || Boolean(form.property_name)))
+                          }
                           className={`form-select ${
-                            tab === "investor_payout"
+                            tab === "investor_payout" ||
+                            (tab === "investor_capital" &&
+                              (editingId != null || Boolean(form.property_name)))
                               ? "text-zinc-400 cursor-not-allowed bg-zinc-700/50"
                               : ""
                           }`}
@@ -1518,7 +1543,8 @@ export default function PropertyManagerApp() {
                               Boolean(form.property_name)) ||
                             (tab === "investor_payout" && col.key === "payout_id") ||
                             (tab === "investor_capital" && col.key === "payout_id") ||
-                            (tab === "investor_capital" && col.key === "business_address") ||
+                            (tab === "investor_capital" &&
+                              (col.key === "business_address" || col.key === "property_address")) ||
                             (tab === "investor_payout" &&
                               col.key === "property_name" &&
                               Boolean(form.capital_id))
@@ -1541,7 +1567,9 @@ export default function PropertyManagerApp() {
                               (col.key === "payout_id" ||
                                 (col.key === "property_name" && form.capital_id))) ||
                             (tab === "investor_capital" &&
-                              (col.key === "payout_id" || col.key === "business_address"))
+                              (col.key === "payout_id" ||
+                                col.key === "business_address" ||
+                                col.key === "property_address"))
                               ? "text-zinc-400 cursor-not-allowed bg-zinc-700/50"
                               : ""
                           }`}
