@@ -12,7 +12,7 @@ import {
 } from "@/lib/sms-utils";
 import type { MaintenanceRecord, RentPayment, SmsMessage, Tenant } from "@/lib/types";
 
-interface MessagesViewProps {
+interface CommunicationViewProps {
   tenants: Tenant[];
   rentPayments: RentPayment[];
   maintenance: MaintenanceRecord[];
@@ -23,6 +23,18 @@ interface SmsConfig {
   configured: boolean;
   fromNumber: string | null;
 }
+
+interface ThreadView {
+  phone: string;
+  thread: SmsMessage[];
+  last: SmsMessage | null;
+  tenant: Tenant | null;
+  displayName: string;
+  propertyName: string | null;
+  unread: boolean;
+}
+
+const POLL_INTERVAL_MS = 20_000;
 
 function formatMessageTime(iso: string): string {
   const date = new Date(iso);
@@ -48,33 +60,46 @@ function tenantForPhone(tenants: Tenant[], phone: string): Tenant | null {
   );
 }
 
-export default function MessagesView({
+export default function CommunicationView({
   tenants,
   rentPayments,
   maintenance,
   onNotify,
-}: MessagesViewProps) {
+}: CommunicationViewProps) {
   const [messages, setMessages] = useState<SmsMessage[]>([]);
   const [config, setConfig] = useState<SmsConfig>({ configured: false, fromNumber: null });
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [selectedPhone, setSelectedPhone] = useState<string | null>(null);
   const [composeText, setComposeText] = useState("");
   const [sending, setSending] = useState(false);
   const [newTenantId, setNewTenantId] = useState("");
   const [actionId, setActionId] = useState<number | null>(null);
 
-  const loadMessages = useCallback(async () => {
-    const res = await fetch("/api/sms", { cache: "no-store" });
-    const json = await res.json();
-    if (json.success) {
-      setMessages(json.data.messages);
-      setConfig(json.data.config);
+  const loadMessages = useCallback(async (silent = false) => {
+    if (!silent) setRefreshing(true);
+    try {
+      const res = await fetch("/api/sms", { cache: "no-store" });
+      const json = await res.json();
+      if (json.success) {
+        setMessages(json.data.messages);
+        setConfig(json.data.config);
+      }
+    } finally {
+      if (!silent) setRefreshing(false);
     }
   }, []);
 
   useEffect(() => {
     setLoading(true);
     loadMessages().finally(() => setLoading(false));
+  }, [loadMessages]);
+
+  useEffect(() => {
+    const interval = window.setInterval(() => {
+      loadMessages(true);
+    }, POLL_INTERVAL_MS);
+    return () => window.clearInterval(interval);
   }, [loadMessages]);
 
   const threads = useMemo(() => {
@@ -92,21 +117,37 @@ export default function MessagesView({
             last.tenant_name ??
             (tenant ? tenantDisplayName(tenant) : formatPhoneDisplay(phone)),
           propertyName: last.property_name ?? tenant?.property_name ?? null,
-        };
+          unread: last.direction === "inbound",
+        } satisfies ThreadView;
       })
-      .sort((a, b) => b.last.created_at.localeCompare(a.last.created_at));
+      .sort((a, b) => {
+        const aTime = a.last?.created_at ?? "";
+        const bTime = b.last?.created_at ?? "";
+        return bTime.localeCompare(aTime);
+      });
   }, [messages, tenants]);
 
-  useEffect(() => {
-    if (!selectedPhone && threads.length > 0) {
-      setSelectedPhone(threads[0].phone);
-    }
-  }, [threads, selectedPhone]);
-
-  const selectedThread = useMemo(
-    () => threads.find((thread) => thread.phone === selectedPhone) ?? null,
-    [threads, selectedPhone]
+  const unreadCount = useMemo(
+    () => threads.filter((thread) => thread.unread).length,
+    [threads]
   );
+
+  const selectedThread = useMemo((): ThreadView | null => {
+    const existing = threads.find((thread) => thread.phone === selectedPhone);
+    if (existing) return existing;
+    if (!selectedPhone) return null;
+
+    const tenant = tenantForPhone(tenants, selectedPhone);
+    return {
+      phone: selectedPhone,
+      thread: [],
+      last: null,
+      tenant,
+      displayName: tenant ? tenantDisplayName(tenant) : formatPhoneDisplay(selectedPhone),
+      propertyName: tenant?.property_name ?? null,
+      unread: false,
+    };
+  }, [threads, selectedPhone, tenants]);
 
   const outstandingRent = useMemo(
     () =>
@@ -157,9 +198,9 @@ export default function MessagesView({
       });
       const json = await res.json();
       if (!json.success) throw new Error(json.error || "Failed to send message");
-      await loadMessages();
+      await loadMessages(true);
       setSelectedPhone(phone);
-      onNotify("success", "Message sent.");
+      onNotify("success", "Text message sent.");
       return true;
     } catch (error) {
       onNotify("error", (error as Error).message);
@@ -182,7 +223,7 @@ export default function MessagesView({
     if (ok) setComposeText("");
   };
 
-  const handleStartConversation = async () => {
+  const handleStartConversation = () => {
     const tenant = activeTenantsWithPhone.find((t) => String(t.id) === newTenantId);
     if (!tenant?.phone) {
       onNotify("error", "Select a tenant with a phone number.");
@@ -207,7 +248,7 @@ export default function MessagesView({
       });
       const json = await res.json();
       if (!json.success) throw new Error(json.error || "Failed to send reminders");
-      await loadMessages();
+      await loadMessages(true);
       const { sent, failed } = json.data;
       onNotify(
         failed > 0 ? "error" : "success",
@@ -230,7 +271,7 @@ export default function MessagesView({
       });
       const json = await res.json();
       if (!json.success) throw new Error(json.error || "Failed to send update");
-      await loadMessages();
+      await loadMessages(true);
       const phone = json.data.message?.phone_number;
       if (phone) setSelectedPhone(phone);
       onNotify("success", "Maintenance update sent.");
@@ -267,29 +308,54 @@ export default function MessagesView({
   };
 
   if (loading) {
-    return <div className="text-zinc-400 py-12 text-center">Loading messages...</div>;
+    return <div className="text-zinc-400 py-12 text-center">Loading communication...</div>;
   }
 
   return (
     <div className="space-y-4">
+      <div className="flex items-start justify-between gap-3 flex-wrap">
+        <div>
+          <h1 className="text-xl font-semibold text-zinc-100">Communication</h1>
+          <p className="text-sm text-zinc-400 mt-1">
+            Send and receive text messages with tenants for rent reminders and maintenance updates.
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={() => loadMessages()}
+          disabled={refreshing}
+          className="text-xs px-3 py-1.5 rounded-lg border border-zinc-600 bg-zinc-700/80 text-zinc-200 hover:bg-zinc-700 disabled:opacity-50"
+        >
+          {refreshing ? "Refreshing..." : "Refresh messages"}
+        </button>
+      </div>
+
       {!config.configured && (
         <div className="rounded-xl border border-amber-700/60 bg-amber-950/30 px-4 py-3 text-sm text-amber-200">
           SMS is not configured. Set{" "}
           <code className="text-amber-100">TWILIO_ACCOUNT_SID</code>,{" "}
           <code className="text-amber-100">TWILIO_AUTH_TOKEN</code>, and{" "}
           <code className="text-amber-100">TWILIO_PHONE_NUMBER</code> in your environment.
-          Messages will be logged but not delivered until configured.
+          Outbound texts will be logged but not delivered until configured. Inbound replies require
+          the Twilio webhook pointed at <code className="text-amber-100">/api/sms/webhook</code>.
         </div>
       )}
 
       <div className="grid grid-cols-1 xl:grid-cols-[280px_1fr_300px] gap-4 min-h-[560px]">
         <section className="rounded-xl border border-zinc-600/60 bg-zinc-800/90 flex flex-col min-h-[400px] xl:min-h-0">
           <div className="px-4 py-3 border-b border-zinc-600/60">
-            <h2 className="font-semibold text-sm text-zinc-100">Conversations</h2>
+            <div className="flex items-center justify-between gap-2">
+              <h2 className="font-semibold text-sm text-zinc-100">Conversations</h2>
+              {unreadCount > 0 && (
+                <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-600/30 text-emerald-300 border border-emerald-600/40">
+                  {unreadCount} new
+                </span>
+              )}
+            </div>
             <p className="text-xs text-zinc-400 mt-1">
               {config.fromNumber
-                ? `From ${formatPhoneDisplay(config.fromNumber)}`
-                : "Two-way tenant messaging"}
+                ? `Sending from ${formatPhoneDisplay(config.fromNumber)}`
+                : "Two-way tenant texting"}
             </p>
           </div>
           <div className="p-3 border-b border-zinc-600/60 space-y-2">
@@ -298,7 +364,7 @@ export default function MessagesView({
               onChange={(e) => setNewTenantId(e.target.value)}
               className="form-select text-sm w-full"
             >
-              <option value="">Message a tenant...</option>
+              <option value="">Start new conversation...</option>
               {activeTenantsWithPhone.map((tenant) => (
                 <option key={tenant.id} value={tenant.id}>
                   {tenantDisplayName(tenant)}
@@ -318,7 +384,7 @@ export default function MessagesView({
           <div className="flex-1 overflow-y-auto">
             {threads.length === 0 ? (
               <p className="text-xs text-zinc-500 px-4 py-6 text-center">
-                No messages yet. Send a rent reminder or start a conversation.
+                No conversations yet. Select a tenant above or send a rent reminder to get started.
               </p>
             ) : (
               threads.map((thread) => (
@@ -332,16 +398,26 @@ export default function MessagesView({
                       : "hover:bg-zinc-700/40"
                   }`}
                 >
-                  <div className="font-medium text-sm text-zinc-100 truncate">
-                    {thread.displayName}
+                  <div className="flex items-center gap-2">
+                    {thread.unread && (
+                      <span className="h-2 w-2 rounded-full bg-emerald-400 shrink-0" />
+                    )}
+                    <div className="font-medium text-sm text-zinc-100 truncate flex-1">
+                      {thread.displayName}
+                    </div>
                   </div>
                   {thread.propertyName && (
                     <div className="text-xs text-zinc-500 truncate">{thread.propertyName}</div>
                   )}
-                  <div className="text-xs text-zinc-400 truncate mt-1">{thread.last.body}</div>
-                  <div className="text-[10px] text-zinc-500 mt-1">
-                    {formatMessageTime(thread.last.created_at)}
-                  </div>
+                  {thread.last && (
+                    <>
+                      <div className="text-xs text-zinc-400 truncate mt-1">{thread.last.body}</div>
+                      <div className="text-[10px] text-zinc-500 mt-1">
+                        {thread.last.direction === "inbound" ? "Received · " : "Sent · "}
+                        {formatMessageTime(thread.last.created_at)}
+                      </div>
+                    </>
+                  )}
                 </button>
               ))
             )}
@@ -361,45 +437,60 @@ export default function MessagesView({
                 </p>
               </div>
               <div className="flex-1 overflow-y-auto p-4 space-y-3">
-                {selectedThread.thread.map((message) => (
-                  <div
-                    key={message.id}
-                    className={`flex ${
-                      message.direction === "outbound" ? "justify-end" : "justify-start"
-                    }`}
-                  >
+                {selectedThread.thread.length === 0 ? (
+                  <p className="text-xs text-zinc-500 text-center py-8">
+                    No messages in this conversation yet. Type below to send the first text.
+                  </p>
+                ) : (
+                  selectedThread.thread.map((message) => (
                     <div
-                      className={`max-w-[85%] rounded-xl px-3 py-2 text-sm ${
-                        message.direction === "outbound"
-                          ? "bg-emerald-900/50 border border-emerald-700/50 text-emerald-50"
-                          : "bg-zinc-700/80 border border-zinc-600/60 text-zinc-100"
+                      key={message.id}
+                      className={`flex ${
+                        message.direction === "outbound" ? "justify-end" : "justify-start"
                       }`}
                     >
-                      <p className="whitespace-pre-wrap break-words">{message.body}</p>
-                      <div className="flex items-center gap-2 mt-1 text-[10px] opacity-70">
-                        <span>{formatMessageTime(message.created_at)}</span>
-                        {message.message_type !== "general" && (
-                          <span className="uppercase tracking-wide">
-                            {message.message_type.replace("_", " ")}
-                          </span>
-                        )}
-                        {message.status === "failed" && (
-                          <span className="text-red-300">Failed</span>
+                      <div
+                        className={`max-w-[85%] rounded-xl px-3 py-2 text-sm ${
+                          message.direction === "outbound"
+                            ? "bg-emerald-900/50 border border-emerald-700/50 text-emerald-50"
+                            : "bg-zinc-700/80 border border-zinc-600/60 text-zinc-100"
+                        }`}
+                      >
+                        <p className="text-[10px] uppercase tracking-wide opacity-60 mb-1">
+                          {message.direction === "inbound" ? "Received" : "Sent"}
+                        </p>
+                        <p className="whitespace-pre-wrap break-words">{message.body}</p>
+                        <div className="flex items-center gap-2 mt-1 text-[10px] opacity-70">
+                          <span>{formatMessageTime(message.created_at)}</span>
+                          {message.message_type !== "general" && (
+                            <span className="uppercase tracking-wide">
+                              {message.message_type.replace("_", " ")}
+                            </span>
+                          )}
+                          {message.status === "failed" && (
+                            <span className="text-red-300">Failed</span>
+                          )}
+                        </div>
+                        {message.error_message && (
+                          <p className="text-[10px] text-red-300 mt-1">{message.error_message}</p>
                         )}
                       </div>
-                      {message.error_message && (
-                        <p className="text-[10px] text-red-300 mt-1">{message.error_message}</p>
-                      )}
                     </div>
-                  </div>
-                ))}
+                  ))
+                )}
               </div>
               <div className="p-3 border-t border-zinc-600/60 flex gap-2">
                 <textarea
                   value={composeText}
                   onChange={(e) => setComposeText(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && !e.shiftKey) {
+                      e.preventDefault();
+                      void handleComposeSend();
+                    }
+                  }}
                   rows={2}
-                  placeholder="Type a message..."
+                  placeholder="Type a text message..."
                   className="form-input flex-1 resize-none text-sm"
                 />
                 <button
@@ -413,8 +504,8 @@ export default function MessagesView({
               </div>
             </>
           ) : (
-            <div className="flex-1 flex items-center justify-center text-zinc-500 text-sm">
-              Select a conversation or message a tenant to get started.
+            <div className="flex-1 flex items-center justify-center text-zinc-500 text-sm px-6 text-center">
+              Select a conversation or start a new one to send and receive text messages.
             </div>
           )}
         </section>

@@ -7,7 +7,7 @@ export type SheetTab =
   | "rent_ledger"
   | "expenses"
   | "maintenance"
-  | "messages"
+  | "communication"
   | "investors"
   | "investor_payout"
   | "reports";

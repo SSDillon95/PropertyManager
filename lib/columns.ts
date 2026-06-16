@@ -24,7 +24,6 @@ export const MANAGEMENT_TABS: { id: SheetTab; label: string }[] = [
   { id: "rent_ledger", label: "Rent Ledger" },
   { id: "expenses", label: "Expenses" },
   { id: "maintenance", label: "Maintenance" },
-  { id: "messages", label: "Messages" },
 ];
 
 export const SETTINGS_TABS: { id: SheetTab; label: string }[] = [
@@ -38,6 +37,7 @@ export const NAV_TABS_BEFORE_MANAGEMENT: { id: SheetTab; label: string }[] = [
 ];
 
 export const NAV_TABS_AFTER_MANAGEMENT: { id: SheetTab; label: string }[] = [
+  { id: "communication", label: "Communication" },
   { id: "investor_payout", label: "Investor Payout" },
   { id: "reports", label: "Reports" },
 ];

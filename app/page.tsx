@@ -3,7 +3,7 @@
 import Image from "next/image";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import InvestorPayoutSummaryPanel from "@/components/InvestorPayoutSummaryPanel";
-import MessagesView from "@/components/MessagesView";
+import CommunicationView from "@/components/CommunicationView";
 import PropertyDetailPanel from "@/components/PropertyDetailPanel";
 import ReportsView from "@/components/ReportsView";
 import SpreadsheetTable from "@/components/SpreadsheetTable";
@@ -41,7 +41,7 @@ function apiFetch(input: RequestInfo | URL, init?: RequestInit) {
   return fetch(input, { cache: "no-store", ...init });
 }
 
-type DataTab = Exclude<SheetTab, "dashboard" | "reports" | "messages">;
+type DataTab = Exclude<SheetTab, "dashboard" | "reports" | "communication">;
 
 const API_MAP: Record<DataTab, string> = {
   businesses: "/api/businesses",
@@ -276,7 +276,7 @@ export default function PropertyManagerApp() {
         setRows([]);
         return;
       }
-      if (activeTab === "messages") {
+      if (activeTab === "communication") {
         await Promise.all([loadTenants(), loadRentPayments(), loadMaintenanceRows()]);
         setRows([]);
         return;
@@ -506,7 +506,7 @@ export default function PropertyManagerApp() {
   }, [closeSettingsMenu, settingsMenuOpen, updateSettingsMenuPosition]);
 
   useEffect(() => {
-    if (tab !== "dashboard" && tab !== "reports" && tab !== "messages") {
+    if (tab !== "dashboard" && tab !== "reports" && tab !== "communication") {
       setForm(emptyForm(columns));
       setFormOpen(false);
       setEditingId(null);
@@ -566,7 +566,7 @@ export default function PropertyManagerApp() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (tab === "dashboard" || tab === "reports" || tab === "messages") return;
+    if (tab === "dashboard" || tab === "reports" || tab === "communication") return;
 
     const missing = columns.find((c) => c.required && !form[c.key]?.trim());
     if (missing) {
@@ -610,7 +610,7 @@ export default function PropertyManagerApp() {
   };
 
   const handleArchive = async (id: number) => {
-    if (tab === "dashboard" || tab === "reports" || tab === "messages") return;
+    if (tab === "dashboard" || tab === "reports" || tab === "communication") return;
     setActionId(id);
     try {
       const endpoint = API_MAP[tab];
@@ -661,7 +661,7 @@ export default function PropertyManagerApp() {
   };
 
   const handleRestore = async (id: number) => {
-    if (tab === "dashboard" || tab === "reports" || tab === "messages") return;
+    if (tab === "dashboard" || tab === "reports" || tab === "communication") return;
     setActionId(id);
     try {
       const endpoint = API_MAP[tab];
@@ -689,7 +689,7 @@ export default function PropertyManagerApp() {
   const tableRows = tab === "properties" ? displayRows : rows;
 
   const exportCsv = () => {
-    if (tab === "dashboard" || tab === "reports" || tab === "messages" || tableRows.length === 0)
+    if (tab === "dashboard" || tab === "reports" || tab === "communication" || tableRows.length === 0)
       return;
     const headers = columns.map((c) => c.label);
     const lines = [
@@ -813,7 +813,7 @@ export default function PropertyManagerApp() {
           <div className="flex items-center gap-2 sm:gap-3 shrink-0 pr-2 sm:pr-4 pl-3">
             {tab !== "dashboard" &&
               tab !== "reports" &&
-              tab !== "messages" &&
+              tab !== "communication" &&
               tableRows.length > 0 && (
               <button
                 type="button"
@@ -930,8 +930,8 @@ export default function PropertyManagerApp() {
             investorPayouts={investorPayoutRows}
             investors={investors}
           />
-        ) : tab === "messages" ? (
-          <MessagesView
+        ) : tab === "communication" ? (
+          <CommunicationView
             tenants={tenants}
             rentPayments={rentPayments}
             maintenance={maintenanceRows}
