@@ -63,8 +63,7 @@ export default function LoginForm() {
         <div className="flex flex-1 items-center justify-center px-4 pb-10 lg:pb-0 lg:px-8">
           <div className="w-full max-w-md rounded-2xl border border-zinc-600/70 bg-zinc-900/85 backdrop-blur shadow-2xl shadow-black/40 p-8 sm:p-10">
             <div className="text-center mb-8">
-              <h1 className="text-xl font-semibold text-zinc-100">Property Manager</h1>
-              <p className="mt-2 text-sm text-zinc-400">Sign in to continue</p>
+              <p className="text-sm text-zinc-400">Sign in to continue</p>
             </div>
 
             <form onSubmit={handleSubmit} className="space-y-5">
