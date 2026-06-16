@@ -12,6 +12,8 @@ interface SpreadsheetTableProps {
   actionId: number | null;
   showProfitability?: boolean;
   onProfitability?: (row: Record<string, unknown>) => void;
+  showExpand?: boolean;
+  onExpand?: (row: Record<string, unknown>) => void;
 }
 
 export default function SpreadsheetTable({
@@ -23,6 +25,8 @@ export default function SpreadsheetTable({
   actionId,
   showProfitability = false,
   onProfitability,
+  showExpand = false,
+  onExpand,
 }: SpreadsheetTableProps) {
   if (rows.length === 0) {
     return (
@@ -40,8 +44,8 @@ export default function SpreadsheetTable({
         <table className="w-full text-sm border-collapse min-w-max">
           <thead>
             <tr className="bg-amber-400 text-zinc-900">
-              {showProfitability && !archiveMode && (
-                <th className="sticky left-0 z-20 px-3 py-2 text-left font-semibold whitespace-nowrap border-r border-amber-500/40 text-xs uppercase tracking-wide bg-amber-400 min-w-[7.5rem]">
+              {(showProfitability || showExpand) && !archiveMode && (
+                <th className="sticky left-0 z-20 px-3 py-2 text-left font-semibold whitespace-nowrap border-r border-amber-500/40 text-xs uppercase tracking-wide bg-amber-400 min-w-[11rem]">
                   &nbsp;
                 </th>
               )}
@@ -67,19 +71,32 @@ export default function SpreadsheetTable({
                   idx % 2 === 0 ? "bg-zinc-800/50" : "bg-zinc-700/30"
                 } hover:bg-emerald-950/20`}
               >
-                {showProfitability && !archiveMode && (
+                {(showProfitability || showExpand) && !archiveMode && (
                   <td
                     className={`sticky left-0 z-10 px-3 py-2 whitespace-nowrap border-r border-zinc-700/40 ${
                       idx % 2 === 0 ? "bg-zinc-800/95" : "bg-zinc-700/80"
                     }`}
                   >
-                    <button
-                      type="button"
-                      onClick={() => onProfitability?.(row)}
-                      className="text-xs px-2 py-1 rounded-md border border-emerald-600/60 bg-emerald-950/40 text-emerald-300 hover:bg-emerald-900/50 whitespace-nowrap"
-                    >
-                      Profitability
-                    </button>
+                    <div className="flex flex-col gap-1">
+                      {showProfitability && (
+                        <button
+                          type="button"
+                          onClick={() => onProfitability?.(row)}
+                          className="text-xs px-2 py-1 rounded-md border border-emerald-600/60 bg-emerald-950/40 text-emerald-300 hover:bg-emerald-900/50 whitespace-nowrap"
+                        >
+                          Profitability
+                        </button>
+                      )}
+                      {showExpand && (
+                        <button
+                          type="button"
+                          onClick={() => onExpand?.(row)}
+                          className="text-xs px-2 py-1 rounded-md border border-sky-600/60 bg-sky-950/40 text-sky-300 hover:bg-sky-900/50 whitespace-nowrap"
+                        >
+                          Expand
+                        </button>
+                      )}
+                    </div>
                   </td>
                 )}
                 {columns.map((col) => (

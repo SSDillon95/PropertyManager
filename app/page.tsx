@@ -2,6 +2,7 @@
 
 import Image from "next/image";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import PropertyDetailPanel from "@/components/PropertyDetailPanel";
 import ReportsView from "@/components/ReportsView";
 import SpreadsheetTable from "@/components/SpreadsheetTable";
 import { getColumnsForTab, SHEET_TABS, type ColumnDef } from "@/lib/columns";
@@ -83,6 +84,7 @@ export default function PropertyManagerApp() {
   const [rentPayments, setRentPayments] = useState<RentPayment[]>([]);
   const [expenseRows, setExpenseRows] = useState<Expense[]>([]);
   const [profitabilityProperty, setProfitabilityProperty] = useState<Property | null>(null);
+  const [expandedProperty, setExpandedProperty] = useState<Property | null>(null);
 
   const columns = useMemo(() => getColumnsForTab(tab), [tab]);
   const profitability = useMemo(
@@ -224,6 +226,7 @@ export default function PropertyManagerApp() {
   const handleTabChange = async (next: SheetTab) => {
     setShowArchived(false);
     setFormOpen(false);
+    setExpandedProperty(null);
     setTab(next);
     setLoading(true);
     try {
@@ -238,6 +241,7 @@ export default function PropertyManagerApp() {
     const next = !showArchived;
     setShowArchived(next);
     setFormOpen(false);
+    setExpandedProperty(null);
     setLoading(true);
     try {
       await loadTabData(tab, next);
@@ -573,6 +577,12 @@ export default function PropertyManagerApp() {
                   </button>
                 </div>
               </div>
+              {tab === "properties" && expandedProperty && (
+                <PropertyDetailPanel
+                  property={expandedProperty}
+                  onCollapse={() => setExpandedProperty(null)}
+                />
+              )}
               <SpreadsheetTable
                 columns={columns}
                 rows={rows}
@@ -580,8 +590,10 @@ export default function PropertyManagerApp() {
                 onArchive={handleArchive}
                 onRestore={handleRestore}
                 actionId={actionId}
-                showProfitability={tab === "properties"}
+                showProfitability={tab === "properties" && !showArchived}
                 onProfitability={(row) => setProfitabilityProperty(row as unknown as Property)}
+                showExpand={tab === "properties" && !showArchived}
+                onExpand={(row) => setExpandedProperty(row as unknown as Property)}
               />
             </section>
           </div>
