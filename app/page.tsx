@@ -62,6 +62,7 @@ export default function PropertyManagerApp() {
   const [saving, setSaving] = useState(false);
   const [actionId, setActionId] = useState<number | null>(null);
   const [showArchived, setShowArchived] = useState(false);
+  const [formOpen, setFormOpen] = useState(false);
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(
     null
   );
@@ -181,11 +182,18 @@ export default function PropertyManagerApp() {
   useEffect(() => {
     if (tab !== "dashboard") {
       setForm(emptyForm(columns));
+      setFormOpen(false);
     }
   }, [tab, columns]);
 
+  const openEntryForm = () => {
+    setForm(emptyForm(columns));
+    setFormOpen(true);
+  };
+
   const handleTabChange = async (next: SheetTab) => {
     setShowArchived(false);
+    setFormOpen(false);
     setTab(next);
     setLoading(true);
     try {
@@ -199,6 +207,7 @@ export default function PropertyManagerApp() {
   const toggleArchiveView = async () => {
     const next = !showArchived;
     setShowArchived(next);
+    setFormOpen(false);
     setLoading(true);
     try {
       await loadTabData(tab, next);
@@ -230,8 +239,9 @@ export default function PropertyManagerApp() {
       if (json.data && typeof json.data === "object") {
         setRows((prev) => [...prev, json.data as Record<string, unknown>]);
       }
-      showMessage("success", "Row added.");
+      showMessage("success", "Row saved.");
       setForm(emptyForm(columns));
+      setFormOpen(false);
       await Promise.all([loadTabData(tab, showArchived), loadDashboard()]);
     } catch (error) {
       showMessage("error", (error as Error).message);
@@ -374,17 +384,24 @@ export default function PropertyManagerApp() {
           <DashboardView summary={summary} />
         ) : (
           <div className="space-y-6">
-            {!showArchived && (
+            {!showArchived && formOpen && (
             <section className="rounded-xl border border-zinc-600/60 bg-zinc-800/90 p-4 sm:p-6">
-              <div className="flex items-center justify-between mb-4">
+              <div className="flex items-start justify-between gap-3 mb-4">
                 <div>
-                  <h2 className="font-semibold text-lg">Add New Row</h2>
+                  <h2 className="font-semibold text-lg">New Entry</h2>
                   {tab === "rent_ledger" && (
                     <p className="text-xs text-zinc-400 mt-1">
                       Selecting a property auto-fills rent due and tenant from the Properties tab.
                     </p>
                   )}
                 </div>
+                <button
+                  type="button"
+                  onClick={() => setFormOpen(false)}
+                  className="text-xs px-3 py-1.5 rounded-lg border border-zinc-600 bg-zinc-700/80 text-zinc-300 hover:bg-zinc-700 shrink-0"
+                >
+                  Close
+                </button>
               </div>
               <form onSubmit={handleSubmit}>
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
@@ -481,7 +498,7 @@ export default function PropertyManagerApp() {
                   disabled={saving}
                   className="mt-4 px-5 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-medium disabled:opacity-50"
                 >
-                  {saving ? "Saving..." : "Add Row"}
+                  {saving ? "Saving..." : "Save"}
                 </button>
               </form>
             </section>
@@ -493,17 +510,32 @@ export default function PropertyManagerApp() {
                   {showArchived ? "Archive — " : ""}
                   {SHEET_TABS.find((s) => s.id === tab)?.label} ({rows.length})
                 </h2>
-                <button
-                  type="button"
-                  onClick={toggleArchiveView}
-                  className={`text-xs px-3 py-1.5 rounded-lg border ${
-                    showArchived
-                      ? "border-emerald-600/60 bg-emerald-950/40 text-emerald-300 hover:bg-emerald-900/50"
-                      : "border-zinc-600 bg-zinc-700/80 text-zinc-200 hover:bg-zinc-700"
-                  }`}
-                >
-                  {showArchived ? "Back to Active" : "View Archive"}
-                </button>
+                <div className="flex items-center gap-2 flex-wrap">
+                  {!showArchived && (
+                    <button
+                      type="button"
+                      onClick={openEntryForm}
+                      className={`text-xs px-3 py-1.5 rounded-lg border ${
+                        formOpen
+                          ? "border-emerald-600/60 bg-emerald-950/40 text-emerald-300"
+                          : "border-emerald-600/60 bg-emerald-900/30 text-emerald-300 hover:bg-emerald-900/50"
+                      }`}
+                    >
+                      Add Row
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={toggleArchiveView}
+                    className={`text-xs px-3 py-1.5 rounded-lg border ${
+                      showArchived
+                        ? "border-emerald-600/60 bg-emerald-950/40 text-emerald-300 hover:bg-emerald-900/50"
+                        : "border-zinc-600 bg-zinc-700/80 text-zinc-200 hover:bg-zinc-700"
+                    }`}
+                  >
+                    {showArchived ? "Back to Active" : "View Archive"}
+                  </button>
+                </div>
               </div>
               <SpreadsheetTable
                 columns={columns}

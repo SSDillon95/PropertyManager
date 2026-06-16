@@ -29,7 +29,7 @@ export default function SpreadsheetTable({
       <div className="rounded-xl border border-zinc-600/60 bg-zinc-800/90 p-8 text-center text-zinc-400">
         {archiveMode
           ? "No archived rows. Archive a row from the active list to see it here."
-          : "No rows yet. Add your first entry using the form above."}
+          : "No rows yet. Click Add Row to enter your first record."}
       </div>
     );
   }
