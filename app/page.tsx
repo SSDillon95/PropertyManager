@@ -17,6 +17,7 @@ import {
 } from "@/lib/investor-records";
 import {
   getColumnsForTab,
+  getInvestorFormSections,
   isInvestorTab,
   isManagementTab,
   isSettingsTab,
@@ -222,6 +223,12 @@ export default function PropertyManagerApp() {
   );
 
   const columns = useMemo(() => getColumnsForTab(tab), [tab]);
+  const investorFormSections = useMemo(() => {
+    if (tab === "investor_capital" || tab === "investor_payout") {
+      return getInvestorFormSections(tab);
+    }
+    return null;
+  }, [tab]);
   const investorPayoutFormSummary = useMemo(() => {
     if (tab !== "investor_capital" || !formOpen) return null;
     return {
@@ -1085,6 +1092,186 @@ export default function PropertyManagerApp() {
         : "border-transparent text-zinc-400 hover:text-zinc-100 hover:bg-zinc-700/40"
     }`;
 
+  const formGridClass =
+    "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3";
+
+  const renderFormField = (col: ColumnDef) => (
+    <label key={col.key} className="block">
+      <span className="text-xs font-semibold uppercase tracking-wide text-amber-400 mb-1 block">
+        {col.label}
+        {col.required ? " *" : ""}
+      </span>
+      {col.type === "property" ? (
+        <select
+          value={form[col.key] ?? ""}
+          onChange={(e) => handlePropertySelect(e.target.value, col.key)}
+          disabled={
+            tab === "investor_payout" ||
+            (tab === "investor_capital" &&
+              (editingId != null || Boolean(form.property_name)))
+          }
+          className={`form-select ${
+            tab === "investor_payout" ||
+            (tab === "investor_capital" &&
+              (editingId != null || Boolean(form.property_name)))
+              ? "text-zinc-400 cursor-not-allowed bg-zinc-700/50"
+              : ""
+          }`}
+        >
+          <option value="">
+            {tab === "investor_capital" && !form.business_name
+              ? "Select business first..."
+              : (tab === "investor_capital" ? capitalFormProperties : properties).length
+                ? "Select property..."
+                : "No properties — add one in Properties tab"}
+          </option>
+          {(tab === "investor_capital" ? capitalFormProperties : properties).map((property) => (
+            <option key={property.id} value={property.property_name}>
+              {property.property_name}
+            </option>
+          ))}
+        </select>
+      ) : col.type === "tenant" ? (
+        <select
+          value={form[col.key] ?? ""}
+          onChange={(e) => setForm((prev) => ({ ...prev, [col.key]: e.target.value }))}
+          className="form-select"
+        >
+          <option value="">
+            {tenants.length ? "Select tenant..." : "No tenants — add one in Tenants tab"}
+          </option>
+          {tenants.map((tenant) => (
+            <option key={tenant.id} value={tenantDisplayName(tenant)}>
+              {tenantDisplayName(tenant)}
+              {tenant.property_name ? ` (${tenant.property_name})` : ""}
+            </option>
+          ))}
+        </select>
+      ) : col.type === "capital" ? (
+        <select
+          value={form[col.key] ?? ""}
+          onChange={(e) => handleCapitalSelect(e.target.value)}
+          className="form-select"
+        >
+          <option value="">
+            {investorCapitalRows.length
+              ? "Select capital..."
+              : "No capital records — add one on the Capital tab"}
+          </option>
+          {investorCapitalRows.map((capital) => (
+            <option key={capital.id} value={capital.payout_id}>
+              {capitalOptionLabel(capital)}
+            </option>
+          ))}
+        </select>
+      ) : col.type === "investor" ? (
+        <select
+          value={form[col.key] ?? ""}
+          onChange={(e) => setForm((prev) => ({ ...prev, [col.key]: e.target.value }))}
+          disabled={tab === "investor_payout"}
+          className={`form-select ${
+            tab === "investor_payout" ? "text-zinc-400 cursor-not-allowed bg-zinc-700/50" : ""
+          }`}
+        >
+          <option value="">
+            {investors.length
+              ? "Select investor..."
+              : "No investors — add one on the Investor tab"}
+          </option>
+          {investors
+            .filter((investor) => investor.status === "Active")
+            .map((investor) => (
+              <option key={investor.id} value={investor.investor_name}>
+                {investor.investor_name}
+                {investor.property_name ? ` (${investor.property_name})` : ""}
+              </option>
+            ))}
+        </select>
+      ) : col.type === "business" ? (
+        <select
+          value={form[col.key] ?? ""}
+          onChange={(e) => handleBusinessSelect(e.target.value)}
+          className="form-select"
+        >
+          <option value="">
+            {businesses.length
+              ? "Select business..."
+              : "No businesses — add one on the Business tab"}
+          </option>
+          {businesses
+            .filter((business) => business.status === "Active")
+            .map((business) => (
+              <option key={business.id} value={business.business_name}>
+                {business.business_name}
+              </option>
+            ))}
+        </select>
+      ) : col.type === "select" ? (
+        <select
+          value={form[col.key] ?? ""}
+          onChange={(e) => setForm((prev) => ({ ...prev, [col.key]: e.target.value }))}
+          className="form-select"
+        >
+          {col.options?.map((opt) => (
+            <option key={opt} value={opt}>
+              {opt}
+            </option>
+          ))}
+        </select>
+      ) : (
+        <input
+          type={
+            col.type === "date"
+              ? "date"
+              : col.type === "number" || col.type === "currency"
+                ? "number"
+                : "text"
+          }
+          step={col.type === "currency" ? "0.01" : undefined}
+          value={
+            tab === "investor_payout" && col.key === "payout_id" && !editingId
+              ? nextPayoutIdPreview || form[col.key] || ""
+              : tab === "investor_capital" && col.key === "payout_id" && !editingId
+                ? nextCapitalIdPreview || form[col.key] || ""
+                : (form[col.key] ?? "")
+          }
+          readOnly={
+            (tab === "rent_ledger" &&
+              col.key === "tenant_name" &&
+              Boolean(form.property_name)) ||
+            (tab === "investor_payout" && col.key === "payout_id") ||
+            (tab === "investor_capital" && col.key === "payout_id") ||
+            (tab === "investor_capital" &&
+              (col.key === "business_address" || col.key === "property_address")) ||
+            (tab === "investor_payout" &&
+              col.key === "property_name" &&
+              Boolean(form.capital_id))
+          }
+          onChange={(e) => setForm((prev) => ({ ...prev, [col.key]: e.target.value }))}
+          placeholder={
+            (tab === "investor_payout" || tab === "investor_capital") &&
+            col.key === "payout_id" &&
+            !editingId
+              ? "Auto-assigned"
+              : undefined
+          }
+          className={`form-field ${
+            (tab === "rent_ledger" && col.key === "tenant_name" && form.property_name) ||
+            (tab === "investor_payout" &&
+              (col.key === "payout_id" ||
+                (col.key === "property_name" && form.capital_id))) ||
+            (tab === "investor_capital" &&
+              (col.key === "payout_id" ||
+                col.key === "business_address" ||
+                col.key === "property_address"))
+              ? "text-zinc-400 cursor-not-allowed bg-zinc-700/50"
+              : ""
+          }`}
+        />
+      )}
+    </label>
+  );
+
   return (
     <div className="min-h-screen bg-zinc-800 text-zinc-100 font-sans flex flex-col relative">
       <div
@@ -1430,219 +1617,48 @@ export default function PropertyManagerApp() {
                 </button>
               </div>
               <form onSubmit={handleSubmit}>
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
-                  {columns.map((col) => (
-                    <label key={col.key} className="block">
-                      <span className="text-xs font-semibold uppercase tracking-wide text-amber-400 mb-1 block">
-                        {col.label}
-                        {col.required ? " *" : ""}
-                      </span>
-                      {col.type === "property" ? (
-                        <select
-                          value={form[col.key] ?? ""}
-                          onChange={(e) => handlePropertySelect(e.target.value, col.key)}
-                          disabled={
-                            tab === "investor_payout" ||
-                            (tab === "investor_capital" &&
-                              (editingId != null || Boolean(form.property_name)))
-                          }
-                          className={`form-select ${
-                            tab === "investor_payout" ||
-                            (tab === "investor_capital" &&
-                              (editingId != null || Boolean(form.property_name)))
-                              ? "text-zinc-400 cursor-not-allowed bg-zinc-700/50"
-                              : ""
-                          }`}
-                        >
-                          <option value="">
-                            {tab === "investor_capital" && !form.business_name
-                              ? "Select business first..."
-                              : (tab === "investor_capital"
-                                  ? capitalFormProperties
-                                  : properties
-                                ).length
-                                ? "Select property..."
-                                : "No properties — add one in Properties tab"}
-                          </option>
-                          {(tab === "investor_capital" ? capitalFormProperties : properties).map(
-                            (property) => (
-                              <option key={property.id} value={property.property_name}>
-                                {property.property_name}
-                              </option>
-                            )
-                          )}
-                        </select>
-                      ) : col.type === "tenant" ? (
-                        <select
-                          value={form[col.key] ?? ""}
-                          onChange={(e) =>
-                            setForm((prev) => ({ ...prev, [col.key]: e.target.value }))
-                          }
-                          className="form-select"
-                        >
-                          <option value="">
-                            {tenants.length
-                              ? "Select tenant..."
-                              : "No tenants — add one in Tenants tab"}
-                          </option>
-                          {tenants.map((tenant) => (
-                            <option key={tenant.id} value={tenantDisplayName(tenant)}>
-                              {tenantDisplayName(tenant)}
-                              {tenant.property_name ? ` (${tenant.property_name})` : ""}
-                            </option>
-                          ))}
-                        </select>
-                      ) : col.type === "capital" ? (
-                        <select
-                          value={form[col.key] ?? ""}
-                          onChange={(e) => handleCapitalSelect(e.target.value)}
-                          className="form-select"
-                        >
-                          <option value="">
-                            {investorCapitalRows.length
-                              ? "Select capital..."
-                              : "No capital records — add one on the Capital tab"}
-                          </option>
-                          {investorCapitalRows.map((capital) => (
-                            <option key={capital.id} value={capital.payout_id}>
-                              {capitalOptionLabel(capital)}
-                            </option>
-                          ))}
-                        </select>
-                      ) : col.type === "investor" ? (
-                        <select
-                          value={form[col.key] ?? ""}
-                          onChange={(e) =>
-                            setForm((prev) => ({ ...prev, [col.key]: e.target.value }))
-                          }
-                          disabled={tab === "investor_payout"}
-                          className={`form-select ${
-                            tab === "investor_payout" ? "text-zinc-400 cursor-not-allowed bg-zinc-700/50" : ""
-                          }`}
-                        >
-                          <option value="">
-                            {investors.length
-                              ? "Select investor..."
-                              : "No investors — add one on the Investor tab"}
-                          </option>
-                          {investors
-                            .filter((investor) => investor.status === "Active")
-                            .map((investor) => (
-                              <option key={investor.id} value={investor.investor_name}>
-                                {investor.investor_name}
-                                {investor.property_name ? ` (${investor.property_name})` : ""}
-                              </option>
-                            ))}
-                        </select>
-                      ) : col.type === "business" ? (
-                        <select
-                          value={form[col.key] ?? ""}
-                          onChange={(e) => handleBusinessSelect(e.target.value)}
-                          className="form-select"
-                        >
-                          <option value="">
-                            {businesses.length
-                              ? "Select business..."
-                              : "No businesses — add one on the Business tab"}
-                          </option>
-                          {businesses
-                            .filter((business) => business.status === "Active")
-                            .map((business) => (
-                              <option key={business.id} value={business.business_name}>
-                                {business.business_name}
-                              </option>
-                            ))}
-                        </select>
-                      ) : col.type === "select" ? (
-                        <select
-                          value={form[col.key] ?? ""}
-                          onChange={(e) =>
-                            setForm((prev) => ({ ...prev, [col.key]: e.target.value }))
-                          }
-                          className="form-select"
-                        >
-                          {col.options?.map((opt) => (
-                            <option key={opt} value={opt}>
-                              {opt}
-                            </option>
-                          ))}
-                        </select>
-                      ) : (
-                        <input
-                          type={
-                            col.type === "date"
-                              ? "date"
-                              : col.type === "number" || col.type === "currency"
-                                ? "number"
-                                : "text"
-                          }
-                          step={col.type === "currency" ? "0.01" : undefined}
-                          value={
-                            tab === "investor_payout" && col.key === "payout_id" && !editingId
-                              ? nextPayoutIdPreview || form[col.key] || ""
-                              : tab === "investor_capital" && col.key === "payout_id" && !editingId
-                                ? nextCapitalIdPreview || form[col.key] || ""
-                                : form[col.key] ?? ""
-                          }
-                          readOnly={
-                            (tab === "rent_ledger" &&
-                              col.key === "tenant_name" &&
-                              Boolean(form.property_name)) ||
-                            (tab === "investor_payout" && col.key === "payout_id") ||
-                            (tab === "investor_capital" && col.key === "payout_id") ||
-                            (tab === "investor_capital" &&
-                              (col.key === "business_address" || col.key === "property_address")) ||
-                            (tab === "investor_payout" &&
-                              col.key === "property_name" &&
-                              Boolean(form.capital_id))
-                          }
-                          onChange={(e) =>
-                            setForm((prev) => ({ ...prev, [col.key]: e.target.value }))
-                          }
-                          placeholder={
-                            (tab === "investor_payout" || tab === "investor_capital") &&
-                            col.key === "payout_id" &&
-                            !editingId
-                              ? "Auto-assigned"
-                              : undefined
-                          }
-                          className={`form-field ${
-                            (tab === "rent_ledger" &&
-                              col.key === "tenant_name" &&
-                              form.property_name) ||
-                            (tab === "investor_payout" &&
-                              (col.key === "payout_id" ||
-                                (col.key === "property_name" && form.capital_id))) ||
-                            (tab === "investor_capital" &&
-                              (col.key === "payout_id" ||
-                                col.key === "business_address" ||
-                                col.key === "property_address"))
-                              ? "text-zinc-400 cursor-not-allowed bg-zinc-700/50"
-                              : ""
-                          }`}
-                        />
-                      )}
-                    </label>
-                  ))}
-                  {tab === "users" && (
-                    <label className="block">
-                      <span className="text-xs font-semibold uppercase tracking-wide text-amber-400 mb-1 block">
-                        Password{editingId ? "" : " *"}
-                      </span>
-                      <input
-                        type="password"
-                        value={form.password ?? ""}
-                        onChange={(e) =>
-                          setForm((prev) => ({ ...prev, password: e.target.value }))
-                        }
-                        className="form-field"
-                        placeholder={editingId ? "Leave blank to keep current password" : "Enter password"}
-                        required={!editingId}
-                        autoComplete="new-password"
-                      />
-                    </label>
-                  )}
-                </div>
+                {investorFormSections ? (
+                  <div className="space-y-5">
+                    <div className="rounded-xl border-2 border-emerald-700/50 bg-zinc-900/40 p-4 sm:p-5">
+                      <h3 className="text-xs font-semibold uppercase tracking-wide text-emerald-300 mb-4">
+                        Entry Details
+                      </h3>
+                      <div className={formGridClass}>
+                        {investorFormSections.inputColumns.map((col) => renderFormField(col))}
+                      </div>
+                    </div>
+                    <div className="rounded-xl border border-zinc-600/70 bg-zinc-800/50 p-4 sm:p-5">
+                      <h3 className="text-xs font-semibold uppercase tracking-wide text-zinc-400 mb-4">
+                        Auto-Assigned
+                      </h3>
+                      <div className={formGridClass}>
+                        {investorFormSections.autoColumns.map((col) => renderFormField(col))}
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className={formGridClass}>
+                    {columns.map((col) => renderFormField(col))}
+                  </div>
+                )}
+                {tab === "users" && (
+                  <label className="block mt-3">
+                    <span className="text-xs font-semibold uppercase tracking-wide text-amber-400 mb-1 block">
+                      Password{editingId ? "" : " *"}
+                    </span>
+                    <input
+                      type="password"
+                      value={form.password ?? ""}
+                      onChange={(e) =>
+                        setForm((prev) => ({ ...prev, password: e.target.value }))
+                      }
+                      className="form-field"
+                      placeholder={editingId ? "Leave blank to keep current password" : "Enter password"}
+                      required={!editingId}
+                      autoComplete="new-password"
+                    />
+                  </label>
+                )}
                 <button
                   type="submit"
                   disabled={saving}

@@ -313,16 +313,16 @@ export const INVESTOR_COLUMNS: ColumnDef[] = [
   { key: "notes", label: "Notes", type: "text", width: "200px" },
 ];
 
-export const INVESTOR_CAPITAL_COLUMNS: ColumnDef[] = [
+const INVESTOR_CAPITAL_COLUMN_DEFS: ColumnDef[] = [
   { key: "payout_id", label: "Capital ID", type: "text", width: "100px" },
   { key: "date", label: "Date", type: "date", required: true, width: "110px" },
   { key: "business_name", label: "Business", type: "business", required: true, width: "160px" },
   { key: "business_address", label: "Business Address", type: "text", width: "200px" },
   { key: "property_name", label: "Property", type: "property", required: true, width: "150px" },
   { key: "property_address", label: "Property Address", type: "text", width: "180px" },
+  { key: "investor_name", label: "Investor", type: "investor", required: true, width: "150px" },
   { key: "loan_date", label: "Loan Date", type: "date", width: "110px" },
   { key: "sell_estimate_date", label: "Sell Estimate", type: "date", width: "120px" },
-  { key: "investor_name", label: "Investor", type: "investor", required: true, width: "150px" },
   { key: "attorney", label: "Attorney", type: "text", width: "130px" },
   { key: "amount_loaned", label: "Capital Received", type: "currency", width: "120px" },
   { key: "annual_interest_rate", label: "12-Mo Rate", type: "number", width: "100px" },
@@ -331,7 +331,28 @@ export const INVESTOR_CAPITAL_COLUMNS: ColumnDef[] = [
   { key: "notes", label: "Notes", type: "text", width: "200px" },
 ];
 
-export const INVESTOR_PAYOUT_COLUMNS: ColumnDef[] = [
+const INVESTOR_CAPITAL_INPUT_KEYS = [
+  "date",
+  "business_name",
+  "property_name",
+  "investor_name",
+  "loan_date",
+  "sell_estimate_date",
+  "attorney",
+  "amount_loaned",
+  "annual_interest_rate",
+  "kicker",
+  "days_in_year",
+  "notes",
+] as const;
+
+const INVESTOR_CAPITAL_AUTO_KEYS = [
+  "payout_id",
+  "business_address",
+  "property_address",
+] as const;
+
+const INVESTOR_PAYOUT_COLUMN_DEFS: ColumnDef[] = [
   { key: "capital_id", label: "Capital ID", type: "capital", required: true, width: "120px" },
   { key: "payout_id", label: "Payout ID", type: "text", width: "90px" },
   { key: "date", label: "Date", type: "date", required: true, width: "110px" },
@@ -371,6 +392,53 @@ export const INVESTOR_PAYOUT_COLUMNS: ColumnDef[] = [
   },
   { key: "notes", label: "Notes", type: "text", width: "200px" },
 ];
+
+const INVESTOR_PAYOUT_INPUT_KEYS = [
+  "capital_id",
+  "date",
+  "payout_type",
+  "payout_amount",
+  "payment_method",
+  "payment_date",
+  "tax_year",
+  "status",
+  "notes",
+] as const;
+
+const INVESTOR_PAYOUT_AUTO_KEYS = ["payout_id", "property_name", "investor_name"] as const;
+
+function orderColumnsByKeys(keys: readonly string[], columns: ColumnDef[]): ColumnDef[] {
+  const byKey = new Map(columns.map((column) => [column.key, column]));
+  return keys
+    .map((key) => byKey.get(key))
+    .filter((column): column is ColumnDef => column != null);
+}
+
+export const INVESTOR_CAPITAL_COLUMNS = orderColumnsByKeys(
+  [...INVESTOR_CAPITAL_INPUT_KEYS, ...INVESTOR_CAPITAL_AUTO_KEYS],
+  INVESTOR_CAPITAL_COLUMN_DEFS
+);
+
+export const INVESTOR_PAYOUT_COLUMNS = orderColumnsByKeys(
+  [...INVESTOR_PAYOUT_INPUT_KEYS, ...INVESTOR_PAYOUT_AUTO_KEYS],
+  INVESTOR_PAYOUT_COLUMN_DEFS
+);
+
+export function getInvestorFormSections(tab: "investor_capital" | "investor_payout"): {
+  inputColumns: ColumnDef[];
+  autoColumns: ColumnDef[];
+} {
+  if (tab === "investor_capital") {
+    return {
+      inputColumns: orderColumnsByKeys(INVESTOR_CAPITAL_INPUT_KEYS, INVESTOR_CAPITAL_COLUMN_DEFS),
+      autoColumns: orderColumnsByKeys(INVESTOR_CAPITAL_AUTO_KEYS, INVESTOR_CAPITAL_COLUMN_DEFS),
+    };
+  }
+  return {
+    inputColumns: orderColumnsByKeys(INVESTOR_PAYOUT_INPUT_KEYS, INVESTOR_PAYOUT_COLUMN_DEFS),
+    autoColumns: orderColumnsByKeys(INVESTOR_PAYOUT_AUTO_KEYS, INVESTOR_PAYOUT_COLUMN_DEFS),
+  };
+}
 
 export const USER_COLUMNS: ColumnDef[] = [
   { key: "username", label: "Username", type: "text", required: true, width: "160px" },
