@@ -199,7 +199,10 @@ const SQLITE_SCHEMA = `
 
   CREATE TABLE IF NOT EXISTS investor_payouts (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    payout_id TEXT NOT NULL UNIQUE,
+    record_kind TEXT NOT NULL DEFAULT 'capital',
+    capital_id TEXT,
+    payout_seq INTEGER,
+    payout_id TEXT NOT NULL,
     date TEXT NOT NULL,
     property_name TEXT NOT NULL,
     property_address TEXT,
@@ -438,7 +441,10 @@ async function initSchema(): Promise<void> {
     await sql`
       CREATE TABLE IF NOT EXISTS investor_payouts (
         id SERIAL PRIMARY KEY,
-        payout_id TEXT NOT NULL UNIQUE,
+        record_kind TEXT NOT NULL DEFAULT 'capital',
+        capital_id TEXT,
+        payout_seq INTEGER,
+        payout_id TEXT NOT NULL,
         date TEXT NOT NULL,
         property_name TEXT NOT NULL,
         property_address TEXT,
@@ -468,6 +474,19 @@ async function initSchema(): Promise<void> {
     await sql`ALTER TABLE investor_payouts ADD COLUMN IF NOT EXISTS annual_interest_rate REAL`;
     await sql`ALTER TABLE investor_payouts ADD COLUMN IF NOT EXISTS kicker REAL`;
     await sql`ALTER TABLE investor_payouts ADD COLUMN IF NOT EXISTS days_in_year INTEGER DEFAULT 365`;
+    await sql`ALTER TABLE investor_payouts ADD COLUMN IF NOT EXISTS record_kind TEXT NOT NULL DEFAULT 'capital'`;
+    await sql`ALTER TABLE investor_payouts ADD COLUMN IF NOT EXISTS capital_id TEXT`;
+    await sql`ALTER TABLE investor_payouts ADD COLUMN IF NOT EXISTS payout_seq INTEGER`;
+    await sql`UPDATE investor_payouts SET record_kind = 'capital' WHERE record_kind IS NULL`;
+    await sql`ALTER TABLE investor_payouts DROP CONSTRAINT IF EXISTS investor_payouts_payout_id_key`;
+    await sql`
+      CREATE UNIQUE INDEX IF NOT EXISTS investor_payouts_capital_id_unique
+      ON investor_payouts (payout_id) WHERE record_kind = 'capital'
+    `;
+    await sql`
+      CREATE UNIQUE INDEX IF NOT EXISTS investor_payouts_capital_seq_unique
+      ON investor_payouts (capital_id, payout_seq) WHERE record_kind = 'payout'
+    `;
     await sql`ALTER TABLE businesses ADD COLUMN IF NOT EXISTS archived BOOLEAN NOT NULL DEFAULT FALSE`;
     await sql`ALTER TABLE properties ADD COLUMN IF NOT EXISTS archived BOOLEAN NOT NULL DEFAULT FALSE`;
     await sql`ALTER TABLE tenants ADD COLUMN IF NOT EXISTS archived BOOLEAN NOT NULL DEFAULT FALSE`;
@@ -561,6 +580,61 @@ async function initSchema(): Promise<void> {
   if (!hasPayoutCol("days_in_year")) {
     db.exec("ALTER TABLE investor_payouts ADD COLUMN days_in_year INTEGER DEFAULT 365");
   }
+  if (!hasPayoutCol("record_kind")) {
+    db.exec(`
+      CREATE TABLE investor_payouts_migrated (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        record_kind TEXT NOT NULL DEFAULT 'capital',
+        capital_id TEXT,
+        payout_seq INTEGER,
+        payout_id TEXT NOT NULL,
+        date TEXT NOT NULL,
+        property_name TEXT NOT NULL,
+        property_address TEXT,
+        loan_date TEXT,
+        sell_estimate_date TEXT,
+        investor_name TEXT NOT NULL,
+        attorney TEXT,
+        amount_loaned REAL,
+        annual_interest_rate REAL,
+        kicker REAL,
+        days_in_year INTEGER DEFAULT 365,
+        payout_type TEXT NOT NULL,
+        payout_amount REAL NOT NULL,
+        payment_method TEXT,
+        payment_date TEXT,
+        tax_year INTEGER,
+        status TEXT DEFAULT 'Pending',
+        notes TEXT,
+        archived INTEGER NOT NULL DEFAULT 0,
+        created_at TEXT NOT NULL DEFAULT (datetime('now'))
+      )
+    `);
+    db.exec(`
+      INSERT INTO investor_payouts_migrated (
+        id, record_kind, capital_id, payout_seq, payout_id, date, property_name, property_address,
+        loan_date, sell_estimate_date, investor_name, attorney, amount_loaned, annual_interest_rate,
+        kicker, days_in_year, payout_type, payout_amount, payment_method, payment_date, tax_year,
+        status, notes, archived, created_at
+      )
+      SELECT
+        id, 'capital', NULL, NULL, payout_id, date, property_name, property_address,
+        loan_date, sell_estimate_date, investor_name, attorney, amount_loaned, annual_interest_rate,
+        kicker, days_in_year, payout_type, payout_amount, payment_method, payment_date, tax_year,
+        status, notes, archived, created_at
+      FROM investor_payouts
+    `);
+    db.exec("DROP TABLE investor_payouts");
+    db.exec("ALTER TABLE investor_payouts_migrated RENAME TO investor_payouts");
+  }
+  db.exec(`
+    CREATE UNIQUE INDEX IF NOT EXISTS investor_payouts_capital_id_unique
+    ON investor_payouts (payout_id) WHERE record_kind = 'capital'
+  `);
+  db.exec(`
+    CREATE UNIQUE INDEX IF NOT EXISTS investor_payouts_capital_seq_unique
+    ON investor_payouts (capital_id, payout_seq) WHERE record_kind = 'payout'
+  `);
   const smsTable = db
     .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='sms_messages'")
     .get();
@@ -795,9 +869,17 @@ function mapInvestor(row: Record<string, unknown>): Investor {
 }
 
 function mapInvestorPayout(row: Record<string, unknown>): InvestorPayout {
+  const recordKind = row.record_kind === "payout" ? "payout" : "capital";
+  const payoutSeq = num(row.payout_seq);
   return {
     id: Number(row.id),
-    payout_id: String(row.payout_id),
+    record_kind: recordKind,
+    capital_id: str(row.capital_id),
+    payout_seq: payoutSeq != null ? Number(payoutSeq) : null,
+    payout_id:
+      recordKind === "payout" && payoutSeq != null
+        ? String(payoutSeq)
+        : String(row.payout_id),
     date: String(row.date),
     property_name: String(row.property_name),
     property_address: str(row.property_address),
@@ -1512,21 +1594,95 @@ export async function restoreInvestor(id: number): Promise<void> {
   db.close();
 }
 
-export async function listInvestorPayouts(archived = false): Promise<InvestorPayout[]> {
+export async function listInvestorPayouts(
+  archived = false,
+  kind?: "capital" | "payout"
+): Promise<InvestorPayout[]> {
   await ensureSchema();
   if (usePostgres) {
     const sql = await getPostgresSql();
-    const rows = archived
-      ? await sql`SELECT * FROM investor_payouts WHERE archived = TRUE ORDER BY date DESC`
-      : await sql`SELECT * FROM investor_payouts WHERE archived = FALSE ORDER BY date DESC`;
+    const rows =
+      kind === "capital"
+        ? archived
+          ? await sql`SELECT * FROM investor_payouts WHERE archived = TRUE AND record_kind = 'capital' ORDER BY date DESC`
+          : await sql`SELECT * FROM investor_payouts WHERE archived = FALSE AND record_kind = 'capital' ORDER BY date DESC`
+        : kind === "payout"
+          ? archived
+            ? await sql`SELECT * FROM investor_payouts WHERE archived = TRUE AND record_kind = 'payout' ORDER BY capital_id, payout_seq`
+            : await sql`SELECT * FROM investor_payouts WHERE archived = FALSE AND record_kind = 'payout' ORDER BY capital_id, payout_seq`
+          : archived
+            ? await sql`SELECT * FROM investor_payouts WHERE archived = TRUE ORDER BY date DESC`
+            : await sql`SELECT * FROM investor_payouts WHERE archived = FALSE ORDER BY date DESC`;
     return rows.map((r) => mapInvestorPayout(r as Record<string, unknown>));
   }
   const db = await getSqliteDb();
+  const orderBy =
+    kind === "payout"
+      ? "capital_id, payout_seq"
+      : "date DESC";
+  const kindClause =
+    kind === "capital"
+      ? " AND record_kind = 'capital'"
+      : kind === "payout"
+        ? " AND record_kind = 'payout'"
+        : "";
   const rows = db
-    .prepare("SELECT * FROM investor_payouts WHERE archived = ? ORDER BY date DESC")
+    .prepare(
+      `SELECT * FROM investor_payouts WHERE archived = ?${kindClause} ORDER BY ${orderBy}`
+    )
     .all(archived ? 1 : 0);
   db.close();
   return rows.map((r) => mapInvestorPayout(r as Record<string, unknown>));
+}
+
+export async function getInvestorCapitalByCapitalId(
+  capitalId: string
+): Promise<InvestorPayout | null> {
+  await ensureSchema();
+  if (usePostgres) {
+    const sql = await getPostgresSql();
+    const rows = await sql`
+      SELECT * FROM investor_payouts
+      WHERE record_kind = 'capital' AND payout_id = ${capitalId} AND archived = FALSE
+      LIMIT 1
+    `;
+    return rows[0]
+      ? mapInvestorPayout(rows[0] as Record<string, unknown>)
+      : null;
+  }
+  const db = await getSqliteDb();
+  const row = db
+    .prepare(
+      `SELECT * FROM investor_payouts
+       WHERE record_kind = 'capital' AND payout_id = ? AND archived = 0
+       LIMIT 1`
+    )
+    .get(capitalId);
+  db.close();
+  return row ? mapInvestorPayout(row as Record<string, unknown>) : null;
+}
+
+export async function getNextPayoutSequenceForCapital(capitalId: string): Promise<number> {
+  await ensureSchema();
+  if (usePostgres) {
+    const sql = await getPostgresSql();
+    const rows = await sql`
+      SELECT COALESCE(MAX(payout_seq), 0) AS max_seq
+      FROM investor_payouts
+      WHERE record_kind = 'payout' AND capital_id = ${capitalId} AND archived = FALSE
+    `;
+    return Number(rows[0]?.max_seq ?? 0) + 1;
+  }
+  const db = await getSqliteDb();
+  const row = db
+    .prepare(
+      `SELECT COALESCE(MAX(payout_seq), 0) AS max_seq
+       FROM investor_payouts
+       WHERE record_kind = 'payout' AND capital_id = ? AND archived = 0`
+    )
+    .get(capitalId) as { max_seq: number } | undefined;
+  db.close();
+  return Number(row?.max_seq ?? 0) + 1;
 }
 
 export async function createInvestorPayout(
@@ -1537,15 +1693,17 @@ export async function createInvestorPayout(
     const sql = await getPostgresSql();
     const rows = await sql`
       INSERT INTO investor_payouts (
-        payout_id, date, property_name, property_address, loan_date, sell_estimate_date,
-        investor_name, attorney, amount_loaned, annual_interest_rate, kicker, days_in_year,
-        payout_type, payout_amount, payment_method, payment_date, tax_year, status, notes
+        record_kind, capital_id, payout_seq, payout_id, date, property_name, property_address,
+        loan_date, sell_estimate_date, investor_name, attorney, amount_loaned,
+        annual_interest_rate, kicker, days_in_year, payout_type, payout_amount, payment_method,
+        payment_date, tax_year, status, notes
       ) VALUES (
-        ${data.payout_id}, ${data.date}, ${data.property_name}, ${data.property_address},
-        ${data.loan_date}, ${data.sell_estimate_date}, ${data.investor_name}, ${data.attorney},
-        ${data.amount_loaned}, ${data.annual_interest_rate}, ${data.kicker}, ${data.days_in_year},
-        ${data.payout_type}, ${data.payout_amount}, ${data.payment_method},
-        ${data.payment_date}, ${data.tax_year}, ${data.status}, ${data.notes}
+        ${data.record_kind}, ${data.capital_id}, ${data.payout_seq}, ${data.payout_id},
+        ${data.date}, ${data.property_name}, ${data.property_address}, ${data.loan_date},
+        ${data.sell_estimate_date}, ${data.investor_name}, ${data.attorney}, ${data.amount_loaned},
+        ${data.annual_interest_rate}, ${data.kicker}, ${data.days_in_year}, ${data.payout_type},
+        ${data.payout_amount}, ${data.payment_method}, ${data.payment_date}, ${data.tax_year},
+        ${data.status}, ${data.notes}
       ) RETURNING *
     `;
     return mapInvestorPayout(rows[0] as Record<string, unknown>);
@@ -1554,13 +1712,15 @@ export async function createInvestorPayout(
   const row = db
     .prepare(
       `INSERT INTO investor_payouts (
-        payout_id, date, property_name, property_address, loan_date, sell_estimate_date,
-        investor_name, attorney, amount_loaned, annual_interest_rate, kicker, days_in_year,
-        payout_type, payout_amount, payment_method, payment_date, tax_year, status, notes
+        record_kind, capital_id, payout_seq, payout_id, date, property_name, property_address,
+        loan_date, sell_estimate_date, investor_name, attorney, amount_loaned,
+        annual_interest_rate, kicker, days_in_year, payout_type, payout_amount, payment_method,
+        payment_date, tax_year, status, notes
       ) VALUES (
-        @payout_id, @date, @property_name, @property_address, @loan_date, @sell_estimate_date,
-        @investor_name, @attorney, @amount_loaned, @annual_interest_rate, @kicker, @days_in_year,
-        @payout_type, @payout_amount, @payment_method, @payment_date, @tax_year, @status, @notes
+        @record_kind, @capital_id, @payout_seq, @payout_id, @date, @property_name,
+        @property_address, @loan_date, @sell_estimate_date, @investor_name, @attorney,
+        @amount_loaned, @annual_interest_rate, @kicker, @days_in_year, @payout_type,
+        @payout_amount, @payment_method, @payment_date, @tax_year, @status, @notes
       ) RETURNING *`
     )
     .get(data);
@@ -1896,12 +2056,13 @@ export async function updateInvestorPayout(
     const sql = await getPostgresSql();
     const rows = await sql`
       UPDATE investor_payouts SET
-        payout_id = ${data.payout_id}, date = ${data.date}, property_name = ${data.property_name},
-        property_address = ${data.property_address}, loan_date = ${data.loan_date},
-        sell_estimate_date = ${data.sell_estimate_date}, investor_name = ${data.investor_name},
-        attorney = ${data.attorney}, amount_loaned = ${data.amount_loaned},
-        annual_interest_rate = ${data.annual_interest_rate}, kicker = ${data.kicker},
-        days_in_year = ${data.days_in_year}, payout_type = ${data.payout_type},
+        record_kind = ${data.record_kind}, capital_id = ${data.capital_id},
+        payout_seq = ${data.payout_seq}, payout_id = ${data.payout_id}, date = ${data.date},
+        property_name = ${data.property_name}, property_address = ${data.property_address},
+        loan_date = ${data.loan_date}, sell_estimate_date = ${data.sell_estimate_date},
+        investor_name = ${data.investor_name}, attorney = ${data.attorney},
+        amount_loaned = ${data.amount_loaned}, annual_interest_rate = ${data.annual_interest_rate},
+        kicker = ${data.kicker}, days_in_year = ${data.days_in_year}, payout_type = ${data.payout_type},
         payout_amount = ${data.payout_amount}, payment_method = ${data.payment_method},
         payment_date = ${data.payment_date}, tax_year = ${data.tax_year},
         status = ${data.status}, notes = ${data.notes}
@@ -1914,6 +2075,7 @@ export async function updateInvestorPayout(
   const row = db
     .prepare(
       `UPDATE investor_payouts SET
+        record_kind = @record_kind, capital_id = @capital_id, payout_seq = @payout_seq,
         payout_id = @payout_id, date = @date, property_name = @property_name,
         property_address = @property_address, loan_date = @loan_date,
         sell_estimate_date = @sell_estimate_date, investor_name = @investor_name,

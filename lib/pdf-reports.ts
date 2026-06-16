@@ -6,7 +6,7 @@ import type {
   InvestorPayoutReportSummary,
   PLReport,
   ReportKind,
-  VendorPayoutReport,
+  InvestorCapitalReport,
 } from "./reports";
 import {
   formatRate,
@@ -484,57 +484,120 @@ export async function downloadPLPdf(report: PLReport): Promise<void> {
   triggerBrowserDownload(await buildPLPdf(report));
 }
 
-export async function buildVendorPayoutPdf(report: VendorPayoutReport): Promise<PdfResult> {
+export async function buildInvestorCapitalReportPdf(
+  report: InvestorCapitalReport
+): Promise<PdfResult> {
   const doc = new jsPDF();
-  const { startDate, endDate } = report.period;
+  const { startDate, endDate, propertyName, investorName } = report.period;
 
   let contentStartY = await renderPdfHeader(
     doc,
-    "Vendor Payout Report",
+    "Investor Capital Report",
     standardReportMeta(startDate, endDate)
   );
+  const filterParts = [
+    propertyName ? `Property: ${propertyName}` : null,
+    investorName ? `Investor: ${investorName}` : null,
+  ].filter(Boolean);
   contentStartY = addSubtitle(
     doc,
     contentStartY,
-    "Payments to vendors from Expenses and Maintenance tabs."
+    filterParts.length
+      ? `Filters: ${filterParts.join(" · ")}`
+      : "Investor capital records in period with loan calculator totals"
   );
 
   autoTable(doc, {
     startY: contentStartY,
-    head: [["Date", "Source", "Vendor", "Property", "Category", "Description", "Amount"]],
-    body: report.lines.map((l) => [
-      l.date,
-      l.source,
-      l.vendor,
-      l.property_name,
-      l.category,
-      l.description,
-      money(l.amount),
-    ]),
-    styles: { fontSize: 8, cellPadding: 2 },
-    headStyles: { fillColor: [251, 191, 36], textColor: [24, 24, 27] },
-    alternateRowStyles: { fillColor: [245, 245, 245] },
+    head: [["Investor", "Records", "Total Loaned"]],
+    body: [
+      ...report.byInvestor.map((r) => [
+        r.investor_name,
+        String(r.count),
+        money(r.total_loaned),
+      ]),
+      ["TOTAL", String(report.lines.length), money(report.totalLoaned)],
+    ],
+    styles: { fontSize: 10, cellPadding: 3 },
+    headStyles: { fillColor: REPORT_GREEN_RGB, textColor: [255, 255, 255] },
+    footStyles: { fillColor: [230, 230, 230], textColor: [30, 30, 30], fontStyle: "bold" },
   });
 
   const summaryY = (doc as jsPDF & { lastAutoTable?: { finalY: number } }).lastAutoTable
     ?.finalY ?? contentStartY;
 
-  autoTable(doc, {
-    startY: summaryY + 10,
-    head: [["Vendor", "Total Payout"]],
-    body: [
-      ...report.byVendor.map((r) => [r.vendor, money(r.total)]),
-      ["TOTAL", money(report.totalPayouts)],
-    ],
-    styles: { fontSize: 9 },
-    headStyles: { fillColor: REPORT_GREEN_RGB, textColor: [255, 255, 255] },
-  });
+  if (report.lines.length > 0) {
+    drawBodyText(doc, "Capital Detail", summaryY + 14, {
+      fontSize: 10,
+      bold: true,
+      color: [REPORT_GREEN.r, REPORT_GREEN.g, REPORT_GREEN.b],
+    });
 
-  return finishPdf(doc, `hop2it-vendor_payout-report-${startDate}-to-${endDate}.pdf`);
+    autoTable(doc, {
+      startY: summaryY + 18,
+      head: [["Date", "Capital ID", "Investor", "Property", "Loaned", "Rate", "Loan Date", "Sell Est."]],
+      body: report.lines.map((l) => [
+        l.date,
+        l.capital_id,
+        l.investor_name,
+        l.property_name,
+        money(l.amount_loaned),
+        l.annual_interest_rate > 0 ? formatRate(l.annual_interest_rate) : "",
+        l.loan_date,
+        l.sell_estimate_date,
+      ]),
+      styles: { fontSize: 8, cellPadding: 2 },
+      headStyles: { fillColor: [251, 191, 36], textColor: [24, 24, 27] },
+      alternateRowStyles: { fillColor: [245, 245, 245] },
+    });
+  }
+
+  if (report.loanSummaries.length > 0) {
+    let loanY =
+      ((doc as jsPDF & { lastAutoTable?: { finalY: number } }).lastAutoTable?.finalY ??
+        summaryY) + 16;
+
+    drawBodyText(doc, "Payout Calculator Summary", loanY, {
+      fontSize: 11,
+      bold: true,
+      color: [REPORT_GREEN.r, REPORT_GREEN.g, REPORT_GREEN.b],
+    });
+    loanY += 10;
+
+    for (const [index, summary] of report.loanSummaries.entries()) {
+      if (loanY > doc.internal.pageSize.getHeight() - 70) {
+        doc.addPage();
+        loanY = PAGE_MARGIN + 10;
+      }
+      loanY = renderLoanSummaryTable(
+        doc,
+        summary,
+        loanY,
+        report.loanSummaries.length > 1
+          ? `${summary.investor_name || "Investor"} · ${summary.property_address || summary.investor_name}`
+          : undefined
+      );
+      if (index < report.loanSummaries.length - 1) loanY += 10;
+    }
+
+    const totalsY = loanY + 8;
+    autoTable(doc, {
+      startY: totalsY,
+      head: [["Calculated Total Payouts", moneyPrecise(report.calculatedTotalPayouts)]],
+      body: [],
+      styles: { fontSize: 10, cellPadding: 4 },
+      headStyles: { fillColor: [230, 230, 230], textColor: [30, 30, 30], fontStyle: "bold" },
+      theme: "plain",
+    });
+  }
+
+  return finishPdf(doc, `hop2it-investor_capital-report-${startDate}-to-${endDate}.pdf`);
 }
 
-export async function downloadVendorPayoutPdf(report: VendorPayoutReport): Promise<void> {
-  triggerBrowserDownload(await buildVendorPayoutPdf(report));
+export async function downloadInvestorCapitalReportPdf(
+  report: InvestorCapitalReport
+): Promise<void> {
+  triggerBrowserDownload(await buildInvestorCapitalReportPdf(report));
 }
 
 export async function buildInvestorPayoutReportPdf(

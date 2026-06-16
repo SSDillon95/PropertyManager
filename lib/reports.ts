@@ -2,15 +2,15 @@ import {
   loanSummaryFromPayout,
   type InvestorPayoutLoanSummary,
 } from "./investor-payout-summary";
+import { isCapitalRecord, isPayoutRecord } from "./investor-records";
 import type {
   Expense,
   InvestorPayout,
-  MaintenanceRecord,
   Property,
   RentPayment,
 } from "./types";
 
-export type ReportKind = "pl" | "income" | "expense" | "vendor_payout" | "investor_payout";
+export type ReportKind = "pl" | "income" | "expense" | "investor_capital" | "investor_payout";
 
 export interface ReportFilters {
   startDate: string;
@@ -262,96 +262,93 @@ export function buildPLReport(
   };
 }
 
-export interface VendorPayoutLine {
+export interface InvestorCapitalReportLine {
   date: string;
-  source: "Expense" | "Maintenance";
-  vendor: string;
+  capital_id: string;
   property_name: string;
-  category: string;
-  description: string;
-  amount: number;
-  payment_method: string;
+  property_address: string;
+  investor_name: string;
+  amount_loaned: number;
+  annual_interest_rate: number;
+  loan_date: string;
+  sell_estimate_date: string;
+  loanSummary: InvestorPayoutLoanSummary | null;
 }
 
-export interface VendorPayoutReport {
+export interface InvestorCapitalReport {
   period: ReportFilters;
-  lines: VendorPayoutLine[];
-  byVendor: { vendor: string; total: number }[];
-  byProperty: { property_name: string; total: number }[];
-  totalPayouts: number;
+  lines: InvestorCapitalReportLine[];
+  byInvestor: { investor_name: string; total_loaned: number; count: number }[];
+  byProperty: { property_name: string; total_loaned: number }[];
+  totalLoaned: number;
+  calculatedTotalPayouts: number;
+  loanSummaries: InvestorPayoutLoanSummary[];
 }
 
-export function buildVendorPayoutReport(
-  expenses: Expense[],
-  maintenance: MaintenanceRecord[],
+export function buildInvestorCapitalReport(
+  capitals: InvestorPayout[],
   filters: ReportFilters
-): VendorPayoutReport {
-  const expenseLines: VendorPayoutLine[] = expenses
+): InvestorCapitalReport {
+  const lines = capitals
     .filter(
-      (e) =>
-        e.vendor?.trim() &&
-        n(e.amount) > 0 &&
-        isDateInRange(e.date, filters.startDate, filters.endDate) &&
-        matchesProperty(e.property_name, filters.propertyName)
+      (p) =>
+        isCapitalRecord(p) &&
+        isDateInRange(p.date, filters.startDate, filters.endDate) &&
+        matchesProperty(p.property_name, filters.propertyName) &&
+        matchesInvestor(p.investor_name, filters.investorName)
     )
-    .map((e) => ({
-      date: e.date,
-      source: "Expense" as const,
-      vendor: e.vendor!.trim(),
-      property_name: e.property_name,
-      category: e.category,
-      description: e.description ?? "",
-      amount: n(e.amount),
-      payment_method: e.payment_method ?? "",
-    }));
-
-  const maintenanceLines: VendorPayoutLine[] = maintenance
-    .filter((m) => {
-      const vendor = m.vendor?.trim();
-      const amount = n(m.actual_cost) || n(m.estimated_cost);
-      const date = m.date_completed ?? m.date_reported;
-      return (
-        Boolean(vendor) &&
-        amount > 0 &&
-        isDateInRange(date, filters.startDate, filters.endDate) &&
-        matchesProperty(m.property_name, filters.propertyName)
-      );
+    .map((p) => {
+      const loanSummary = loanSummaryFromPayout(p);
+      return {
+        date: p.date,
+        capital_id: p.payout_id,
+        property_name: p.property_name,
+        property_address: p.property_address ?? "",
+        investor_name: p.investor_name,
+        amount_loaned: n(p.amount_loaned),
+        annual_interest_rate: n(p.annual_interest_rate),
+        loan_date: p.loan_date ?? "",
+        sell_estimate_date: p.sell_estimate_date ?? "",
+        loanSummary,
+      };
     })
-    .map((m) => ({
-      date: m.date_completed ?? m.date_reported,
-      source: "Maintenance" as const,
-      vendor: m.vendor!.trim(),
-      property_name: m.property_name,
-      category: m.category,
-      description: m.description,
-      amount: n(m.actual_cost) || n(m.estimated_cost),
-      payment_method: "",
-    }));
+    .sort((a, b) => b.date.localeCompare(a.date));
 
-  const lines = [...expenseLines, ...maintenanceLines].sort((a, b) =>
-    b.date.localeCompare(a.date)
-  );
-
-  const vendorTotals = new Map<string, number>();
+  const investorTotals = new Map<string, { total_loaned: number; count: number }>();
   const propertyTotals = new Map<string, number>();
   for (const line of lines) {
-    vendorTotals.set(line.vendor, (vendorTotals.get(line.vendor) ?? 0) + line.amount);
+    const current = investorTotals.get(line.investor_name) ?? { total_loaned: 0, count: 0 };
+    investorTotals.set(line.investor_name, {
+      total_loaned: current.total_loaned + line.amount_loaned,
+      count: current.count + 1,
+    });
     propertyTotals.set(
       line.property_name,
-      (propertyTotals.get(line.property_name) ?? 0) + line.amount
+      (propertyTotals.get(line.property_name) ?? 0) + line.amount_loaned
     );
   }
 
   return {
     period: filters,
     lines,
-    byVendor: [...vendorTotals.entries()]
-      .map(([vendor, total]) => ({ vendor, total }))
-      .sort((a, b) => b.total - a.total),
+    byInvestor: [...investorTotals.entries()]
+      .map(([investor_name, stats]) => ({
+        investor_name,
+        total_loaned: stats.total_loaned,
+        count: stats.count,
+      }))
+      .sort((a, b) => b.total_loaned - a.total_loaned),
     byProperty: [...propertyTotals.entries()]
-      .map(([property_name, total]) => ({ property_name, total }))
-      .sort((a, b) => b.total - a.total),
-    totalPayouts: lines.reduce((sum, l) => sum + l.amount, 0),
+      .map(([property_name, total_loaned]) => ({ property_name, total_loaned }))
+      .sort((a, b) => b.total_loaned - a.total_loaned),
+    totalLoaned: lines.reduce((sum, l) => sum + l.amount_loaned, 0),
+    calculatedTotalPayouts: lines.reduce(
+      (sum, l) => sum + (l.loanSummary?.total_payout ?? 0),
+      0
+    ),
+    loanSummaries: lines
+      .map((l) => l.loanSummary)
+      .filter((summary): summary is InvestorPayoutLoanSummary => summary != null),
   };
 }
 
@@ -388,6 +385,7 @@ export function buildInvestorPayoutReport(
   const lines = payouts
     .filter(
       (p) =>
+        isPayoutRecord(p) &&
         isDateInRange(p.date, filters.startDate, filters.endDate) &&
         matchesProperty(p.property_name, filters.propertyName) &&
         matchesInvestor(p.investor_name, filters.investorName)

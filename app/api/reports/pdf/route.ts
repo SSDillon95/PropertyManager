@@ -4,15 +4,15 @@ import {
   buildInvestorPayoutPdf,
   buildInvestorPayoutReportPdf,
   buildPLPdf,
-  buildVendorPayoutPdf,
+  buildInvestorCapitalReportPdf,
 } from "@/lib/pdf-reports";
 import type {
   ExpenseReport,
   IncomeReport,
+  InvestorCapitalReport,
   InvestorPayoutReportSummary,
   PLReport,
   ReportKind,
-  VendorPayoutReport,
 } from "@/lib/reports";
 import { requireAdminOrForbidden } from "@/lib/session";
 import type { InvestorPayout } from "@/lib/types";
@@ -23,7 +23,7 @@ type PdfRequest =
   | { kind: "income"; report: IncomeReport }
   | { kind: "expense"; report: ExpenseReport }
   | { kind: "pl"; report: PLReport }
-  | { kind: "vendor_payout"; report: VendorPayoutReport }
+  | { kind: "investor_capital"; report: InvestorCapitalReport }
   | { kind: "investor_payout"; report: InvestorPayoutReportSummary }
   | {
       kind: "investor_payout_form";
@@ -58,8 +58,10 @@ const BUILDERS: Record<
   income: (body) => buildIncomePdf((body as Extract<PdfRequest, { kind: "income" }>).report),
   expense: (body) => buildExpensePdf((body as Extract<PdfRequest, { kind: "expense" }>).report),
   pl: (body) => buildPLPdf((body as Extract<PdfRequest, { kind: "pl" }>).report),
-  vendor_payout: (body) =>
-    buildVendorPayoutPdf((body as Extract<PdfRequest, { kind: "vendor_payout" }>).report),
+  investor_capital: (body) =>
+    buildInvestorCapitalReportPdf(
+      (body as Extract<PdfRequest, { kind: "investor_capital" }>).report
+    ),
   investor_payout: (body) =>
     buildInvestorPayoutReportPdf(
       (body as Extract<PdfRequest, { kind: "investor_payout" }>).report

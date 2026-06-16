@@ -18,6 +18,7 @@ export function formatCellValue(
     | "property"
     | "tenant"
     | "investor"
+    | "capital"
     | "business"
 ): string {
   if (value == null || value === "") return "";

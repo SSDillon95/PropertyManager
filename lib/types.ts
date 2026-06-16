@@ -177,8 +177,13 @@ export interface Investor {
   created_at: string;
 }
 
+export type InvestorRecordKind = "capital" | "payout";
+
 export interface InvestorPayout {
   id: number;
+  record_kind: InvestorRecordKind;
+  capital_id: string | null;
+  payout_seq: number | null;
   payout_id: string;
   date: string;
   property_name: string;

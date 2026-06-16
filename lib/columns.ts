@@ -12,6 +12,7 @@ export interface ColumnDef {
     | "property"
     | "tenant"
     | "investor"
+    | "capital"
     | "business";
   options?: string[];
   required?: boolean;
@@ -326,7 +327,8 @@ export const INVESTOR_CAPITAL_COLUMNS: ColumnDef[] = [
 ];
 
 export const INVESTOR_PAYOUT_COLUMNS: ColumnDef[] = [
-  { key: "payout_id", label: "Payout ID", type: "text", required: true, width: "100px" },
+  { key: "capital_id", label: "Capital ID", type: "capital", required: true, width: "120px" },
+  { key: "payout_id", label: "Payout ID", type: "text", width: "90px" },
   { key: "date", label: "Date", type: "date", required: true, width: "110px" },
   { key: "property_name", label: "Property", type: "property", required: true, width: "150px" },
   { key: "investor_name", label: "Investor", type: "investor", required: true, width: "150px" },

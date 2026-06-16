@@ -8,9 +8,9 @@ import { requestReportPdf } from "@/lib/pdf-client";
 import {
   buildExpenseReport,
   buildIncomeReport,
+  buildInvestorCapitalReport,
   buildInvestorPayoutReport,
   buildPLReport,
-  buildVendorPayoutReport,
   defaultReportRange,
   type ReportKind,
 } from "@/lib/reports";
@@ -18,7 +18,6 @@ import type {
   Expense,
   Investor,
   InvestorPayout,
-  MaintenanceRecord,
   Property,
   RentPayment,
 } from "@/lib/types";
@@ -27,7 +26,6 @@ interface ReportsViewProps {
   properties: Property[];
   rentPayments: RentPayment[];
   expenses: Expense[];
-  maintenance: MaintenanceRecord[];
   investorPayouts: InvestorPayout[];
   investors: Investor[];
 }
@@ -49,9 +47,9 @@ const REPORT_OPTIONS: { id: ReportKind; label: string; description: string }[] =
     description: "All expenses in the period, with totals by category and property.",
   },
   {
-    id: "vendor_payout",
-    label: "Vendor Payout Report",
-    description: "Payments to vendors from Expenses and Maintenance, totaled by vendor.",
+    id: "investor_capital",
+    label: "Investor Capital Report",
+    description: "Investor capital raised in the period with loan calculator payout totals.",
   },
   {
     id: "investor_payout",
@@ -60,11 +58,12 @@ const REPORT_OPTIONS: { id: ReportKind; label: string; description: string }[] =
   },
 ];
 
+const INVESTOR_FILTER_REPORTS: ReportKind[] = ["investor_capital", "investor_payout"];
+
 export default function ReportsView({
   properties,
   rentPayments,
   expenses,
-  maintenance,
   investorPayouts,
   investors,
 }: ReportsViewProps) {
@@ -93,7 +92,9 @@ export default function ReportsView({
       endDate,
       propertyName: propertyName || undefined,
       investorName:
-        reportKind === "investor_payout" && investorName ? investorName : undefined,
+        INVESTOR_FILTER_REPORTS.includes(reportKind) && investorName
+          ? investorName
+          : undefined,
     }),
     [startDate, endDate, propertyName, investorName, reportKind]
   );
@@ -110,9 +111,9 @@ export default function ReportsView({
     () => buildPLReport(properties, rentPayments, expenses, filters),
     [properties, rentPayments, expenses, filters]
   );
-  const vendorPayoutReport = useMemo(
-    () => buildVendorPayoutReport(expenses, maintenance, filters),
-    [expenses, maintenance, filters]
+  const investorCapitalReport = useMemo(
+    () => buildInvestorCapitalReport(investorPayouts, filters),
+    [investorPayouts, filters]
   );
   const investorPayoutReport = useMemo(
     () => buildInvestorPayoutReport(investorPayouts, filters),
@@ -123,7 +124,7 @@ export default function ReportsView({
 
   const handleReportKindChange = (next: ReportKind) => {
     setReportKind(next);
-    if (next !== "investor_payout") setInvestorName("");
+    if (!INVESTOR_FILTER_REPORTS.includes(next)) setInvestorName("");
   };
 
   const handleDownload = async () => {
@@ -133,8 +134,8 @@ export default function ReportsView({
         await requestReportPdf("income", { report: incomeReport });
       } else if (reportKind === "expense") {
         await requestReportPdf("expense", { report: expenseReport });
-      } else if (reportKind === "vendor_payout") {
-        await requestReportPdf("vendor_payout", { report: vendorPayoutReport });
+      } else if (reportKind === "investor_capital") {
+        await requestReportPdf("investor_capital", { report: investorCapitalReport });
       } else if (reportKind === "investor_payout") {
         await requestReportPdf("investor_payout", { report: investorPayoutReport });
       } else {
@@ -193,26 +194,26 @@ export default function ReportsView({
               },
               { label: "Line Items", value: String(expenseReport.lines.length), tone: "zinc" },
             ]
-          : reportKind === "vendor_payout"
+          : reportKind === "investor_capital"
             ? [
                 {
-                  label: "Total Payouts",
-                  value: formatCurrency(vendorPayoutReport.totalPayouts),
+                  label: "Total Loaned",
+                  value: formatCurrency(investorCapitalReport.totalLoaned),
                   tone: "emerald",
                 },
                 {
-                  label: "Vendors",
-                  value: String(vendorPayoutReport.byVendor.length),
+                  label: "Investors",
+                  value: String(investorCapitalReport.byInvestor.length),
                   tone: "zinc",
                 },
                 {
                   label: "Properties",
-                  value: String(vendorPayoutReport.byProperty.length),
+                  value: String(investorCapitalReport.byProperty.length),
                   tone: "zinc",
                 },
                 {
-                  label: "Line Items",
-                  value: String(vendorPayoutReport.lines.length),
+                  label: "Capital Records",
+                  value: String(investorCapitalReport.lines.length),
                   tone: "zinc",
                 },
               ]
@@ -244,7 +245,8 @@ export default function ReportsView({
       <div>
         <h1 className="text-3xl font-semibold tracking-tighter mb-2">Reports</h1>
         <p className="text-sm text-zinc-400">
-          Generate P/L, income, expense, vendor payout, and investor payout reports as PDF downloads.
+          Generate P/L, income, expense, investor capital, and investor payout reports as PDF
+          downloads.
         </p>
       </div>
 
@@ -293,7 +295,7 @@ export default function ReportsView({
             />
           </label>
           <label
-            className={`block ${reportKind === "investor_payout" ? "" : "sm:col-span-2"}`}
+            className={`block ${INVESTOR_FILTER_REPORTS.includes(reportKind) ? "" : "sm:col-span-2"}`}
           >
             <span className="text-xs font-semibold uppercase tracking-wide text-amber-400 mb-1 block">
               Property (optional)
@@ -311,7 +313,7 @@ export default function ReportsView({
               ))}
             </select>
           </label>
-          {reportKind === "investor_payout" && (
+          {INVESTOR_FILTER_REPORTS.includes(reportKind) && (
             <label className="block">
               <span className="text-xs font-semibold uppercase tracking-wide text-amber-400 mb-1 block">
                 Investor (optional)
@@ -366,11 +368,90 @@ export default function ReportsView({
           ))}
         </div>
 
+        {reportKind === "investor_capital" && (
+          <div className="mt-6">
+            <h3 className="text-sm font-semibold text-emerald-300 mb-3">Totals by Investor</h3>
+            {investorCapitalReport.byInvestor.length === 0 ? (
+              <p className="text-sm text-zinc-400">
+                No investor capital records match the selected filters.
+              </p>
+            ) : (
+              <div className="overflow-x-auto rounded-lg border border-zinc-600/60">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="bg-emerald-900/40 text-left">
+                      <th className="px-3 py-2 font-semibold text-emerald-200">Investor</th>
+                      <th className="px-3 py-2 font-semibold text-emerald-200">Records</th>
+                      <th className="px-3 py-2 font-semibold text-emerald-200 text-right">
+                        Total Loaned
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {investorCapitalReport.byInvestor.map((row, idx) => (
+                      <tr
+                        key={row.investor_name}
+                        className={`border-t border-zinc-700/60 ${
+                          idx % 2 === 0 ? "bg-zinc-800/50" : "bg-zinc-700/30"
+                        }`}
+                      >
+                        <td className="px-3 py-2 text-zinc-100">{row.investor_name}</td>
+                        <td className="px-3 py-2 text-zinc-300">{row.count}</td>
+                        <td className="px-3 py-2 text-emerald-400 text-right font-medium">
+                          {formatCurrency(row.total_loaned)}
+                        </td>
+                      </tr>
+                    ))}
+                    <tr className="border-t border-zinc-600 bg-zinc-700/50 font-semibold">
+                      <td className="px-3 py-2 text-zinc-100">Total</td>
+                      <td className="px-3 py-2 text-zinc-300">
+                        {investorCapitalReport.lines.length}
+                      </td>
+                      <td className="px-3 py-2 text-emerald-400 text-right">
+                        {formatCurrency(investorCapitalReport.totalLoaned)}
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        )}
+
+        {reportKind === "investor_capital" && investorCapitalReport.loanSummaries.length > 0 && (
+          <div className="mt-6 space-y-4">
+            <h3 className="text-sm font-semibold text-emerald-300">Payout Calculator Summary</h3>
+            {investorCapitalReport.loanSummaries.map((summary, index) => (
+              <InvestorPayoutSummaryPanel
+                key={`${summary.investor_name}-${summary.loan_date}-${index}`}
+                input={{
+                  property_address: summary.property_address,
+                  loan_date: summary.loan_date,
+                  sell_estimate_date: summary.sell_estimate_date,
+                  investor_name: summary.investor_name,
+                  attorney: summary.attorney,
+                  amount_loaned: summary.amount_loaned,
+                  annual_interest_rate: summary.annual_interest_rate,
+                  kicker: summary.kicker,
+                  days_in_year: summary.days_in_year,
+                }}
+                title={`${summary.investor_name || "Investor"} · ${summary.property_address || "Property"}`}
+              />
+            ))}
+            <div className="rounded-lg border border-emerald-700/50 bg-emerald-950/20 p-4 flex items-center justify-between">
+              <span className="text-sm font-semibold text-emerald-200">
+                Calculated Total Payouts
+              </span>
+              <span className="text-lg font-semibold text-emerald-300">
+                {formatMoneyPrecise(investorCapitalReport.calculatedTotalPayouts)}
+              </span>
+            </div>
+          </div>
+        )}
+
         {reportKind === "investor_payout" && (
           <div className="mt-6">
-            <h3 className="text-sm font-semibold text-emerald-300 mb-3">
-              Totals by Investor
-            </h3>
+            <h3 className="text-sm font-semibold text-emerald-300 mb-3">Totals by Investor</h3>
             {investorPayoutReport.byInvestor.length === 0 ? (
               <p className="text-sm text-zinc-400">
                 No investor payouts match the selected filters.
@@ -415,39 +496,6 @@ export default function ReportsView({
                 </table>
               </div>
             )}
-          </div>
-        )}
-
-        {reportKind === "investor_payout" && investorPayoutReport.loanSummaries.length > 0 && (
-          <div className="mt-6 space-y-4">
-            <h3 className="text-sm font-semibold text-emerald-300">
-              Payout Calculator Summary
-            </h3>
-            {investorPayoutReport.loanSummaries.map((summary, index) => (
-              <InvestorPayoutSummaryPanel
-                key={`${summary.investor_name}-${summary.loan_date}-${index}`}
-                input={{
-                  property_address: summary.property_address,
-                  loan_date: summary.loan_date,
-                  sell_estimate_date: summary.sell_estimate_date,
-                  investor_name: summary.investor_name,
-                  attorney: summary.attorney,
-                  amount_loaned: summary.amount_loaned,
-                  annual_interest_rate: summary.annual_interest_rate,
-                  kicker: summary.kicker,
-                  days_in_year: summary.days_in_year,
-                }}
-                title={`${summary.investor_name || "Investor"} · ${summary.property_address || "Property"}`}
-              />
-            ))}
-            <div className="rounded-lg border border-emerald-700/50 bg-emerald-950/20 p-4 flex items-center justify-between">
-              <span className="text-sm font-semibold text-emerald-200">
-                Calculated Total Payouts
-              </span>
-              <span className="text-lg font-semibold text-emerald-300">
-                {formatMoneyPrecise(investorPayoutReport.calculatedTotalPayouts)}
-              </span>
-            </div>
           </div>
         )}
       </section>
