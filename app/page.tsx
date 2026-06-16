@@ -462,6 +462,15 @@ export default function PropertyManagerApp() {
     }
   };
 
+  const handleLogout = async () => {
+    try {
+      await apiFetch("/api/auth/logout", { method: "POST" });
+      window.location.href = "/login";
+    } catch (error) {
+      showMessage("error", (error as Error).message);
+    }
+  };
+
   const exportCsv = () => {
     if (tab === "dashboard" || tab === "reports" || rows.length === 0) return;
     const headers = columns.map((c) => c.label);
@@ -529,6 +538,13 @@ export default function PropertyManagerApp() {
               className="text-xs px-3 py-1.5 rounded-lg border border-zinc-600 bg-zinc-700/80 text-zinc-200 hover:bg-zinc-700"
             >
               Refresh
+            </button>
+            <button
+              type="button"
+              onClick={handleLogout}
+              className="text-xs px-3 py-1.5 rounded-lg border border-zinc-600 bg-zinc-700/80 text-zinc-200 hover:bg-zinc-700"
+            >
+              Logout
             </button>
             <Image
               src="/hop2it-logo.png"
