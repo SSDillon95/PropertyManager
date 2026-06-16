@@ -19,6 +19,14 @@ function getPostgresUrl(): string | undefined {
 const usePostgres = Boolean(getPostgresUrl());
 let schemaReady: Promise<void> | null = null;
 
+function assertProductionDatabase(): void {
+  if (process.env.VERCEL === "1" && !getPostgresUrl()) {
+    throw new Error(
+      "No persistent database configured. Connect Neon Postgres to this Vercel project."
+    );
+  }
+}
+
 function ensureSchema(): Promise<void> {
   if (!schemaReady) schemaReady = initSchema();
   return schemaReady;
@@ -141,6 +149,7 @@ const SQLITE_SCHEMA = `
 `;
 
 async function initSchema(): Promise<void> {
+  assertProductionDatabase();
   if (usePostgres) {
     const { neon } = await import("@neondatabase/serverless");
     const sql = neon(getPostgresUrl()!);

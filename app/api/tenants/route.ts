@@ -1,6 +1,8 @@
 import { createTenant, deleteTenant, listTenants } from "@/lib/db";
 import { handleRoute, jsonError, jsonOk } from "@/lib/api-helpers";
 
+export const dynamic = "force-dynamic";
+
 export async function GET() {
   return handleRoute(() => listTenants());
 }

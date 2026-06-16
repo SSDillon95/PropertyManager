@@ -8,6 +8,10 @@ import { formatCurrency, todayIso } from "@/lib/format";
 import { rentDetailsForProperty, tenantDisplayName } from "@/lib/rent-ledger";
 import type { DashboardSummary, Lease, Property, SheetTab, Tenant } from "@/lib/types";
 
+function apiFetch(input: RequestInfo | URL, init?: RequestInit) {
+  return fetch(input, { cache: "no-store", ...init });
+}
+
 const API_MAP: Record<Exclude<SheetTab, "dashboard">, string> = {
   properties: "/api/properties",
   tenants: "/api/tenants",
@@ -71,25 +75,25 @@ export default function PropertyManagerApp() {
   };
 
   const loadDashboard = useCallback(async () => {
-    const res = await fetch("/api/summary");
+    const res = await apiFetch("/api/summary");
     const json = await res.json();
     if (json.success) setSummary(json.data);
   }, []);
 
   const loadProperties = useCallback(async () => {
-    const res = await fetch("/api/properties");
+    const res = await apiFetch("/api/properties");
     const json = await res.json();
     if (json.success) setProperties(json.data);
   }, []);
 
   const loadTenants = useCallback(async () => {
-    const res = await fetch("/api/tenants");
+    const res = await apiFetch("/api/tenants");
     const json = await res.json();
     if (json.success) setTenants(json.data);
   }, []);
 
   const loadLeases = useCallback(async () => {
-    const res = await fetch("/api/leases");
+    const res = await apiFetch("/api/leases");
     const json = await res.json();
     if (json.success) setLeases(json.data);
   }, []);
@@ -109,11 +113,11 @@ export default function PropertyManagerApp() {
     if (activeTab === "rent_ledger") {
       await Promise.all([loadProperties(), loadTenants(), loadLeases()]);
     }
-    if (activeTab === "expenses") {
+    if (activeTab === "expenses" || activeTab === "maintenance") {
       await loadProperties();
     }
     const endpoint = API_MAP[activeTab];
-    const res = await fetch(endpoint);
+    const res = await apiFetch(endpoint);
     const json = await res.json();
     if (json.success) setRows(json.data);
   }, [loadDashboard, loadProperties, loadTenants, loadLeases]);
@@ -193,13 +197,16 @@ export default function PropertyManagerApp() {
     setSaving(true);
     try {
       const endpoint = API_MAP[tab];
-      const res = await fetch(endpoint, {
+      const res = await apiFetch(endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payloadFromForm(form, columns)),
       });
       const json = await res.json();
       if (!json.success) throw new Error(json.error || "Save failed");
+      if (json.data && typeof json.data === "object") {
+        setRows((prev) => [...prev, json.data as Record<string, unknown>]);
+      }
       showMessage("success", "Row added.");
       setForm(emptyForm(columns));
       await Promise.all([loadTabData(tab), loadDashboard()]);
@@ -215,7 +222,7 @@ export default function PropertyManagerApp() {
     setDeletingId(id);
     try {
       const endpoint = API_MAP[tab];
-      const res = await fetch(`${endpoint}?id=${id}`, { method: "DELETE" });
+      const res = await apiFetch(`${endpoint}?id=${id}`, { method: "DELETE" });
       const json = await res.json();
       if (!json.success) throw new Error(json.error || "Delete failed");
       showMessage("success", "Row deleted.");
