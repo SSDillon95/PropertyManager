@@ -9,7 +9,16 @@ export function formatCurrency(value: number | null | undefined): string {
 
 export function formatCellValue(
   value: unknown,
-  type: "text" | "number" | "date" | "currency" | "select" | "property" | "tenant" | "investor"
+  type:
+    | "text"
+    | "number"
+    | "date"
+    | "currency"
+    | "select"
+    | "property"
+    | "tenant"
+    | "investor"
+    | "business"
 ): string {
   if (value == null || value === "") return "";
   if (type === "currency") return formatCurrency(Number(value));

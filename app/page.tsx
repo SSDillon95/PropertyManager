@@ -13,6 +13,7 @@ import { requestReportPdf } from "@/lib/pdf-client";
 import { propertyProfitability } from "@/lib/profitability";
 import { rentDetailsForProperty, tenantDisplayName } from "@/lib/rent-ledger";
 import type {
+  Business,
   DashboardSummary,
   Expense,
   Investor,
@@ -32,6 +33,7 @@ function apiFetch(input: RequestInfo | URL, init?: RequestInit) {
 type DataTab = Exclude<SheetTab, "dashboard" | "reports">;
 
 const API_MAP: Record<DataTab, string> = {
+  businesses: "/api/businesses",
   properties: "/api/properties",
   tenants: "/api/tenants",
   leases: "/api/leases",
@@ -104,7 +106,9 @@ export default function PropertyManagerApp() {
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(
     null
   );
+  const [businesses, setBusinesses] = useState<Business[]>([]);
   const [properties, setProperties] = useState<Property[]>([]);
+  const [propertyBusinessFilter, setPropertyBusinessFilter] = useState("");
   const [tenants, setTenants] = useState<Tenant[]>([]);
   const [leases, setLeases] = useState<Lease[]>([]);
   const [rentPayments, setRentPayments] = useState<RentPayment[]>([]);
@@ -132,6 +136,22 @@ export default function PropertyManagerApp() {
       days_in_year: form.days_in_year ? Number(form.days_in_year) : 365,
     };
   }, [tab, formOpen, form]);
+  const displayRows = useMemo(() => {
+    if (tab !== "properties" || !propertyBusinessFilter) return rows;
+    return rows.filter((row) => row.business_name === propertyBusinessFilter);
+  }, [tab, rows, propertyBusinessFilter]);
+
+  const propertyBusinessOptions = useMemo(() => {
+    const names = new Set<string>();
+    for (const business of businesses) {
+      if (business.status === "Active") names.add(business.business_name);
+    }
+    for (const property of properties) {
+      if (property.business_name) names.add(property.business_name);
+    }
+    return [...names].sort((a, b) => a.localeCompare(b));
+  }, [businesses, properties]);
+
   const investorPayoutTableSummaries = useMemo(
     () =>
       investorPayoutRows
@@ -156,6 +176,12 @@ export default function PropertyManagerApp() {
     const res = await apiFetch("/api/summary");
     const json = await res.json();
     if (json.success) setSummary(json.data);
+  }, []);
+
+  const loadBusinesses = useCallback(async () => {
+    const res = await apiFetch("/api/businesses");
+    const json = await res.json();
+    if (json.success) setBusinesses(json.data);
   }, []);
 
   const loadProperties = useCallback(async () => {
@@ -225,6 +251,9 @@ export default function PropertyManagerApp() {
         setRows([]);
         return;
       }
+      if (activeTab === "properties") {
+        await loadBusinesses();
+      }
       if (activeTab === "tenants") {
         await loadProperties();
       }
@@ -255,6 +284,7 @@ export default function PropertyManagerApp() {
     },
     [
       loadDashboard,
+      loadBusinesses,
       loadProperties,
       loadTenants,
       loadLeases,
@@ -372,6 +402,7 @@ export default function PropertyManagerApp() {
     setShowArchived(false);
     setFormOpen(false);
     setExpandedProperty(null);
+    if (next !== "properties") setPropertyBusinessFilter("");
     setTab(next);
     setLoading(true);
     try {
@@ -517,12 +548,14 @@ export default function PropertyManagerApp() {
     }
   };
 
+  const tableRows = tab === "properties" ? displayRows : rows;
+
   const exportCsv = () => {
-    if (tab === "dashboard" || tab === "reports" || rows.length === 0) return;
+    if (tab === "dashboard" || tab === "reports" || tableRows.length === 0) return;
     const headers = columns.map((c) => c.label);
     const lines = [
       headers.join(","),
-      ...rows.map((row) =>
+      ...tableRows.map((row) =>
         columns
           .map((col) => {
             const val = row[col.key];
@@ -569,7 +602,7 @@ export default function PropertyManagerApp() {
             ))}
           </div>
           <div className="flex items-center gap-2 sm:gap-3 shrink-0">
-            {tab !== "dashboard" && tab !== "reports" && rows.length > 0 && (
+            {tab !== "dashboard" && tab !== "reports" && tableRows.length > 0 && (
               <button
                 type="button"
                 onClick={exportCsv}
@@ -643,6 +676,12 @@ export default function PropertyManagerApp() {
                   {tab === "rent_ledger" && (
                     <p className="text-xs text-zinc-400 mt-1">
                       Selecting a property auto-fills rent due and tenant from the Properties tab.
+                    </p>
+                  )}
+                  {tab === "properties" && (
+                    <p className="text-xs text-zinc-400 mt-1">
+                      Assign each property to a business using the Business dropdown. Add
+                      businesses on the Business tab first.
                     </p>
                   )}
                   {tab === "investor_payout" && (
@@ -728,6 +767,27 @@ export default function PropertyManagerApp() {
                               </option>
                             ))}
                         </select>
+                      ) : col.type === "business" ? (
+                        <select
+                          value={form[col.key] ?? ""}
+                          onChange={(e) =>
+                            setForm((prev) => ({ ...prev, [col.key]: e.target.value }))
+                          }
+                          className="form-select"
+                        >
+                          <option value="">
+                            {businesses.length
+                              ? "Select business..."
+                              : "No businesses — add one on the Business tab"}
+                          </option>
+                          {businesses
+                            .filter((business) => business.status === "Active")
+                            .map((business) => (
+                              <option key={business.id} value={business.business_name}>
+                                {business.business_name}
+                              </option>
+                            ))}
+                        </select>
                       ) : col.type === "select" ? (
                         <select
                           value={form[col.key] ?? ""}
@@ -796,9 +856,30 @@ export default function PropertyManagerApp() {
               <div className="flex items-center justify-between gap-3 mb-3 flex-wrap">
                 <h2 className="font-semibold text-lg">
                   {showArchived ? "Archive — " : ""}
-                  {SHEET_TABS.find((s) => s.id === tab)?.label} ({rows.length})
+                  {SHEET_TABS.find((s) => s.id === tab)?.label} ({tableRows.length}
+                  {tab === "properties" && propertyBusinessFilter && rows.length !== tableRows.length
+                    ? ` of ${rows.length}`
+                    : ""}
+                  )
                 </h2>
                 <div className="flex items-center gap-2 flex-wrap">
+                  {tab === "properties" && !showArchived && (
+                    <label className="flex items-center gap-2 text-xs text-zinc-300">
+                      <span className="whitespace-nowrap">Filter by business</span>
+                      <select
+                        value={propertyBusinessFilter}
+                        onChange={(e) => setPropertyBusinessFilter(e.target.value)}
+                        className="form-select py-1.5 min-w-[10rem]"
+                      >
+                        <option value="">All businesses</option>
+                        {propertyBusinessOptions.map((name) => (
+                          <option key={name} value={name}>
+                            {name}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  )}
                   {!showArchived && (
                     <button
                       type="button"
@@ -834,7 +915,7 @@ export default function PropertyManagerApp() {
               )}
               <SpreadsheetTable
                 columns={columns}
-                rows={rows}
+                rows={tableRows}
                 archiveMode={showArchived}
                 onArchive={handleArchive}
                 onRestore={handleRestore}

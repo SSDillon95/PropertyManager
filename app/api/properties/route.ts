@@ -29,6 +29,7 @@ export async function POST(request: Request) {
     }
     const property = await createProperty({
       legal_id: String(legalId),
+      business_name: body.business_name ?? null,
       property_name: String(body.property_name),
       lien_holder: body.lien_holder ?? null,
       account_number: body.account_number ?? null,
@@ -73,6 +74,7 @@ export async function PUT(request: Request) {
     }
     const property = await updateProperty(id, {
       legal_id: String(legalId),
+      business_name: body.business_name ?? null,
       property_name: String(body.property_name),
       lien_holder: body.lien_holder ?? null,
       account_number: body.account_number ?? null,

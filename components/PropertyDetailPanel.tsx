@@ -22,6 +22,7 @@ export default function PropertyDetailPanel({
           <h3 className="font-semibold text-lg text-zinc-100">{property.property_name}</h3>
           <p className="text-sm text-zinc-400 mt-0.5">
             Legal ID: {property.legal_id}
+            {property.business_name ? ` · ${property.business_name}` : ""}
             {property.status ? ` · ${property.status}` : ""}
           </p>
         </div>

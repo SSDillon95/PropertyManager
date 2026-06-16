@@ -3,7 +3,16 @@ import type { SheetTab } from "./types";
 export interface ColumnDef {
   key: string;
   label: string;
-  type: "text" | "number" | "date" | "currency" | "select" | "property" | "tenant" | "investor";
+  type:
+    | "text"
+    | "number"
+    | "date"
+    | "currency"
+    | "select"
+    | "property"
+    | "tenant"
+    | "investor"
+    | "business";
   options?: string[];
   required?: boolean;
   width?: string;
@@ -11,6 +20,7 @@ export interface ColumnDef {
 
 export const SHEET_TABS: { id: SheetTab; label: string }[] = [
   { id: "dashboard", label: "Dashboard" },
+  { id: "businesses", label: "Business" },
   { id: "properties", label: "Properties" },
   { id: "tenants", label: "Tenants" },
   { id: "leases", label: "Leases" },
@@ -22,8 +32,33 @@ export const SHEET_TABS: { id: SheetTab; label: string }[] = [
   { id: "reports", label: "Reports" },
 ];
 
+export const BUSINESS_COLUMNS: ColumnDef[] = [
+  { key: "business_id", label: "Business ID", type: "text", required: true, width: "110px" },
+  { key: "business_name", label: "Business Name", type: "text", required: true, width: "180px" },
+  {
+    key: "entity_type",
+    label: "Entity Type",
+    type: "select",
+    options: ["LLC", "Corporation", "Partnership", "Sole Proprietorship", "Trust", "Other"],
+    width: "150px",
+  },
+  { key: "address", label: "Address", type: "text", width: "180px" },
+  { key: "city", label: "City", type: "text", width: "120px" },
+  { key: "state", label: "State", type: "text", width: "70px" },
+  { key: "zip", label: "ZIP", type: "text", width: "80px" },
+  {
+    key: "status",
+    label: "Status",
+    type: "select",
+    options: ["Active", "Inactive"],
+    width: "100px",
+  },
+  { key: "notes", label: "Notes", type: "text", width: "200px" },
+];
+
 export const PROPERTY_COLUMNS: ColumnDef[] = [
   { key: "legal_id", label: "Legal ID", type: "text", required: true, width: "100px" },
+  { key: "business_name", label: "Business", type: "business", width: "160px" },
   { key: "property_name", label: "Property Name", type: "text", required: true, width: "160px" },
   { key: "lien_holder", label: "Lien Holder", type: "text", width: "150px" },
   { key: "account_number", label: "Account Number", type: "text", width: "130px" },
@@ -287,6 +322,8 @@ export const INVESTOR_PAYOUT_COLUMNS: ColumnDef[] = [
 
 export function getColumnsForTab(tab: SheetTab): ColumnDef[] {
   switch (tab) {
+    case "businesses":
+      return BUSINESS_COLUMNS;
     case "properties":
       return PROPERTY_COLUMNS;
     case "tenants":

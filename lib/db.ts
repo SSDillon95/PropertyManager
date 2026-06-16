@@ -1,4 +1,5 @@
 import type {
+  Business,
   DashboardSummary,
   Expense,
   Investor,
@@ -35,9 +36,25 @@ function ensureSchema(): Promise<void> {
 }
 
 const SQLITE_SCHEMA = `
+  CREATE TABLE IF NOT EXISTS businesses (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    business_id TEXT NOT NULL UNIQUE,
+    business_name TEXT NOT NULL,
+    entity_type TEXT DEFAULT 'LLC',
+    address TEXT,
+    city TEXT,
+    state TEXT,
+    zip TEXT,
+    status TEXT DEFAULT 'Active',
+    notes TEXT,
+    archived INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+
   CREATE TABLE IF NOT EXISTS properties (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     legal_id TEXT NOT NULL UNIQUE,
+    business_name TEXT,
     property_name TEXT NOT NULL,
     lien_holder TEXT,
     account_number TEXT,
@@ -202,6 +219,7 @@ const SQLITE_SCHEMA = `
 `;
 
 const ARCHIVED_TABLES = [
+  "businesses",
   "properties",
   "tenants",
   "leases",
@@ -218,9 +236,25 @@ async function initSchema(): Promise<void> {
     const { neon } = await import("@neondatabase/serverless");
     const sql = neon(getPostgresUrl()!);
     await sql`
+      CREATE TABLE IF NOT EXISTS businesses (
+        id SERIAL PRIMARY KEY,
+        business_id TEXT NOT NULL UNIQUE,
+        business_name TEXT NOT NULL,
+        entity_type TEXT DEFAULT 'LLC',
+        address TEXT,
+        city TEXT,
+        state TEXT,
+        zip TEXT,
+        status TEXT DEFAULT 'Active',
+        notes TEXT,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `;
+    await sql`
       CREATE TABLE IF NOT EXISTS properties (
         id SERIAL PRIMARY KEY,
         legal_id TEXT NOT NULL UNIQUE,
+        business_name TEXT,
         property_name TEXT NOT NULL,
         lien_holder TEXT,
         account_number TEXT,
@@ -248,6 +282,7 @@ async function initSchema(): Promise<void> {
         created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
       )
     `;
+    await sql`ALTER TABLE properties ADD COLUMN IF NOT EXISTS business_name TEXT`;
     await sql`ALTER TABLE properties ADD COLUMN IF NOT EXISTS monthly_rent REAL`;
     await sql`ALTER TABLE properties ADD COLUMN IF NOT EXISTS legal_id TEXT`;
     await sql`ALTER TABLE properties ADD COLUMN IF NOT EXISTS lien_holder TEXT`;
@@ -402,6 +437,7 @@ async function initSchema(): Promise<void> {
     await sql`ALTER TABLE investor_payouts ADD COLUMN IF NOT EXISTS annual_interest_rate REAL`;
     await sql`ALTER TABLE investor_payouts ADD COLUMN IF NOT EXISTS kicker REAL`;
     await sql`ALTER TABLE investor_payouts ADD COLUMN IF NOT EXISTS days_in_year INTEGER DEFAULT 365`;
+    await sql`ALTER TABLE businesses ADD COLUMN IF NOT EXISTS archived BOOLEAN NOT NULL DEFAULT FALSE`;
     await sql`ALTER TABLE properties ADD COLUMN IF NOT EXISTS archived BOOLEAN NOT NULL DEFAULT FALSE`;
     await sql`ALTER TABLE tenants ADD COLUMN IF NOT EXISTS archived BOOLEAN NOT NULL DEFAULT FALSE`;
     await sql`ALTER TABLE leases ADD COLUMN IF NOT EXISTS archived BOOLEAN NOT NULL DEFAULT FALSE`;
@@ -424,6 +460,7 @@ async function initSchema(): Promise<void> {
   db.exec(SQLITE_SCHEMA);
   const propertyCols = db.pragma("table_info(properties)") as { name: string }[];
   const hasCol = (name: string) => propertyCols.some((c) => c.name === name);
+  if (!hasCol("business_name")) db.exec("ALTER TABLE properties ADD COLUMN business_name TEXT");
   if (!hasCol("monthly_rent")) db.exec("ALTER TABLE properties ADD COLUMN monthly_rent REAL");
   if (!hasCol("legal_id")) db.exec("ALTER TABLE properties ADD COLUMN legal_id TEXT");
   if (!hasCol("lien_holder")) db.exec("ALTER TABLE properties ADD COLUMN lien_holder TEXT");
@@ -496,10 +533,27 @@ function str(v: unknown): string | null {
   return s || null;
 }
 
+function mapBusiness(row: Record<string, unknown>): Business {
+  return {
+    id: Number(row.id),
+    business_id: String(row.business_id),
+    business_name: String(row.business_name),
+    entity_type: String(row.entity_type ?? "LLC"),
+    address: str(row.address),
+    city: str(row.city),
+    state: str(row.state),
+    zip: str(row.zip),
+    status: String(row.status ?? "Active"),
+    notes: str(row.notes),
+    created_at: String(row.created_at),
+  };
+}
+
 function mapProperty(row: Record<string, unknown>): Property {
   return {
     id: Number(row.id),
     legal_id: String(row.legal_id ?? row.property_id ?? ""),
+    business_name: str(row.business_name),
     property_name: String(row.property_name),
     lien_holder: str(row.lien_holder),
     account_number: str(row.account_number),
@@ -674,18 +728,120 @@ export async function listProperties(archived = false): Promise<Property[]> {
   if (usePostgres) {
     const sql = await getPostgresSql();
     const rows = archived
-      ? await sql`SELECT * FROM properties WHERE archived = TRUE ORDER BY property_name`
-      : await sql`SELECT * FROM properties WHERE archived = FALSE ORDER BY property_name`;
+      ? await sql`SELECT * FROM properties WHERE archived = TRUE ORDER BY business_name NULLS LAST, property_name`
+      : await sql`SELECT * FROM properties WHERE archived = FALSE ORDER BY business_name NULLS LAST, property_name`;
     return rows.map((r) => mapProperty(r as Record<string, unknown>));
   }
   const db = await getSqliteDb();
   const rows = db
     .prepare(
-      `SELECT * FROM properties WHERE archived = ? ORDER BY property_name`
+      `SELECT * FROM properties WHERE archived = ? ORDER BY COALESCE(business_name, ''), property_name`
     )
     .all(archived ? 1 : 0);
   db.close();
   return rows.map((r) => mapProperty(r as Record<string, unknown>));
+}
+
+export async function listBusinesses(archived = false): Promise<Business[]> {
+  await ensureSchema();
+  if (usePostgres) {
+    const sql = await getPostgresSql();
+    const rows = archived
+      ? await sql`SELECT * FROM businesses WHERE archived = TRUE ORDER BY business_name`
+      : await sql`SELECT * FROM businesses WHERE archived = FALSE ORDER BY business_name`;
+    return rows.map((r) => mapBusiness(r as Record<string, unknown>));
+  }
+  const db = await getSqliteDb();
+  const rows = db
+    .prepare("SELECT * FROM businesses WHERE archived = ? ORDER BY business_name")
+    .all(archived ? 1 : 0);
+  db.close();
+  return rows.map((r) => mapBusiness(r as Record<string, unknown>));
+}
+
+export async function createBusiness(
+  data: Omit<Business, "id" | "created_at">
+): Promise<Business> {
+  await ensureSchema();
+  if (usePostgres) {
+    const sql = await getPostgresSql();
+    const rows = await sql`
+      INSERT INTO businesses (
+        business_id, business_name, entity_type, address, city, state, zip, status, notes
+      ) VALUES (
+        ${data.business_id}, ${data.business_name}, ${data.entity_type}, ${data.address},
+        ${data.city}, ${data.state}, ${data.zip}, ${data.status}, ${data.notes}
+      ) RETURNING *
+    `;
+    return mapBusiness(rows[0] as Record<string, unknown>);
+  }
+  const db = await getSqliteDb();
+  const row = db
+    .prepare(
+      `INSERT INTO businesses (
+        business_id, business_name, entity_type, address, city, state, zip, status, notes
+      ) VALUES (
+        @business_id, @business_name, @entity_type, @address, @city, @state, @zip, @status, @notes
+      ) RETURNING *`
+    )
+    .get(data);
+  db.close();
+  return mapBusiness(row as Record<string, unknown>);
+}
+
+export async function archiveBusiness(id: number): Promise<void> {
+  await ensureSchema();
+  if (usePostgres) {
+    const sql = await getPostgresSql();
+    await sql`UPDATE businesses SET archived = TRUE WHERE id = ${id}`;
+    return;
+  }
+  const db = await getSqliteDb();
+  db.prepare("UPDATE businesses SET archived = 1 WHERE id = ?").run(id);
+  db.close();
+}
+
+export async function restoreBusiness(id: number): Promise<void> {
+  await ensureSchema();
+  if (usePostgres) {
+    const sql = await getPostgresSql();
+    await sql`UPDATE businesses SET archived = FALSE WHERE id = ${id}`;
+    return;
+  }
+  const db = await getSqliteDb();
+  db.prepare("UPDATE businesses SET archived = 0 WHERE id = ?").run(id);
+  db.close();
+}
+
+export async function updateBusiness(
+  id: number,
+  data: Omit<Business, "id" | "created_at">
+): Promise<Business> {
+  await ensureSchema();
+  if (usePostgres) {
+    const sql = await getPostgresSql();
+    const rows = await sql`
+      UPDATE businesses SET
+        business_id = ${data.business_id}, business_name = ${data.business_name},
+        entity_type = ${data.entity_type}, address = ${data.address}, city = ${data.city},
+        state = ${data.state}, zip = ${data.zip}, status = ${data.status}, notes = ${data.notes}
+      WHERE id = ${id} RETURNING *
+    `;
+    if (!rows[0]) throw new Error("Business not found.");
+    return mapBusiness(rows[0] as Record<string, unknown>);
+  }
+  const db = await getSqliteDb();
+  const row = db
+    .prepare(
+      `UPDATE businesses SET
+        business_id = @business_id, business_name = @business_name, entity_type = @entity_type,
+        address = @address, city = @city, state = @state, zip = @zip, status = @status, notes = @notes
+      WHERE id = @id RETURNING *`
+    )
+    .get({ ...data, id });
+  db.close();
+  if (!row) throw new Error("Business not found.");
+  return mapBusiness(row as Record<string, unknown>);
 }
 
 export async function createProperty(
@@ -703,14 +859,14 @@ export async function createProperty(
     const rows = hasLegacyPropertyId
       ? await sql`
           INSERT INTO properties (
-            legal_id, property_id, property_name, lien_holder, account_number,
+            legal_id, property_id, business_name, property_name, lien_holder, account_number,
             address, city, state, zip, property_type,
             units, bedrooms, bathrooms, sq_ft, year_built, purchase_date,
             purchase_price, current_value, mortgage_balance, monthly_mortgage,
             annual_property_tax, annual_insurance, monthly_hoa, monthly_rent, status, notes
           ) VALUES (
-            ${data.legal_id}, ${data.legal_id}, ${data.property_name}, ${data.lien_holder},
-            ${data.account_number}, ${data.address}, ${data.city},
+            ${data.legal_id}, ${data.legal_id}, ${data.business_name}, ${data.property_name},
+            ${data.lien_holder}, ${data.account_number}, ${data.address}, ${data.city},
             ${data.state}, ${data.zip}, ${data.property_type}, ${data.units},
             ${data.bedrooms}, ${data.bathrooms}, ${data.sq_ft}, ${data.year_built},
             ${data.purchase_date}, ${data.purchase_price}, ${data.current_value},
@@ -720,13 +876,13 @@ export async function createProperty(
         `
       : await sql`
           INSERT INTO properties (
-            legal_id, property_name, lien_holder, account_number,
+            legal_id, business_name, property_name, lien_holder, account_number,
             address, city, state, zip, property_type,
             units, bedrooms, bathrooms, sq_ft, year_built, purchase_date,
             purchase_price, current_value, mortgage_balance, monthly_mortgage,
             annual_property_tax, annual_insurance, monthly_hoa, monthly_rent, status, notes
           ) VALUES (
-            ${data.legal_id}, ${data.property_name}, ${data.lien_holder},
+            ${data.legal_id}, ${data.business_name}, ${data.property_name}, ${data.lien_holder},
             ${data.account_number}, ${data.address}, ${data.city},
             ${data.state}, ${data.zip}, ${data.property_type}, ${data.units},
             ${data.bedrooms}, ${data.bathrooms}, ${data.sq_ft}, ${data.year_built},
@@ -745,13 +901,13 @@ export async function createProperty(
     ? db
         .prepare(
           `INSERT INTO properties (
-            legal_id, property_id, property_name, lien_holder, account_number,
+            legal_id, property_id, business_name, property_name, lien_holder, account_number,
             address, city, state, zip, property_type,
             units, bedrooms, bathrooms, sq_ft, year_built, purchase_date,
             purchase_price, current_value, mortgage_balance, monthly_mortgage,
             annual_property_tax, annual_insurance, monthly_hoa, monthly_rent, status, notes
           ) VALUES (
-            @legal_id, @property_id, @property_name, @lien_holder, @account_number,
+            @legal_id, @property_id, @business_name, @property_name, @lien_holder, @account_number,
             @address, @city, @state, @zip, @property_type,
             @units, @bedrooms, @bathrooms, @sq_ft, @year_built, @purchase_date,
             @purchase_price, @current_value, @mortgage_balance, @monthly_mortgage,
@@ -762,13 +918,13 @@ export async function createProperty(
     : db
         .prepare(
           `INSERT INTO properties (
-            legal_id, property_name, lien_holder, account_number,
+            legal_id, business_name, property_name, lien_holder, account_number,
             address, city, state, zip, property_type,
             units, bedrooms, bathrooms, sq_ft, year_built, purchase_date,
             purchase_price, current_value, mortgage_balance, monthly_mortgage,
             annual_property_tax, annual_insurance, monthly_hoa, monthly_rent, status, notes
           ) VALUES (
-            @legal_id, @property_name, @lien_holder, @account_number,
+            @legal_id, @business_name, @property_name, @lien_holder, @account_number,
             @address, @city, @state, @zip, @property_type,
             @units, @bedrooms, @bathrooms, @sq_ft, @year_built, @purchase_date,
             @purchase_price, @current_value, @mortgage_balance, @monthly_mortgage,
@@ -1356,9 +1512,9 @@ export async function updateProperty(
       ? await sql`
           UPDATE properties SET
             legal_id = ${data.legal_id}, property_id = ${data.legal_id},
-            property_name = ${data.property_name}, lien_holder = ${data.lien_holder},
-            account_number = ${data.account_number}, address = ${data.address},
-            city = ${data.city}, state = ${data.state}, zip = ${data.zip},
+            business_name = ${data.business_name}, property_name = ${data.property_name},
+            lien_holder = ${data.lien_holder}, account_number = ${data.account_number},
+            address = ${data.address}, city = ${data.city}, state = ${data.state}, zip = ${data.zip},
             property_type = ${data.property_type}, units = ${data.units},
             bedrooms = ${data.bedrooms}, bathrooms = ${data.bathrooms}, sq_ft = ${data.sq_ft},
             year_built = ${data.year_built}, purchase_date = ${data.purchase_date},
@@ -1371,9 +1527,10 @@ export async function updateProperty(
         `
       : await sql`
           UPDATE properties SET
-            legal_id = ${data.legal_id}, property_name = ${data.property_name},
-            lien_holder = ${data.lien_holder}, account_number = ${data.account_number},
-            address = ${data.address}, city = ${data.city}, state = ${data.state}, zip = ${data.zip},
+            legal_id = ${data.legal_id}, business_name = ${data.business_name},
+            property_name = ${data.property_name}, lien_holder = ${data.lien_holder},
+            account_number = ${data.account_number}, address = ${data.address},
+            city = ${data.city}, state = ${data.state}, zip = ${data.zip},
             property_type = ${data.property_type}, units = ${data.units},
             bedrooms = ${data.bedrooms}, bathrooms = ${data.bathrooms}, sq_ft = ${data.sq_ft},
             year_built = ${data.year_built}, purchase_date = ${data.purchase_date},
@@ -1395,9 +1552,9 @@ export async function updateProperty(
     ? db
         .prepare(
           `UPDATE properties SET
-            legal_id = @legal_id, property_id = @property_id, property_name = @property_name,
-            lien_holder = @lien_holder, account_number = @account_number, address = @address,
-            city = @city, state = @state, zip = @zip, property_type = @property_type,
+            legal_id = @legal_id, property_id = @property_id, business_name = @business_name,
+            property_name = @property_name, lien_holder = @lien_holder, account_number = @account_number,
+            address = @address, city = @city, state = @state, zip = @zip, property_type = @property_type,
             units = @units, bedrooms = @bedrooms, bathrooms = @bathrooms, sq_ft = @sq_ft,
             year_built = @year_built, purchase_date = @purchase_date,
             purchase_price = @purchase_price, current_value = @current_value,
@@ -1410,11 +1567,11 @@ export async function updateProperty(
     : db
         .prepare(
           `UPDATE properties SET
-            legal_id = @legal_id, property_name = @property_name, lien_holder = @lien_holder,
-            account_number = @account_number, address = @address, city = @city, state = @state,
-            zip = @zip, property_type = @property_type, units = @units, bedrooms = @bedrooms,
-            bathrooms = @bathrooms, sq_ft = @sq_ft, year_built = @year_built,
-            purchase_date = @purchase_date, purchase_price = @purchase_price,
+            legal_id = @legal_id, business_name = @business_name, property_name = @property_name,
+            lien_holder = @lien_holder, account_number = @account_number, address = @address,
+            city = @city, state = @state, zip = @zip, property_type = @property_type,
+            units = @units, bedrooms = @bedrooms, bathrooms = @bathrooms, sq_ft = @sq_ft,
+            year_built = @year_built, purchase_date = @purchase_date, purchase_price = @purchase_price,
             current_value = @current_value, mortgage_balance = @mortgage_balance,
             monthly_mortgage = @monthly_mortgage, annual_property_tax = @annual_property_tax,
             annual_insurance = @annual_insurance, monthly_hoa = @monthly_hoa,

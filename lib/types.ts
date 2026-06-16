@@ -1,5 +1,6 @@
 export type SheetTab =
   | "dashboard"
+  | "businesses"
   | "properties"
   | "tenants"
   | "leases"
@@ -10,9 +11,24 @@ export type SheetTab =
   | "investor_payout"
   | "reports";
 
+export interface Business {
+  id: number;
+  business_id: string;
+  business_name: string;
+  entity_type: string;
+  address: string | null;
+  city: string | null;
+  state: string | null;
+  zip: string | null;
+  status: string;
+  notes: string | null;
+  created_at: string;
+}
+
 export interface Property {
   id: number;
   legal_id: string;
+  business_name: string | null;
   property_name: string;
   lien_holder: string | null;
   account_number: string | null;
