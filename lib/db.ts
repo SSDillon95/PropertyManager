@@ -60,6 +60,7 @@ const SQLITE_SCHEMA = `
     monthly_rent REAL,
     status TEXT DEFAULT 'Vacant',
     notes TEXT,
+    archived INTEGER NOT NULL DEFAULT 0,
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
   );
 
@@ -78,6 +79,7 @@ const SQLITE_SCHEMA = `
     move_out_date TEXT,
     status TEXT DEFAULT 'Active',
     notes TEXT,
+    archived INTEGER NOT NULL DEFAULT 0,
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
   );
 
@@ -96,6 +98,7 @@ const SQLITE_SCHEMA = `
     status TEXT DEFAULT 'Active',
     renewal_date TEXT,
     notes TEXT,
+    archived INTEGER NOT NULL DEFAULT 0,
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
   );
 
@@ -113,6 +116,7 @@ const SQLITE_SCHEMA = `
     balance REAL,
     status TEXT DEFAULT 'Pending',
     notes TEXT,
+    archived INTEGER NOT NULL DEFAULT 0,
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
   );
 
@@ -127,6 +131,7 @@ const SQLITE_SCHEMA = `
     payment_method TEXT,
     receipt_number TEXT,
     notes TEXT,
+    archived INTEGER NOT NULL DEFAULT 0,
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
   );
 
@@ -144,9 +149,19 @@ const SQLITE_SCHEMA = `
     actual_cost REAL,
     date_completed TEXT,
     notes TEXT,
+    archived INTEGER NOT NULL DEFAULT 0,
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
   );
 `;
+
+const ARCHIVED_TABLES = [
+  "properties",
+  "tenants",
+  "leases",
+  "rent_payments",
+  "expenses",
+  "maintenance_records",
+] as const;
 
 async function initSchema(): Promise<void> {
   assertProductionDatabase();
@@ -285,6 +300,12 @@ async function initSchema(): Promise<void> {
         created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
       )
     `;
+    await sql`ALTER TABLE properties ADD COLUMN IF NOT EXISTS archived BOOLEAN NOT NULL DEFAULT FALSE`;
+    await sql`ALTER TABLE tenants ADD COLUMN IF NOT EXISTS archived BOOLEAN NOT NULL DEFAULT FALSE`;
+    await sql`ALTER TABLE leases ADD COLUMN IF NOT EXISTS archived BOOLEAN NOT NULL DEFAULT FALSE`;
+    await sql`ALTER TABLE rent_payments ADD COLUMN IF NOT EXISTS archived BOOLEAN NOT NULL DEFAULT FALSE`;
+    await sql`ALTER TABLE expenses ADD COLUMN IF NOT EXISTS archived BOOLEAN NOT NULL DEFAULT FALSE`;
+    await sql`ALTER TABLE maintenance_records ADD COLUMN IF NOT EXISTS archived BOOLEAN NOT NULL DEFAULT FALSE`;
     return;
   }
 
@@ -307,6 +328,12 @@ async function initSchema(): Promise<void> {
     db.exec(
       "UPDATE properties SET legal_id = property_id WHERE legal_id IS NULL AND property_id IS NOT NULL"
     );
+  }
+  for (const table of ARCHIVED_TABLES) {
+    const cols = db.pragma(`table_info(${table})`) as { name: string }[];
+    if (!cols.some((c) => c.name === "archived")) {
+      db.exec(`ALTER TABLE ${table} ADD COLUMN archived INTEGER NOT NULL DEFAULT 0`);
+    }
   }
   db.close();
 }
@@ -465,15 +492,21 @@ function mapMaintenance(row: Record<string, unknown>): MaintenanceRecord {
   };
 }
 
-export async function listProperties(): Promise<Property[]> {
+export async function listProperties(archived = false): Promise<Property[]> {
   await ensureSchema();
   if (usePostgres) {
     const sql = await getPostgresSql();
-    const rows = await sql`SELECT * FROM properties ORDER BY property_name`;
+    const rows = archived
+      ? await sql`SELECT * FROM properties WHERE archived = TRUE ORDER BY property_name`
+      : await sql`SELECT * FROM properties WHERE archived = FALSE ORDER BY property_name`;
     return rows.map((r) => mapProperty(r as Record<string, unknown>));
   }
   const db = await getSqliteDb();
-  const rows = db.prepare("SELECT * FROM properties ORDER BY property_name").all();
+  const rows = db
+    .prepare(
+      `SELECT * FROM properties WHERE archived = ? ORDER BY property_name`
+    )
+    .all(archived ? 1 : 0);
   db.close();
   return rows.map((r) => mapProperty(r as Record<string, unknown>));
 }
@@ -570,29 +603,43 @@ export async function createProperty(
   return mapProperty(row as Record<string, unknown>);
 }
 
-export async function deleteProperty(id: number): Promise<void> {
+export async function archiveProperty(id: number): Promise<void> {
   await ensureSchema();
   if (usePostgres) {
     const sql = await getPostgresSql();
-    await sql`DELETE FROM properties WHERE id = ${id}`;
+    await sql`UPDATE properties SET archived = TRUE WHERE id = ${id}`;
     return;
   }
   const db = await getSqliteDb();
-  db.prepare("DELETE FROM properties WHERE id = ?").run(id);
+  db.prepare("UPDATE properties SET archived = 1 WHERE id = ?").run(id);
   db.close();
 }
 
-export async function listTenants(): Promise<Tenant[]> {
+export async function restoreProperty(id: number): Promise<void> {
   await ensureSchema();
   if (usePostgres) {
     const sql = await getPostgresSql();
-    const rows = await sql`SELECT * FROM tenants ORDER BY last_name, first_name`;
+    await sql`UPDATE properties SET archived = FALSE WHERE id = ${id}`;
+    return;
+  }
+  const db = await getSqliteDb();
+  db.prepare("UPDATE properties SET archived = 0 WHERE id = ?").run(id);
+  db.close();
+}
+
+export async function listTenants(archived = false): Promise<Tenant[]> {
+  await ensureSchema();
+  if (usePostgres) {
+    const sql = await getPostgresSql();
+    const rows = archived
+      ? await sql`SELECT * FROM tenants WHERE archived = TRUE ORDER BY last_name, first_name`
+      : await sql`SELECT * FROM tenants WHERE archived = FALSE ORDER BY last_name, first_name`;
     return rows.map((r) => mapTenant(r as Record<string, unknown>));
   }
   const db = await getSqliteDb();
   const rows = db
-    .prepare("SELECT * FROM tenants ORDER BY last_name, first_name")
-    .all();
+    .prepare("SELECT * FROM tenants WHERE archived = ? ORDER BY last_name, first_name")
+    .all(archived ? 1 : 0);
   db.close();
   return rows.map((r) => mapTenant(r as Record<string, unknown>));
 }
@@ -633,27 +680,43 @@ export async function createTenant(
   return mapTenant(row as Record<string, unknown>);
 }
 
-export async function deleteTenant(id: number): Promise<void> {
+export async function archiveTenant(id: number): Promise<void> {
   await ensureSchema();
   if (usePostgres) {
     const sql = await getPostgresSql();
-    await sql`DELETE FROM tenants WHERE id = ${id}`;
+    await sql`UPDATE tenants SET archived = TRUE WHERE id = ${id}`;
     return;
   }
   const db = await getSqliteDb();
-  db.prepare("DELETE FROM tenants WHERE id = ?").run(id);
+  db.prepare("UPDATE tenants SET archived = 1 WHERE id = ?").run(id);
   db.close();
 }
 
-export async function listLeases(): Promise<Lease[]> {
+export async function restoreTenant(id: number): Promise<void> {
   await ensureSchema();
   if (usePostgres) {
     const sql = await getPostgresSql();
-    const rows = await sql`SELECT * FROM leases ORDER BY lease_start DESC`;
+    await sql`UPDATE tenants SET archived = FALSE WHERE id = ${id}`;
+    return;
+  }
+  const db = await getSqliteDb();
+  db.prepare("UPDATE tenants SET archived = 0 WHERE id = ?").run(id);
+  db.close();
+}
+
+export async function listLeases(archived = false): Promise<Lease[]> {
+  await ensureSchema();
+  if (usePostgres) {
+    const sql = await getPostgresSql();
+    const rows = archived
+      ? await sql`SELECT * FROM leases WHERE archived = TRUE ORDER BY lease_start DESC`
+      : await sql`SELECT * FROM leases WHERE archived = FALSE ORDER BY lease_start DESC`;
     return rows.map((r) => mapLease(r as Record<string, unknown>));
   }
   const db = await getSqliteDb();
-  const rows = db.prepare("SELECT * FROM leases ORDER BY lease_start DESC").all();
+  const rows = db
+    .prepare("SELECT * FROM leases WHERE archived = ? ORDER BY lease_start DESC")
+    .all(archived ? 1 : 0);
   db.close();
   return rows.map((r) => mapLease(r as Record<string, unknown>));
 }
@@ -692,27 +755,43 @@ export async function createLease(
   return mapLease(row as Record<string, unknown>);
 }
 
-export async function deleteLease(id: number): Promise<void> {
+export async function archiveLease(id: number): Promise<void> {
   await ensureSchema();
   if (usePostgres) {
     const sql = await getPostgresSql();
-    await sql`DELETE FROM leases WHERE id = ${id}`;
+    await sql`UPDATE leases SET archived = TRUE WHERE id = ${id}`;
     return;
   }
   const db = await getSqliteDb();
-  db.prepare("DELETE FROM leases WHERE id = ?").run(id);
+  db.prepare("UPDATE leases SET archived = 1 WHERE id = ?").run(id);
   db.close();
 }
 
-export async function listRentPayments(): Promise<RentPayment[]> {
+export async function restoreLease(id: number): Promise<void> {
   await ensureSchema();
   if (usePostgres) {
     const sql = await getPostgresSql();
-    const rows = await sql`SELECT * FROM rent_payments ORDER BY date DESC`;
+    await sql`UPDATE leases SET archived = FALSE WHERE id = ${id}`;
+    return;
+  }
+  const db = await getSqliteDb();
+  db.prepare("UPDATE leases SET archived = 0 WHERE id = ?").run(id);
+  db.close();
+}
+
+export async function listRentPayments(archived = false): Promise<RentPayment[]> {
+  await ensureSchema();
+  if (usePostgres) {
+    const sql = await getPostgresSql();
+    const rows = archived
+      ? await sql`SELECT * FROM rent_payments WHERE archived = TRUE ORDER BY date DESC`
+      : await sql`SELECT * FROM rent_payments WHERE archived = FALSE ORDER BY date DESC`;
     return rows.map((r) => mapRentPayment(r as Record<string, unknown>));
   }
   const db = await getSqliteDb();
-  const rows = db.prepare("SELECT * FROM rent_payments ORDER BY date DESC").all();
+  const rows = db
+    .prepare("SELECT * FROM rent_payments WHERE archived = ? ORDER BY date DESC")
+    .all(archived ? 1 : 0);
   db.close();
   return rows.map((r) => mapRentPayment(r as Record<string, unknown>));
 }
@@ -751,27 +830,43 @@ export async function createRentPayment(
   return mapRentPayment(row as Record<string, unknown>);
 }
 
-export async function deleteRentPayment(id: number): Promise<void> {
+export async function archiveRentPayment(id: number): Promise<void> {
   await ensureSchema();
   if (usePostgres) {
     const sql = await getPostgresSql();
-    await sql`DELETE FROM rent_payments WHERE id = ${id}`;
+    await sql`UPDATE rent_payments SET archived = TRUE WHERE id = ${id}`;
     return;
   }
   const db = await getSqliteDb();
-  db.prepare("DELETE FROM rent_payments WHERE id = ?").run(id);
+  db.prepare("UPDATE rent_payments SET archived = 1 WHERE id = ?").run(id);
   db.close();
 }
 
-export async function listExpenses(): Promise<Expense[]> {
+export async function restoreRentPayment(id: number): Promise<void> {
   await ensureSchema();
   if (usePostgres) {
     const sql = await getPostgresSql();
-    const rows = await sql`SELECT * FROM expenses ORDER BY date DESC`;
+    await sql`UPDATE rent_payments SET archived = FALSE WHERE id = ${id}`;
+    return;
+  }
+  const db = await getSqliteDb();
+  db.prepare("UPDATE rent_payments SET archived = 0 WHERE id = ?").run(id);
+  db.close();
+}
+
+export async function listExpenses(archived = false): Promise<Expense[]> {
+  await ensureSchema();
+  if (usePostgres) {
+    const sql = await getPostgresSql();
+    const rows = archived
+      ? await sql`SELECT * FROM expenses WHERE archived = TRUE ORDER BY date DESC`
+      : await sql`SELECT * FROM expenses WHERE archived = FALSE ORDER BY date DESC`;
     return rows.map((r) => mapExpense(r as Record<string, unknown>));
   }
   const db = await getSqliteDb();
-  const rows = db.prepare("SELECT * FROM expenses ORDER BY date DESC").all();
+  const rows = db
+    .prepare("SELECT * FROM expenses WHERE archived = ? ORDER BY date DESC")
+    .all(archived ? 1 : 0);
   db.close();
   return rows.map((r) => mapExpense(r as Record<string, unknown>));
 }
@@ -810,29 +905,45 @@ export async function createExpense(
   return mapExpense(row as Record<string, unknown>);
 }
 
-export async function deleteExpense(id: number): Promise<void> {
+export async function archiveExpense(id: number): Promise<void> {
   await ensureSchema();
   if (usePostgres) {
     const sql = await getPostgresSql();
-    await sql`DELETE FROM expenses WHERE id = ${id}`;
+    await sql`UPDATE expenses SET archived = TRUE WHERE id = ${id}`;
     return;
   }
   const db = await getSqliteDb();
-  db.prepare("DELETE FROM expenses WHERE id = ?").run(id);
+  db.prepare("UPDATE expenses SET archived = 1 WHERE id = ?").run(id);
   db.close();
 }
 
-export async function listMaintenance(): Promise<MaintenanceRecord[]> {
+export async function restoreExpense(id: number): Promise<void> {
   await ensureSchema();
   if (usePostgres) {
     const sql = await getPostgresSql();
-    const rows = await sql`SELECT * FROM maintenance_records ORDER BY date_reported DESC`;
+    await sql`UPDATE expenses SET archived = FALSE WHERE id = ${id}`;
+    return;
+  }
+  const db = await getSqliteDb();
+  db.prepare("UPDATE expenses SET archived = 0 WHERE id = ?").run(id);
+  db.close();
+}
+
+export async function listMaintenance(archived = false): Promise<MaintenanceRecord[]> {
+  await ensureSchema();
+  if (usePostgres) {
+    const sql = await getPostgresSql();
+    const rows = archived
+      ? await sql`SELECT * FROM maintenance_records WHERE archived = TRUE ORDER BY date_reported DESC`
+      : await sql`SELECT * FROM maintenance_records WHERE archived = FALSE ORDER BY date_reported DESC`;
     return rows.map((r) => mapMaintenance(r as Record<string, unknown>));
   }
   const db = await getSqliteDb();
   const rows = db
-    .prepare("SELECT * FROM maintenance_records ORDER BY date_reported DESC")
-    .all();
+    .prepare(
+      "SELECT * FROM maintenance_records WHERE archived = ? ORDER BY date_reported DESC"
+    )
+    .all(archived ? 1 : 0);
   db.close();
   return rows.map((r) => mapMaintenance(r as Record<string, unknown>));
 }
@@ -871,15 +982,27 @@ export async function createMaintenance(
   return mapMaintenance(row as Record<string, unknown>);
 }
 
-export async function deleteMaintenance(id: number): Promise<void> {
+export async function archiveMaintenance(id: number): Promise<void> {
   await ensureSchema();
   if (usePostgres) {
     const sql = await getPostgresSql();
-    await sql`DELETE FROM maintenance_records WHERE id = ${id}`;
+    await sql`UPDATE maintenance_records SET archived = TRUE WHERE id = ${id}`;
     return;
   }
   const db = await getSqliteDb();
-  db.prepare("DELETE FROM maintenance_records WHERE id = ?").run(id);
+  db.prepare("UPDATE maintenance_records SET archived = 1 WHERE id = ?").run(id);
+  db.close();
+}
+
+export async function restoreMaintenance(id: number): Promise<void> {
+  await ensureSchema();
+  if (usePostgres) {
+    const sql = await getPostgresSql();
+    await sql`UPDATE maintenance_records SET archived = FALSE WHERE id = ${id}`;
+    return;
+  }
+  const db = await getSqliteDb();
+  db.prepare("UPDATE maintenance_records SET archived = 0 WHERE id = ?").run(id);
   db.close();
 }
 
@@ -892,25 +1015,25 @@ export async function getDashboardSummary(): Promise<DashboardSummary> {
     const sql = await getPostgresSql();
     const [props, tenants, leases, rentExpected, rentCollected, maint, exp] =
       await Promise.all([
-        sql`SELECT COUNT(*)::int AS c FROM properties`,
-        sql`SELECT COUNT(*)::int AS c FROM tenants WHERE status = 'Active'`,
-        sql`SELECT COUNT(*)::int AS c FROM leases WHERE status = 'Active'`,
+        sql`SELECT COUNT(*)::int AS c FROM properties WHERE archived = FALSE`,
+        sql`SELECT COUNT(*)::int AS c FROM tenants WHERE status = 'Active' AND archived = FALSE`,
+        sql`SELECT COUNT(*)::int AS c FROM leases WHERE status = 'Active' AND archived = FALSE`,
         sql`
           SELECT COALESCE(SUM(monthly_rent), 0)::float AS total
-          FROM leases WHERE status = 'Active'
+          FROM leases WHERE status = 'Active' AND archived = FALSE
         `,
         sql`
           SELECT COALESCE(SUM(amount_paid), 0)::float AS total
           FROM rent_payments
-          WHERE date >= ${monthStart} AND status IN ('Paid', 'Partial')
+          WHERE date >= ${monthStart} AND status IN ('Paid', 'Partial') AND archived = FALSE
         `,
         sql`
           SELECT COUNT(*)::int AS c FROM maintenance_records
-          WHERE status IN ('Open', 'In Progress')
+          WHERE status IN ('Open', 'In Progress') AND archived = FALSE
         `,
         sql`
           SELECT COALESCE(SUM(amount), 0)::float AS total
-          FROM expenses WHERE date >= ${monthStart}
+          FROM expenses WHERE date >= ${monthStart} AND archived = FALSE
         `,
       ]);
     return {
@@ -926,22 +1049,29 @@ export async function getDashboardSummary(): Promise<DashboardSummary> {
 
   const db = await getSqliteDb();
   const total_properties = (
-    db.prepare("SELECT COUNT(*) AS c FROM properties").get() as { c: number }
+    db
+      .prepare("SELECT COUNT(*) AS c FROM properties WHERE archived = 0")
+      .get() as { c: number }
   ).c;
   const active_tenants = (
     db
-      .prepare("SELECT COUNT(*) AS c FROM tenants WHERE status = 'Active'")
+      .prepare(
+        "SELECT COUNT(*) AS c FROM tenants WHERE status = 'Active' AND archived = 0"
+      )
       .get() as { c: number }
   ).c;
   const active_leases = (
     db
-      .prepare("SELECT COUNT(*) AS c FROM leases WHERE status = 'Active'")
+      .prepare(
+        "SELECT COUNT(*) AS c FROM leases WHERE status = 'Active' AND archived = 0"
+      )
       .get() as { c: number }
   ).c;
   const monthly_rent_expected = (
     db
       .prepare(
-        "SELECT COALESCE(SUM(monthly_rent), 0) AS total FROM leases WHERE status = 'Active'"
+        `SELECT COALESCE(SUM(monthly_rent), 0) AS total FROM leases
+         WHERE status = 'Active' AND archived = 0`
       )
       .get() as { total: number }
   ).total;
@@ -949,7 +1079,7 @@ export async function getDashboardSummary(): Promise<DashboardSummary> {
     db
       .prepare(
         `SELECT COALESCE(SUM(amount_paid), 0) AS total FROM rent_payments
-         WHERE date >= ? AND status IN ('Paid', 'Partial')`
+         WHERE date >= ? AND status IN ('Paid', 'Partial') AND archived = 0`
       )
       .get(monthStart) as { total: number }
   ).total;
@@ -957,13 +1087,15 @@ export async function getDashboardSummary(): Promise<DashboardSummary> {
     db
       .prepare(
         `SELECT COUNT(*) AS c FROM maintenance_records
-         WHERE status IN ('Open', 'In Progress')`
+         WHERE status IN ('Open', 'In Progress') AND archived = 0`
       )
       .get() as { c: number }
   ).c;
   const monthly_expenses = (
     db
-      .prepare("SELECT COALESCE(SUM(amount), 0) AS total FROM expenses WHERE date >= ?")
+      .prepare(
+        "SELECT COALESCE(SUM(amount), 0) AS total FROM expenses WHERE date >= ? AND archived = 0"
+      )
       .get(monthStart) as { total: number }
   ).total;
   db.close();

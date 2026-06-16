@@ -1,14 +1,22 @@
 import {
+  archiveRentPayment,
   createRentPayment,
-  deleteRentPayment,
   listRentPayments,
+  restoreRentPayment,
 } from "@/lib/db";
-import { handleRoute, jsonError, jsonOk } from "@/lib/api-helpers";
+import {
+  handleRoute,
+  jsonError,
+  jsonOk,
+  parseArchivedParam,
+  parseIdParam,
+} from "@/lib/api-helpers";
 
 export const dynamic = "force-dynamic";
 
-export async function GET() {
-  return handleRoute(() => listRentPayments());
+export async function GET(request: Request) {
+  const archived = parseArchivedParam(request);
+  return handleRoute(() => listRentPayments(archived));
 }
 
 export async function POST(request: Request) {
@@ -39,11 +47,21 @@ export async function POST(request: Request) {
 
 export async function DELETE(request: Request) {
   try {
-    const { searchParams } = new URL(request.url);
-    const id = Number(searchParams.get("id"));
+    const id = parseIdParam(request);
     if (!id) return jsonError("Payment id is required.");
-    await deleteRentPayment(id);
-    return jsonOk({ deleted: true });
+    await archiveRentPayment(id);
+    return jsonOk({ archived: true });
+  } catch (error) {
+    return jsonError((error as Error).message, 400);
+  }
+}
+
+export async function PATCH(request: Request) {
+  try {
+    const id = parseIdParam(request);
+    if (!id) return jsonError("Payment id is required.");
+    await restoreRentPayment(id);
+    return jsonOk({ restored: true });
   } catch (error) {
     return jsonError((error as Error).message, 400);
   }

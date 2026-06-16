@@ -1,10 +1,22 @@
-import { createExpense, deleteExpense, listExpenses } from "@/lib/db";
-import { handleRoute, jsonError, jsonOk } from "@/lib/api-helpers";
+import {
+  archiveExpense,
+  createExpense,
+  listExpenses,
+  restoreExpense,
+} from "@/lib/db";
+import {
+  handleRoute,
+  jsonError,
+  jsonOk,
+  parseArchivedParam,
+  parseIdParam,
+} from "@/lib/api-helpers";
 
 export const dynamic = "force-dynamic";
 
-export async function GET() {
-  return handleRoute(() => listExpenses());
+export async function GET(request: Request) {
+  const archived = parseArchivedParam(request);
+  return handleRoute(() => listExpenses(archived));
 }
 
 export async function POST(request: Request) {
@@ -32,11 +44,21 @@ export async function POST(request: Request) {
 
 export async function DELETE(request: Request) {
   try {
-    const { searchParams } = new URL(request.url);
-    const id = Number(searchParams.get("id"));
+    const id = parseIdParam(request);
     if (!id) return jsonError("Expense id is required.");
-    await deleteExpense(id);
-    return jsonOk({ deleted: true });
+    await archiveExpense(id);
+    return jsonOk({ archived: true });
+  } catch (error) {
+    return jsonError((error as Error).message, 400);
+  }
+}
+
+export async function PATCH(request: Request) {
+  try {
+    const id = parseIdParam(request);
+    if (!id) return jsonError("Expense id is required.");
+    await restoreExpense(id);
+    return jsonOk({ restored: true });
   } catch (error) {
     return jsonError((error as Error).message, 400);
   }

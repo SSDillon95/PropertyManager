@@ -19,3 +19,11 @@ export async function handleRoute<T>(
     return jsonError((error as Error).message, 500);
   }
 }
+
+export function parseArchivedParam(request: Request): boolean {
+  return new URL(request.url).searchParams.get("archived") === "1";
+}
+
+export function parseIdParam(request: Request): number {
+  return Number(new URL(request.url).searchParams.get("id"));
+}

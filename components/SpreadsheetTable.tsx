@@ -6,8 +6,10 @@ import { formatCellValue } from "@/lib/format";
 interface SpreadsheetTableProps {
   columns: ColumnDef[];
   rows: Record<string, unknown>[];
-  onDelete: (id: number) => void;
-  deletingId: number | null;
+  archiveMode?: boolean;
+  onArchive?: (id: number) => void;
+  onRestore?: (id: number) => void;
+  actionId: number | null;
   showProfitability?: boolean;
   onProfitability?: (row: Record<string, unknown>) => void;
 }
@@ -15,15 +17,19 @@ interface SpreadsheetTableProps {
 export default function SpreadsheetTable({
   columns,
   rows,
-  onDelete,
-  deletingId,
+  archiveMode = false,
+  onArchive,
+  onRestore,
+  actionId,
   showProfitability = false,
   onProfitability,
 }: SpreadsheetTableProps) {
   if (rows.length === 0) {
     return (
       <div className="rounded-xl border border-zinc-600/60 bg-zinc-800/90 p-8 text-center text-zinc-400">
-        No rows yet. Add your first entry using the form above.
+        {archiveMode
+          ? "No archived rows. Archive a row from the active list to see it here."
+          : "No rows yet. Add your first entry using the form above."}
       </div>
     );
   }
@@ -34,7 +40,7 @@ export default function SpreadsheetTable({
         <table className="w-full text-sm border-collapse min-w-max">
           <thead>
             <tr className="bg-amber-400 text-zinc-900">
-              {showProfitability && (
+              {showProfitability && !archiveMode && (
                 <th className="sticky left-0 z-20 px-3 py-2 text-left font-semibold whitespace-nowrap border-r border-amber-500/40 text-xs uppercase tracking-wide bg-amber-400 min-w-[7.5rem]">
                   &nbsp;
                 </th>
@@ -48,7 +54,7 @@ export default function SpreadsheetTable({
                   {col.label}
                 </th>
               ))}
-              <th className="px-3 py-2 text-left font-semibold text-xs uppercase tracking-wide w-20">
+              <th className="px-3 py-2 text-left font-semibold text-xs uppercase tracking-wide min-w-[5.5rem]">
                 Actions
               </th>
             </tr>
@@ -61,7 +67,7 @@ export default function SpreadsheetTable({
                   idx % 2 === 0 ? "bg-zinc-800/50" : "bg-zinc-700/30"
                 } hover:bg-emerald-950/20`}
               >
-                {showProfitability && (
+                {showProfitability && !archiveMode && (
                   <td
                     className={`sticky left-0 z-10 px-3 py-2 whitespace-nowrap border-r border-zinc-700/40 ${
                       idx % 2 === 0 ? "bg-zinc-800/95" : "bg-zinc-700/80"
@@ -85,14 +91,25 @@ export default function SpreadsheetTable({
                   </td>
                 ))}
                 <td className="px-3 py-2">
-                  <button
-                    type="button"
-                    onClick={() => onDelete(Number(row.id))}
-                    disabled={deletingId === Number(row.id)}
-                    className="text-xs text-red-400 hover:text-red-300 disabled:opacity-50"
-                  >
-                    {deletingId === Number(row.id) ? "..." : "Delete"}
-                  </button>
+                  {archiveMode ? (
+                    <button
+                      type="button"
+                      onClick={() => onRestore?.(Number(row.id))}
+                      disabled={actionId === Number(row.id)}
+                      className="text-xs text-emerald-400 hover:text-emerald-300 disabled:opacity-50 whitespace-nowrap"
+                    >
+                      {actionId === Number(row.id) ? "..." : "Restore"}
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => onArchive?.(Number(row.id))}
+                      disabled={actionId === Number(row.id)}
+                      className="text-xs text-amber-400 hover:text-amber-300 disabled:opacity-50 whitespace-nowrap"
+                    >
+                      {actionId === Number(row.id) ? "..." : "Archive"}
+                    </button>
+                  )}
                 </td>
               </tr>
             ))}

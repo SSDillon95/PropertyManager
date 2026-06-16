@@ -60,7 +60,8 @@ export default function PropertyManagerApp() {
   const [form, setForm] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [deletingId, setDeletingId] = useState<number | null>(null);
+  const [actionId, setActionId] = useState<number | null>(null);
+  const [showArchived, setShowArchived] = useState(false);
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(
     null
   );
@@ -104,29 +105,33 @@ export default function PropertyManagerApp() {
     if (json.success) setLeases(json.data);
   }, []);
 
-  const loadTabData = useCallback(async (activeTab: SheetTab) => {
-    if (activeTab === "dashboard") {
-      await loadDashboard();
-      setRows([]);
-      return;
-    }
-    if (activeTab === "tenants") {
-      await loadProperties();
-    }
-    if (activeTab === "leases") {
-      await Promise.all([loadProperties(), loadTenants()]);
-    }
-    if (activeTab === "rent_ledger") {
-      await Promise.all([loadProperties(), loadTenants(), loadLeases()]);
-    }
-    if (activeTab === "expenses" || activeTab === "maintenance") {
-      await loadProperties();
-    }
-    const endpoint = API_MAP[activeTab];
-    const res = await apiFetch(endpoint);
-    const json = await res.json();
-    if (json.success) setRows(json.data);
-  }, [loadDashboard, loadProperties, loadTenants, loadLeases]);
+  const loadTabData = useCallback(
+    async (activeTab: SheetTab, archived = false) => {
+      if (activeTab === "dashboard") {
+        await loadDashboard();
+        setRows([]);
+        return;
+      }
+      if (activeTab === "tenants") {
+        await loadProperties();
+      }
+      if (activeTab === "leases") {
+        await Promise.all([loadProperties(), loadTenants()]);
+      }
+      if (activeTab === "rent_ledger") {
+        await Promise.all([loadProperties(), loadTenants(), loadLeases()]);
+      }
+      if (activeTab === "expenses" || activeTab === "maintenance") {
+        await loadProperties();
+      }
+      const endpoint = API_MAP[activeTab];
+      const url = archived ? `${endpoint}?archived=1` : endpoint;
+      const res = await apiFetch(url);
+      const json = await res.json();
+      if (json.success) setRows(json.data);
+    },
+    [loadDashboard, loadProperties, loadTenants, loadLeases]
+  );
 
   const handlePropertySelect = (propertyName: string, fieldKey: string) => {
     if (tab === "rent_ledger" && fieldKey === "property_name") {
@@ -161,13 +166,13 @@ export default function PropertyManagerApp() {
   const refresh = useCallback(async () => {
     setLoading(true);
     try {
-      await Promise.all([loadDashboard(), loadTabData(tab)]);
+      await Promise.all([loadDashboard(), loadTabData(tab, showArchived)]);
     } catch {
       showMessage("error", "Failed to load data.");
     } finally {
       setLoading(false);
     }
-  }, [loadDashboard, loadTabData, tab]);
+  }, [loadDashboard, loadTabData, tab, showArchived]);
 
   useEffect(() => {
     refresh();
@@ -180,11 +185,23 @@ export default function PropertyManagerApp() {
   }, [tab, columns]);
 
   const handleTabChange = async (next: SheetTab) => {
+    setShowArchived(false);
     setTab(next);
     setLoading(true);
     try {
-      await loadTabData(next);
+      await loadTabData(next, false);
       if (next === "dashboard") await loadDashboard();
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const toggleArchiveView = async () => {
+    const next = !showArchived;
+    setShowArchived(next);
+    setLoading(true);
+    try {
+      await loadTabData(tab, next);
     } finally {
       setLoading(false);
     }
@@ -215,7 +232,7 @@ export default function PropertyManagerApp() {
       }
       showMessage("success", "Row added.");
       setForm(emptyForm(columns));
-      await Promise.all([loadTabData(tab), loadDashboard()]);
+      await Promise.all([loadTabData(tab, showArchived), loadDashboard()]);
     } catch (error) {
       showMessage("error", (error as Error).message);
     } finally {
@@ -223,20 +240,37 @@ export default function PropertyManagerApp() {
     }
   };
 
-  const handleDelete = async (id: number) => {
+  const handleArchive = async (id: number) => {
     if (tab === "dashboard") return;
-    setDeletingId(id);
+    setActionId(id);
     try {
       const endpoint = API_MAP[tab];
       const res = await apiFetch(`${endpoint}?id=${id}`, { method: "DELETE" });
       const json = await res.json();
-      if (!json.success) throw new Error(json.error || "Delete failed");
-      showMessage("success", "Row deleted.");
-      await Promise.all([loadTabData(tab), loadDashboard()]);
+      if (!json.success) throw new Error(json.error || "Archive failed");
+      showMessage("success", "Row archived.");
+      await Promise.all([loadTabData(tab, showArchived), loadDashboard()]);
     } catch (error) {
       showMessage("error", (error as Error).message);
     } finally {
-      setDeletingId(null);
+      setActionId(null);
+    }
+  };
+
+  const handleRestore = async (id: number) => {
+    if (tab === "dashboard") return;
+    setActionId(id);
+    try {
+      const endpoint = API_MAP[tab];
+      const res = await apiFetch(`${endpoint}?id=${id}`, { method: "PATCH" });
+      const json = await res.json();
+      if (!json.success) throw new Error(json.error || "Restore failed");
+      showMessage("success", "Row restored.");
+      await Promise.all([loadTabData(tab, showArchived), loadDashboard()]);
+    } catch (error) {
+      showMessage("error", (error as Error).message);
+    } finally {
+      setActionId(null);
     }
   };
 
@@ -340,6 +374,7 @@ export default function PropertyManagerApp() {
           <DashboardView summary={summary} />
         ) : (
           <div className="space-y-6">
+            {!showArchived && (
             <section className="rounded-xl border border-zinc-600/60 bg-zinc-800/90 p-4 sm:p-6">
               <div className="flex items-center justify-between mb-4">
                 <div>
@@ -450,18 +485,33 @@ export default function PropertyManagerApp() {
                 </button>
               </form>
             </section>
+            )}
 
             <section>
-              <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center justify-between gap-3 mb-3 flex-wrap">
                 <h2 className="font-semibold text-lg">
+                  {showArchived ? "Archive — " : ""}
                   {SHEET_TABS.find((s) => s.id === tab)?.label} ({rows.length})
                 </h2>
+                <button
+                  type="button"
+                  onClick={toggleArchiveView}
+                  className={`text-xs px-3 py-1.5 rounded-lg border ${
+                    showArchived
+                      ? "border-emerald-600/60 bg-emerald-950/40 text-emerald-300 hover:bg-emerald-900/50"
+                      : "border-zinc-600 bg-zinc-700/80 text-zinc-200 hover:bg-zinc-700"
+                  }`}
+                >
+                  {showArchived ? "Back to Active" : "View Archive"}
+                </button>
               </div>
               <SpreadsheetTable
                 columns={columns}
                 rows={rows}
-                onDelete={handleDelete}
-                deletingId={deletingId}
+                archiveMode={showArchived}
+                onArchive={handleArchive}
+                onRestore={handleRestore}
+                actionId={actionId}
                 showProfitability={tab === "properties"}
                 onProfitability={(row) => setProfitabilityProperty(row as unknown as Property)}
               />

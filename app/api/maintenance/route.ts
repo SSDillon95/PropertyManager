@@ -1,14 +1,22 @@
 import {
+  archiveMaintenance,
   createMaintenance,
-  deleteMaintenance,
   listMaintenance,
+  restoreMaintenance,
 } from "@/lib/db";
-import { handleRoute, jsonError, jsonOk } from "@/lib/api-helpers";
+import {
+  handleRoute,
+  jsonError,
+  jsonOk,
+  parseArchivedParam,
+  parseIdParam,
+} from "@/lib/api-helpers";
 
 export const dynamic = "force-dynamic";
 
-export async function GET() {
-  return handleRoute(() => listMaintenance());
+export async function GET(request: Request) {
+  const archived = parseArchivedParam(request);
+  return handleRoute(() => listMaintenance(archived));
 }
 
 export async function POST(request: Request) {
@@ -40,11 +48,21 @@ export async function POST(request: Request) {
 
 export async function DELETE(request: Request) {
   try {
-    const { searchParams } = new URL(request.url);
-    const id = Number(searchParams.get("id"));
+    const id = parseIdParam(request);
     if (!id) return jsonError("Maintenance id is required.");
-    await deleteMaintenance(id);
-    return jsonOk({ deleted: true });
+    await archiveMaintenance(id);
+    return jsonOk({ archived: true });
+  } catch (error) {
+    return jsonError((error as Error).message, 400);
+  }
+}
+
+export async function PATCH(request: Request) {
+  try {
+    const id = parseIdParam(request);
+    if (!id) return jsonError("Maintenance id is required.");
+    await restoreMaintenance(id);
+    return jsonOk({ restored: true });
   } catch (error) {
     return jsonError((error as Error).message, 400);
   }
