@@ -123,6 +123,13 @@ export default function ReportsView({
     [investorPayouts, filters]
   );
 
+  const selectedReport = REPORT_OPTIONS.find((opt) => opt.id === reportKind);
+
+  const handleReportKindChange = (next: ReportKind) => {
+    setReportKind(next);
+    if (next !== "investor_payout") setInvestorName("");
+  };
+
   const handleDownload = async () => {
     setGenerating(true);
     try {
@@ -240,35 +247,27 @@ export default function ReportsView({
         </p>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
-        {REPORT_OPTIONS.map((opt) => (
-          <button
-            key={opt.id}
-            type="button"
-            onClick={() => {
-              setReportKind(opt.id);
-              if (opt.id !== "investor_payout") setInvestorName("");
-            }}
-            className={`rounded-xl border p-4 text-left transition ${
-              reportKind === opt.id
-                ? "border-emerald-500/70 bg-emerald-950/30"
-                : "border-zinc-600/60 bg-zinc-800/90 hover:border-zinc-500"
-            }`}
-          >
-            <div
-              className={`font-semibold mb-1 ${
-                reportKind === opt.id ? "text-emerald-300" : "text-zinc-100"
-              }`}
-            >
-              {opt.label}
-            </div>
-            <p className="text-xs text-zinc-400">{opt.description}</p>
-          </button>
-        ))}
-      </div>
-
       <section className="rounded-xl border border-zinc-600/60 bg-zinc-800/90 p-4 sm:p-6">
         <h2 className="font-semibold text-lg mb-4">Report Options</h2>
+        <label className="block mb-4">
+          <span className="text-xs font-semibold uppercase tracking-wide text-amber-400 mb-1 block">
+            Report Type
+          </span>
+          <select
+            value={reportKind}
+            onChange={(e) => handleReportKindChange(e.target.value as ReportKind)}
+            className="form-select"
+          >
+            {REPORT_OPTIONS.map((opt) => (
+              <option key={opt.id} value={opt.id}>
+                {opt.label}
+              </option>
+            ))}
+          </select>
+          {selectedReport && (
+            <p className="text-xs text-zinc-400 mt-2">{selectedReport.description}</p>
+          )}
+        </label>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
           <label className="block">
             <span className="text-xs font-semibold uppercase tracking-wide text-amber-400 mb-1 block">
