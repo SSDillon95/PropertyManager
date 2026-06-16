@@ -734,7 +734,7 @@ export default function PropertyManagerApp() {
                 }`}
               >
                 <svg
-                  className="w-4 h-4"
+                  className="w-8 h-8"
                   viewBox="0 0 24 24"
                   fill="none"
                   stroke="currentColor"
