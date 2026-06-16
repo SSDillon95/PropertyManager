@@ -5,7 +5,12 @@ import type { ExpenseReport, IncomeReport, PLReport, ReportKind } from "./report
 const LOGO_PATH = "/hop2it-logo.png";
 const LOGO_WIDTH = 144;
 const LOGO_HEIGHT = 54;
-const LOGO_GREEN = { r: 5, g: 150, b: 105 };
+const REPORT_GREEN = { r: 16, g: 120, b: 80 };
+const REPORT_GREEN_RGB: [number, number, number] = [
+  REPORT_GREEN.r,
+  REPORT_GREEN.g,
+  REPORT_GREEN.b,
+];
 let logoDataUrl: string | null = null;
 
 function recolorWhiteToGreen(imageData: ImageData): void {
@@ -22,9 +27,9 @@ function recolorWhiteToGreen(imageData: ImageData): void {
     if (!isWhite) continue;
 
     const blend = Math.min(1, (avg - 165) / 90);
-    data[i] = Math.round(r * (1 - blend) + LOGO_GREEN.r * blend);
-    data[i + 1] = Math.round(g * (1 - blend) + LOGO_GREEN.g * blend);
-    data[i + 2] = Math.round(b * (1 - blend) + LOGO_GREEN.b * blend);
+    data[i] = Math.round(r * (1 - blend) + REPORT_GREEN.r * blend);
+    data[i + 1] = Math.round(g * (1 - blend) + REPORT_GREEN.g * blend);
+    data[i + 2] = Math.round(b * (1 - blend) + REPORT_GREEN.b * blend);
   }
 }
 
@@ -73,27 +78,30 @@ function periodLabel(start: string, end: string): string {
 async function addHeader(doc: jsPDF, title: string, start: string, end: string) {
   const logo = await loadLogoDataUrl();
   const pageWidth = doc.internal.pageSize.getWidth();
-  const logoX = pageWidth - 14 - LOGO_WIDTH;
-  doc.addImage(logo, "PNG", logoX, 8, LOGO_WIDTH, LOGO_HEIGHT);
+  const margin = 14;
+  doc.addImage(
+    logo,
+    "PNG",
+    pageWidth - margin - LOGO_WIDTH,
+    10,
+    LOGO_WIDTH,
+    LOGO_HEIGHT
+  );
 
   doc.setFont("helvetica", "bold");
-  doc.setFontSize(16);
-  doc.setTextColor(16, 120, 80);
-  doc.text("HOP2IT Property Manager", 14, 22);
-
-  doc.setFontSize(13);
-  doc.setTextColor(30, 30, 30);
-  doc.text(title, 14, 32);
+  doc.setFontSize(14);
+  doc.setTextColor(REPORT_GREEN.r, REPORT_GREEN.g, REPORT_GREEN.b);
+  doc.text(title, margin, 22);
 
   doc.setFont("helvetica", "normal");
   doc.setFontSize(10);
   doc.setTextColor(80, 80, 80);
-  doc.text(`Period: ${periodLabel(start, end)}`, 14, 40);
-  doc.text(`Generated: ${new Date().toLocaleString()}`, 14, 46);
+  doc.text(`Period: ${periodLabel(start, end)}`, margin, 30);
+  doc.text(`Generated: ${new Date().toLocaleString()}`, margin, 36);
 }
 
 function tableStartY(): number {
-  return 68;
+  return 62;
 }
 
 function savePdf(doc: jsPDF, kind: ReportKind, start: string, end: string) {
@@ -134,7 +142,7 @@ export async function downloadIncomePdf(report: IncomeReport): Promise<void> {
       ["TOTAL", money(report.totalIncome)],
     ],
     styles: { fontSize: 9 },
-    headStyles: { fillColor: [16, 120, 80], textColor: [255, 255, 255] },
+    headStyles: { fillColor: REPORT_GREEN_RGB, textColor: [255, 255, 255] },
   });
 
   savePdf(doc, "income", startDate, endDate);
@@ -187,10 +195,10 @@ export async function downloadPLPdf(report: PLReport): Promise<void> {
 
   doc.setFontSize(9);
   doc.setTextColor(80, 80, 80);
-  doc.text(`Carrying costs prorated over ${report.months} month(s)`, 14, 54);
+  doc.text(`Carrying costs prorated over ${report.months} month(s)`, 14, 44);
 
   autoTable(doc, {
-    startY: 60,
+    startY: 50,
     head: [["Property", "Rental Income", "Operating Exp.", "Fixed Costs", "Net P/L"]],
     body: [
       ...report.rows.map((r) => [
@@ -209,12 +217,12 @@ export async function downloadPLPdf(report: PLReport): Promise<void> {
       ],
     ],
     styles: { fontSize: 9 },
-    headStyles: { fillColor: [16, 120, 80], textColor: [255, 255, 255] },
+    headStyles: { fillColor: REPORT_GREEN_RGB, textColor: [255, 255, 255] },
     footStyles: { fillColor: [230, 230, 230], textColor: [30, 30, 30], fontStyle: "bold" },
   });
 
   const notesY = (doc as jsPDF & { lastAutoTable?: { finalY: number } }).lastAutoTable
-    ?.finalY ?? 60;
+    ?.finalY ?? 50;
 
   doc.setFontSize(8);
   doc.setTextColor(100, 100, 100);
