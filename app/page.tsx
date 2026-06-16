@@ -16,6 +16,7 @@ import type {
   Investor,
   InvestorPayout,
   Lease,
+  MaintenanceRecord,
   Property,
   RentPayment,
   SheetTab,
@@ -106,6 +107,7 @@ export default function PropertyManagerApp() {
   const [leases, setLeases] = useState<Lease[]>([]);
   const [rentPayments, setRentPayments] = useState<RentPayment[]>([]);
   const [expenseRows, setExpenseRows] = useState<Expense[]>([]);
+  const [maintenanceRows, setMaintenanceRows] = useState<MaintenanceRecord[]>([]);
   const [investors, setInvestors] = useState<Investor[]>([]);
   const [profitabilityProperty, setProfitabilityProperty] = useState<Property | null>(null);
   const [expandedProperty, setExpandedProperty] = useState<Property | null>(null);
@@ -157,6 +159,12 @@ export default function PropertyManagerApp() {
     if (json.success) setExpenseRows(json.data);
   }, []);
 
+  const loadMaintenanceRows = useCallback(async () => {
+    const res = await apiFetch("/api/maintenance");
+    const json = await res.json();
+    if (json.success) setMaintenanceRows(json.data);
+  }, []);
+
   const loadInvestors = useCallback(async () => {
     const res = await apiFetch("/api/investors");
     const json = await res.json();
@@ -171,7 +179,12 @@ export default function PropertyManagerApp() {
         return;
       }
       if (activeTab === "reports") {
-        await Promise.all([loadProperties(), loadRentPayments(), loadExpenseRows()]);
+        await Promise.all([
+          loadProperties(),
+          loadRentPayments(),
+          loadExpenseRows(),
+          loadMaintenanceRows(),
+        ]);
         setRows([]);
         return;
       }
@@ -210,6 +223,7 @@ export default function PropertyManagerApp() {
       loadLeases,
       loadRentPayments,
       loadExpenseRows,
+      loadMaintenanceRows,
       loadInvestors,
     ]
   );
@@ -539,6 +553,7 @@ export default function PropertyManagerApp() {
             properties={properties}
             rentPayments={rentPayments}
             expenses={expenseRows}
+            maintenance={maintenanceRows}
           />
         ) : (
           <div className="space-y-6">

@@ -1,6 +1,12 @@
 import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
-import type { ExpenseReport, IncomeReport, PLReport, ReportKind } from "./reports";
+import type {
+  ExpenseReport,
+  IncomeReport,
+  PLReport,
+  ReportKind,
+  VendorPayoutReport,
+} from "./reports";
 import type { InvestorPayout } from "./types";
 
 const LOGO_PATH = "/hop2it-logo.png";
@@ -265,6 +271,50 @@ export async function downloadPLPdf(report: PLReport): Promise<void> {
   );
 
   savePdf(doc, "pl", startDate, endDate);
+}
+
+export async function downloadVendorPayoutPdf(report: VendorPayoutReport): Promise<void> {
+  const doc = new jsPDF();
+  const { startDate, endDate } = report.period;
+
+  await addHeader(doc, "Vendor Payout Report", startDate, endDate);
+
+  doc.setFontSize(9);
+  doc.setTextColor(80, 80, 80);
+  doc.text("Payments to vendors from Expenses and Maintenance tabs.", 14, 44);
+
+  autoTable(doc, {
+    startY: 50,
+    head: [["Date", "Source", "Vendor", "Property", "Category", "Description", "Amount"]],
+    body: report.lines.map((l) => [
+      l.date,
+      l.source,
+      l.vendor,
+      l.property_name,
+      l.category,
+      l.description,
+      money(l.amount),
+    ]),
+    styles: { fontSize: 8, cellPadding: 2 },
+    headStyles: { fillColor: [251, 191, 36], textColor: [24, 24, 27] },
+    alternateRowStyles: { fillColor: [245, 245, 245] },
+  });
+
+  const summaryY = (doc as jsPDF & { lastAutoTable?: { finalY: number } }).lastAutoTable
+    ?.finalY ?? 50;
+
+  autoTable(doc, {
+    startY: summaryY + 10,
+    head: [["Vendor", "Total Payout"]],
+    body: [
+      ...report.byVendor.map((r) => [r.vendor, money(r.total)]),
+      ["TOTAL", money(report.totalPayouts)],
+    ],
+    styles: { fontSize: 9 },
+    headStyles: { fillColor: REPORT_GREEN_RGB, textColor: [255, 255, 255] },
+  });
+
+  savePdf(doc, "vendor_payout", startDate, endDate);
 }
 
 export async function downloadInvestorPayoutPdf(

@@ -6,20 +6,23 @@ import {
   downloadExpensePdf,
   downloadIncomePdf,
   downloadPLPdf,
+  downloadVendorPayoutPdf,
 } from "@/lib/pdf-reports";
 import {
   buildExpenseReport,
   buildIncomeReport,
   buildPLReport,
+  buildVendorPayoutReport,
   defaultReportRange,
   type ReportKind,
 } from "@/lib/reports";
-import type { Expense, Property, RentPayment } from "@/lib/types";
+import type { Expense, MaintenanceRecord, Property, RentPayment } from "@/lib/types";
 
 interface ReportsViewProps {
   properties: Property[];
   rentPayments: RentPayment[];
   expenses: Expense[];
+  maintenance: MaintenanceRecord[];
 }
 
 const REPORT_OPTIONS: { id: ReportKind; label: string; description: string }[] = [
@@ -38,12 +41,18 @@ const REPORT_OPTIONS: { id: ReportKind; label: string; description: string }[] =
     label: "Expense Report",
     description: "All expenses in the period, with totals by category and property.",
   },
+  {
+    id: "vendor_payout",
+    label: "Vendor Payout Report",
+    description: "Payments to vendors from Expenses and Maintenance, totaled by vendor.",
+  },
 ];
 
 export default function ReportsView({
   properties,
   rentPayments,
   expenses,
+  maintenance,
 }: ReportsViewProps) {
   const defaults = defaultReportRange();
   const [reportKind, setReportKind] = useState<ReportKind>("pl");
@@ -73,12 +82,17 @@ export default function ReportsView({
     () => buildPLReport(properties, rentPayments, expenses, filters),
     [properties, rentPayments, expenses, filters]
   );
+  const vendorPayoutReport = useMemo(
+    () => buildVendorPayoutReport(expenses, maintenance, filters),
+    [expenses, maintenance, filters]
+  );
 
   const handleDownload = async () => {
     setGenerating(true);
     try {
       if (reportKind === "income") await downloadIncomePdf(incomeReport);
       else if (reportKind === "expense") await downloadExpensePdf(expenseReport);
+      else if (reportKind === "vendor_payout") await downloadVendorPayoutPdf(vendorPayoutReport);
       else await downloadPLPdf(plReport);
     } finally {
       setGenerating(false);
@@ -114,27 +128,50 @@ export default function ReportsView({
             { label: "Properties", value: String(incomeReport.byProperty.length), tone: "zinc" },
             { label: "Line Items", value: String(incomeReport.lines.length), tone: "zinc" },
           ]
-        : [
-            {
-              label: "Total Expenses",
-              value: formatCurrency(expenseReport.totalExpenses),
-              tone: "emerald",
-            },
-            { label: "Categories", value: String(expenseReport.byCategory.length), tone: "zinc" },
-            { label: "Properties", value: String(expenseReport.byProperty.length), tone: "zinc" },
-            { label: "Line Items", value: String(expenseReport.lines.length), tone: "zinc" },
-          ];
+        : reportKind === "expense"
+          ? [
+              {
+                label: "Total Expenses",
+                value: formatCurrency(expenseReport.totalExpenses),
+                tone: "emerald",
+              },
+              {
+                label: "Categories",
+                value: String(expenseReport.byCategory.length),
+                tone: "zinc",
+              },
+              {
+                label: "Properties",
+                value: String(expenseReport.byProperty.length),
+                tone: "zinc",
+              },
+              { label: "Line Items", value: String(expenseReport.lines.length), tone: "zinc" },
+            ]
+          : [
+              {
+                label: "Total Payouts",
+                value: formatCurrency(vendorPayoutReport.totalPayouts),
+                tone: "emerald",
+              },
+              { label: "Vendors", value: String(vendorPayoutReport.byVendor.length), tone: "zinc" },
+              {
+                label: "Properties",
+                value: String(vendorPayoutReport.byProperty.length),
+                tone: "zinc",
+              },
+              { label: "Line Items", value: String(vendorPayoutReport.lines.length), tone: "zinc" },
+            ];
 
   return (
     <div className="space-y-6">
       <div>
         <h1 className="text-3xl font-semibold tracking-tighter mb-2">Reports</h1>
         <p className="text-sm text-zinc-400">
-          Generate P/L, income, and expense reports as PDF downloads.
+          Generate P/L, income, expense, and vendor payout reports as PDF downloads.
         </p>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
         {REPORT_OPTIONS.map((opt) => (
           <button
             key={opt.id}

@@ -1,6 +1,6 @@
-import type { Expense, Property, RentPayment } from "./types";
+import type { Expense, MaintenanceRecord, Property, RentPayment } from "./types";
 
-export type ReportKind = "pl" | "income" | "expense";
+export type ReportKind = "pl" | "income" | "expense" | "vendor_payout";
 
 export interface ReportFilters {
   startDate: string;
@@ -244,5 +244,98 @@ export function buildPLReport(
     totalOperatingExpenses,
     totalFixedCosts,
     netPL: totalIncome - totalOperatingExpenses - totalFixedCosts,
+  };
+}
+
+export interface VendorPayoutLine {
+  date: string;
+  source: "Expense" | "Maintenance";
+  vendor: string;
+  property_name: string;
+  category: string;
+  description: string;
+  amount: number;
+  payment_method: string;
+}
+
+export interface VendorPayoutReport {
+  period: ReportFilters;
+  lines: VendorPayoutLine[];
+  byVendor: { vendor: string; total: number }[];
+  byProperty: { property_name: string; total: number }[];
+  totalPayouts: number;
+}
+
+export function buildVendorPayoutReport(
+  expenses: Expense[],
+  maintenance: MaintenanceRecord[],
+  filters: ReportFilters
+): VendorPayoutReport {
+  const expenseLines: VendorPayoutLine[] = expenses
+    .filter(
+      (e) =>
+        e.vendor?.trim() &&
+        n(e.amount) > 0 &&
+        isDateInRange(e.date, filters.startDate, filters.endDate) &&
+        matchesProperty(e.property_name, filters.propertyName)
+    )
+    .map((e) => ({
+      date: e.date,
+      source: "Expense" as const,
+      vendor: e.vendor!.trim(),
+      property_name: e.property_name,
+      category: e.category,
+      description: e.description ?? "",
+      amount: n(e.amount),
+      payment_method: e.payment_method ?? "",
+    }));
+
+  const maintenanceLines: VendorPayoutLine[] = maintenance
+    .filter((m) => {
+      const vendor = m.vendor?.trim();
+      const amount = n(m.actual_cost) || n(m.estimated_cost);
+      const date = m.date_completed ?? m.date_reported;
+      return (
+        Boolean(vendor) &&
+        amount > 0 &&
+        isDateInRange(date, filters.startDate, filters.endDate) &&
+        matchesProperty(m.property_name, filters.propertyName)
+      );
+    })
+    .map((m) => ({
+      date: m.date_completed ?? m.date_reported,
+      source: "Maintenance" as const,
+      vendor: m.vendor!.trim(),
+      property_name: m.property_name,
+      category: m.category,
+      description: m.description,
+      amount: n(m.actual_cost) || n(m.estimated_cost),
+      payment_method: "",
+    }));
+
+  const lines = [...expenseLines, ...maintenanceLines].sort((a, b) =>
+    b.date.localeCompare(a.date)
+  );
+
+  const vendorTotals = new Map<string, number>();
+  const propertyTotals = new Map<string, number>();
+  for (const line of lines) {
+    vendorTotals.set(line.vendor, (vendorTotals.get(line.vendor) ?? 0) + line.amount);
+    propertyTotals.set(
+      line.property_name,
+      (propertyTotals.get(line.property_name) ?? 0) + line.amount
+    );
+  }
+
+  return {
+    period: filters,
+    lines,
+    byVendor: [...vendorTotals.entries()]
+      .map(([vendor, total]) => ({ vendor, total }))
+      .sort((a, b) => b.total - a.total),
+    byProperty: [...propertyTotals.entries()]
+      .map(([property_name, total]) => ({ property_name, total }))
+      .sort((a, b) => b.total - a.total),
+    totalPayouts: lines.reduce((sum, l) => sum + l.amount, 0),
   };
 }
