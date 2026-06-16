@@ -10,9 +10,11 @@ import { loanSummaryFromPayout } from "@/lib/investor-payout-summary";
 import {
   getColumnsForTab,
   isManagementTab,
+  isSettingsTab,
   MANAGEMENT_TABS,
   NAV_TABS_AFTER_MANAGEMENT,
   NAV_TABS_BEFORE_MANAGEMENT,
+  SETTINGS_TABS,
   SHEET_TABS,
   type ColumnDef,
 } from "@/lib/columns";
@@ -124,6 +126,13 @@ export default function PropertyManagerApp() {
   } | null>(null);
   const managementButtonRef = useRef<HTMLButtonElement>(null);
   const managementDropdownRef = useRef<HTMLDivElement>(null);
+  const [settingsMenuOpen, setSettingsMenuOpen] = useState(false);
+  const [settingsMenuPosition, setSettingsMenuPosition] = useState<{
+    top: number;
+    left: number;
+  } | null>(null);
+  const settingsButtonRef = useRef<HTMLButtonElement>(null);
+  const settingsDropdownRef = useRef<HTMLDivElement>(null);
   const [tenants, setTenants] = useState<Tenant[]>([]);
   const [leases, setLeases] = useState<Lease[]>([]);
   const [rentPayments, setRentPayments] = useState<RentPayment[]>([]);
@@ -403,9 +412,40 @@ export default function PropertyManagerApp() {
       closeManagementMenu();
       return;
     }
+    setSettingsMenuOpen(false);
+    setSettingsMenuPosition(null);
     updateManagementMenuPosition();
     setManagementMenuOpen(true);
   }, [closeManagementMenu, managementMenuOpen, updateManagementMenuPosition]);
+
+  const updateSettingsMenuPosition = useCallback(() => {
+    if (!settingsButtonRef.current) return;
+    const rect = settingsButtonRef.current.getBoundingClientRect();
+    setSettingsMenuPosition({
+      top: rect.bottom + 4,
+      left: rect.left,
+    });
+  }, []);
+
+  const closeSettingsMenu = useCallback(() => {
+    setSettingsMenuOpen(false);
+    setSettingsMenuPosition(null);
+  }, []);
+
+  const toggleSettingsMenu = useCallback(() => {
+    if (settingsMenuOpen) {
+      closeSettingsMenu();
+      return;
+    }
+    closeManagementMenu();
+    updateSettingsMenuPosition();
+    setSettingsMenuOpen(true);
+  }, [
+    closeManagementMenu,
+    closeSettingsMenu,
+    settingsMenuOpen,
+    updateSettingsMenuPosition,
+  ]);
 
   useEffect(() => {
     if (!managementMenuOpen) return;
@@ -434,6 +474,30 @@ export default function PropertyManagerApp() {
     managementMenuOpen,
     updateManagementMenuPosition,
   ]);
+
+  useEffect(() => {
+    if (!settingsMenuOpen) return;
+    updateSettingsMenuPosition();
+    const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target as Node;
+      if (
+        settingsButtonRef.current?.contains(target) ||
+        settingsDropdownRef.current?.contains(target)
+      ) {
+        return;
+      }
+      closeSettingsMenu();
+    };
+    const handleReposition = () => updateSettingsMenuPosition();
+    document.addEventListener("mousedown", handleClickOutside);
+    window.addEventListener("resize", handleReposition);
+    window.addEventListener("scroll", handleReposition, true);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+      window.removeEventListener("resize", handleReposition);
+      window.removeEventListener("scroll", handleReposition, true);
+    };
+  }, [closeSettingsMenu, settingsMenuOpen, updateSettingsMenuPosition]);
 
   useEffect(() => {
     if (tab !== "dashboard" && tab !== "reports") {
@@ -469,6 +533,7 @@ export default function PropertyManagerApp() {
     setFormOpen(false);
     setExpandedProperty(null);
     closeManagementMenu();
+    closeSettingsMenu();
     if (next !== "properties") setPropertyBusinessFilter("");
     setTab(next);
     setLoading(true);
@@ -691,6 +756,42 @@ export default function PropertyManagerApp() {
                 </span>
               </button>
             </div>
+            <div className="relative shrink-0">
+              <button
+                ref={settingsButtonRef}
+                type="button"
+                onClick={toggleSettingsMenu}
+                aria-label="Settings"
+                aria-expanded={settingsMenuOpen}
+                aria-haspopup="menu"
+                title="Settings"
+                className={`px-4 py-2.5 text-sm whitespace-nowrap border-b-2 transition inline-flex items-center justify-center ${
+                  isSettingsTab(tab) || settingsMenuOpen
+                    ? "border-emerald-400 text-emerald-300 bg-zinc-700/50"
+                    : "border-transparent text-zinc-400 hover:text-zinc-100 hover:bg-zinc-700/40"
+                }`}
+              >
+                <svg
+                  className="w-4 h-4"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  aria-hidden
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"
+                  />
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
+                  />
+                </svg>
+              </button>
+            </div>
             {NAV_TABS_AFTER_MANAGEMENT.map((sheet) => (
               <button
                 key={sheet.id}
@@ -752,6 +853,33 @@ export default function PropertyManagerApp() {
           }}
         >
           {MANAGEMENT_TABS.map((sheet) => (
+            <button
+              key={sheet.id}
+              type="button"
+              role="menuitem"
+              onClick={() => handleTabChange(sheet.id)}
+              className={`block w-full px-4 py-2.5 text-left text-sm transition ${
+                tab === sheet.id
+                  ? "bg-emerald-950/50 text-emerald-300"
+                  : "text-zinc-200 hover:bg-zinc-700/80 hover:text-zinc-100"
+              }`}
+            >
+              {sheet.label}
+            </button>
+          ))}
+        </div>
+      )}
+      {settingsMenuOpen && settingsMenuPosition && (
+        <div
+          ref={settingsDropdownRef}
+          role="menu"
+          className="fixed z-[100] min-w-[11rem] rounded-lg border border-zinc-600/80 bg-zinc-800 py-1 shadow-2xl"
+          style={{
+            top: settingsMenuPosition.top,
+            left: settingsMenuPosition.left,
+          }}
+        >
+          {SETTINGS_TABS.map((sheet) => (
             <button
               key={sheet.id}
               type="button"
