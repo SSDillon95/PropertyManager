@@ -3,7 +3,7 @@ import type { SheetTab } from "./types";
 export interface ColumnDef {
   key: string;
   label: string;
-  type: "text" | "number" | "date" | "currency" | "select" | "property" | "tenant";
+  type: "text" | "number" | "date" | "currency" | "select" | "property" | "tenant" | "investor";
   options?: string[];
   required?: boolean;
   width?: string;
@@ -17,6 +17,7 @@ export const SHEET_TABS: { id: SheetTab; label: string }[] = [
   { id: "rent_ledger", label: "Rent Ledger" },
   { id: "expenses", label: "Expenses" },
   { id: "maintenance", label: "Maintenance" },
+  { id: "investor_payout", label: "Investor Payout" },
   { id: "reports", label: "Reports" },
 ];
 
@@ -206,6 +207,46 @@ export const MAINTENANCE_COLUMNS: ColumnDef[] = [
   { key: "notes", label: "Notes", type: "text", width: "200px" },
 ];
 
+export const INVESTOR_PAYOUT_COLUMNS: ColumnDef[] = [
+  { key: "payout_id", label: "Payout ID", type: "text", required: true, width: "100px" },
+  { key: "date", label: "Date", type: "date", required: true, width: "110px" },
+  { key: "property_name", label: "Property", type: "property", required: true, width: "150px" },
+  { key: "investor_name", label: "Investor", type: "investor", required: true, width: "150px" },
+  {
+    key: "payout_type",
+    label: "Payout Type",
+    type: "select",
+    options: [
+      "Distribution",
+      "Return of Capital",
+      "Preferred Return",
+      "Profit Share",
+      "Tax Distribution",
+      "Other",
+    ],
+    required: true,
+    width: "140px",
+  },
+  { key: "payout_amount", label: "Payout Amount", type: "currency", required: true, width: "120px" },
+  {
+    key: "payment_method",
+    label: "Payment Method",
+    type: "select",
+    options: ["Check", "ACH", "Wire", "Cash", "Other"],
+    width: "130px",
+  },
+  { key: "payment_date", label: "Payment Date", type: "date", width: "120px" },
+  { key: "tax_year", label: "Tax Year", type: "number", width: "90px" },
+  {
+    key: "status",
+    label: "Status",
+    type: "select",
+    options: ["Pending", "Paid", "Cancelled"],
+    width: "100px",
+  },
+  { key: "notes", label: "Notes", type: "text", width: "200px" },
+];
+
 export function getColumnsForTab(tab: SheetTab): ColumnDef[] {
   switch (tab) {
     case "properties":
@@ -220,6 +261,8 @@ export function getColumnsForTab(tab: SheetTab): ColumnDef[] {
       return EXPENSE_COLUMNS;
     case "maintenance":
       return MAINTENANCE_COLUMNS;
+    case "investor_payout":
+      return INVESTOR_PAYOUT_COLUMNS;
     default:
       return [];
   }

@@ -1,6 +1,7 @@
 import type {
   DashboardSummary,
   Expense,
+  InvestorPayout,
   Lease,
   MaintenanceRecord,
   Property,
@@ -152,6 +153,23 @@ const SQLITE_SCHEMA = `
     archived INTEGER NOT NULL DEFAULT 0,
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
   );
+
+  CREATE TABLE IF NOT EXISTS investor_payouts (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    payout_id TEXT NOT NULL UNIQUE,
+    date TEXT NOT NULL,
+    property_name TEXT NOT NULL,
+    investor_name TEXT NOT NULL,
+    payout_type TEXT NOT NULL,
+    payout_amount REAL NOT NULL,
+    payment_method TEXT,
+    payment_date TEXT,
+    tax_year INTEGER,
+    status TEXT DEFAULT 'Pending',
+    notes TEXT,
+    archived INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
 `;
 
 const ARCHIVED_TABLES = [
@@ -161,6 +179,7 @@ const ARCHIVED_TABLES = [
   "rent_payments",
   "expenses",
   "maintenance_records",
+  "investor_payouts",
 ] as const;
 
 async function initSchema(): Promise<void> {
@@ -300,12 +319,30 @@ async function initSchema(): Promise<void> {
         created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
       )
     `;
+    await sql`
+      CREATE TABLE IF NOT EXISTS investor_payouts (
+        id SERIAL PRIMARY KEY,
+        payout_id TEXT NOT NULL UNIQUE,
+        date TEXT NOT NULL,
+        property_name TEXT NOT NULL,
+        investor_name TEXT NOT NULL,
+        payout_type TEXT NOT NULL,
+        payout_amount REAL NOT NULL,
+        payment_method TEXT,
+        payment_date TEXT,
+        tax_year INTEGER,
+        status TEXT DEFAULT 'Pending',
+        notes TEXT,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `;
     await sql`ALTER TABLE properties ADD COLUMN IF NOT EXISTS archived BOOLEAN NOT NULL DEFAULT FALSE`;
     await sql`ALTER TABLE tenants ADD COLUMN IF NOT EXISTS archived BOOLEAN NOT NULL DEFAULT FALSE`;
     await sql`ALTER TABLE leases ADD COLUMN IF NOT EXISTS archived BOOLEAN NOT NULL DEFAULT FALSE`;
     await sql`ALTER TABLE rent_payments ADD COLUMN IF NOT EXISTS archived BOOLEAN NOT NULL DEFAULT FALSE`;
     await sql`ALTER TABLE expenses ADD COLUMN IF NOT EXISTS archived BOOLEAN NOT NULL DEFAULT FALSE`;
     await sql`ALTER TABLE maintenance_records ADD COLUMN IF NOT EXISTS archived BOOLEAN NOT NULL DEFAULT FALSE`;
+    await sql`ALTER TABLE investor_payouts ADD COLUMN IF NOT EXISTS archived BOOLEAN NOT NULL DEFAULT FALSE`;
     return;
   }
 
@@ -487,6 +524,24 @@ function mapMaintenance(row: Record<string, unknown>): MaintenanceRecord {
     estimated_cost: num(row.estimated_cost),
     actual_cost: num(row.actual_cost),
     date_completed: str(row.date_completed),
+    notes: str(row.notes),
+    created_at: String(row.created_at),
+  };
+}
+
+function mapInvestorPayout(row: Record<string, unknown>): InvestorPayout {
+  return {
+    id: Number(row.id),
+    payout_id: String(row.payout_id),
+    date: String(row.date),
+    property_name: String(row.property_name),
+    investor_name: String(row.investor_name),
+    payout_type: String(row.payout_type),
+    payout_amount: Number(row.payout_amount),
+    payment_method: str(row.payment_method),
+    payment_date: str(row.payment_date),
+    tax_year: num(row.tax_year) != null ? Number(row.tax_year) : null,
+    status: String(row.status ?? "Pending"),
     notes: str(row.notes),
     created_at: String(row.created_at),
   };
@@ -1003,6 +1058,81 @@ export async function restoreMaintenance(id: number): Promise<void> {
   }
   const db = await getSqliteDb();
   db.prepare("UPDATE maintenance_records SET archived = 0 WHERE id = ?").run(id);
+  db.close();
+}
+
+export async function listInvestorPayouts(archived = false): Promise<InvestorPayout[]> {
+  await ensureSchema();
+  if (usePostgres) {
+    const sql = await getPostgresSql();
+    const rows = archived
+      ? await sql`SELECT * FROM investor_payouts WHERE archived = TRUE ORDER BY date DESC`
+      : await sql`SELECT * FROM investor_payouts WHERE archived = FALSE ORDER BY date DESC`;
+    return rows.map((r) => mapInvestorPayout(r as Record<string, unknown>));
+  }
+  const db = await getSqliteDb();
+  const rows = db
+    .prepare("SELECT * FROM investor_payouts WHERE archived = ? ORDER BY date DESC")
+    .all(archived ? 1 : 0);
+  db.close();
+  return rows.map((r) => mapInvestorPayout(r as Record<string, unknown>));
+}
+
+export async function createInvestorPayout(
+  data: Omit<InvestorPayout, "id" | "created_at">
+): Promise<InvestorPayout> {
+  await ensureSchema();
+  if (usePostgres) {
+    const sql = await getPostgresSql();
+    const rows = await sql`
+      INSERT INTO investor_payouts (
+        payout_id, date, property_name, investor_name, payout_type, payout_amount,
+        payment_method, payment_date, tax_year, status, notes
+      ) VALUES (
+        ${data.payout_id}, ${data.date}, ${data.property_name}, ${data.investor_name},
+        ${data.payout_type}, ${data.payout_amount}, ${data.payment_method},
+        ${data.payment_date}, ${data.tax_year}, ${data.status}, ${data.notes}
+      ) RETURNING *
+    `;
+    return mapInvestorPayout(rows[0] as Record<string, unknown>);
+  }
+  const db = await getSqliteDb();
+  const row = db
+    .prepare(
+      `INSERT INTO investor_payouts (
+        payout_id, date, property_name, investor_name, payout_type, payout_amount,
+        payment_method, payment_date, tax_year, status, notes
+      ) VALUES (
+        @payout_id, @date, @property_name, @investor_name, @payout_type, @payout_amount,
+        @payment_method, @payment_date, @tax_year, @status, @notes
+      ) RETURNING *`
+    )
+    .get(data);
+  db.close();
+  return mapInvestorPayout(row as Record<string, unknown>);
+}
+
+export async function archiveInvestorPayout(id: number): Promise<void> {
+  await ensureSchema();
+  if (usePostgres) {
+    const sql = await getPostgresSql();
+    await sql`UPDATE investor_payouts SET archived = TRUE WHERE id = ${id}`;
+    return;
+  }
+  const db = await getSqliteDb();
+  db.prepare("UPDATE investor_payouts SET archived = 1 WHERE id = ?").run(id);
+  db.close();
+}
+
+export async function restoreInvestorPayout(id: number): Promise<void> {
+  await ensureSchema();
+  if (usePostgres) {
+    const sql = await getPostgresSql();
+    await sql`UPDATE investor_payouts SET archived = FALSE WHERE id = ${id}`;
+    return;
+  }
+  const db = await getSqliteDb();
+  db.prepare("UPDATE investor_payouts SET archived = 0 WHERE id = ?").run(id);
   db.close();
 }
 

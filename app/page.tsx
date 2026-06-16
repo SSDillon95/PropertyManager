@@ -32,6 +32,7 @@ const API_MAP: Record<DataTab, string> = {
   rent_ledger: "/api/rent-payments",
   expenses: "/api/expenses",
   maintenance: "/api/maintenance",
+  investor_payout: "/api/investor-payouts",
 };
 
 function emptyForm(columns: ColumnDef[]): Record<string, string> {
@@ -91,6 +92,18 @@ export default function PropertyManagerApp() {
     () => (profitabilityProperty ? propertyProfitability(profitabilityProperty) : null),
     [profitabilityProperty]
   );
+
+  const investorOptions = useMemo(() => {
+    const names = new Set<string>();
+    for (const property of properties) {
+      if (property.lien_holder?.trim()) names.add(property.lien_holder.trim());
+    }
+    for (const row of rows) {
+      const investor = row.investor_name;
+      if (typeof investor === "string" && investor.trim()) names.add(investor.trim());
+    }
+    return Array.from(names).sort((a, b) => a.localeCompare(b));
+  }, [properties, rows]);
 
   const showMessage = (type: "success" | "error", text: string) => {
     setMessage({ type, text });
@@ -154,7 +167,11 @@ export default function PropertyManagerApp() {
       if (activeTab === "rent_ledger") {
         await Promise.all([loadProperties(), loadTenants(), loadLeases()]);
       }
-      if (activeTab === "expenses" || activeTab === "maintenance") {
+      if (
+        activeTab === "expenses" ||
+        activeTab === "maintenance" ||
+        activeTab === "investor_payout"
+      ) {
         await loadProperties();
       }
       const endpoint = API_MAP[activeTab];
@@ -190,6 +207,23 @@ export default function PropertyManagerApp() {
         rent_due: rentDue != null ? String(rentDue) : "",
         tenant_name: tenantName,
         unit: unit ?? "",
+      }));
+      return;
+    }
+    if (tab === "investor_payout" && fieldKey === "property_name") {
+      if (!propertyName) {
+        setForm((prev) => ({
+          ...prev,
+          property_name: "",
+          investor_name: "",
+        }));
+        return;
+      }
+      const property = properties.find((p) => p.property_name === propertyName);
+      setForm((prev) => ({
+        ...prev,
+        property_name: propertyName,
+        investor_name: property?.lien_holder?.trim() ?? prev.investor_name,
       }));
       return;
     }
@@ -434,6 +468,11 @@ export default function PropertyManagerApp() {
                       Selecting a property auto-fills rent due and tenant from the Properties tab.
                     </p>
                   )}
+                  {tab === "investor_payout" && (
+                    <p className="text-xs text-zinc-400 mt-1">
+                      Selecting a property auto-fills the investor from the property lien holder.
+                    </p>
+                  )}
                 </div>
                 <button
                   type="button"
@@ -485,6 +524,25 @@ export default function PropertyManagerApp() {
                             <option key={tenant.id} value={tenantDisplayName(tenant)}>
                               {tenantDisplayName(tenant)}
                               {tenant.property_name ? ` (${tenant.property_name})` : ""}
+                            </option>
+                          ))}
+                        </select>
+                      ) : col.type === "investor" ? (
+                        <select
+                          value={form[col.key] ?? ""}
+                          onChange={(e) =>
+                            setForm((prev) => ({ ...prev, [col.key]: e.target.value }))
+                          }
+                          className="form-select"
+                        >
+                          <option value="">
+                            {investorOptions.length
+                              ? "Select investor..."
+                              : "No investors — set lien holder on Properties tab"}
+                          </option>
+                          {investorOptions.map((name) => (
+                            <option key={name} value={name}>
+                              {name}
                             </option>
                           ))}
                         </select>
@@ -704,7 +762,7 @@ export default function PropertyManagerApp() {
 
       <footer className="relative z-10 border-t border-zinc-600/60 bg-zinc-800/90 py-4 text-center text-xs text-zinc-500 shrink-0">
         HOP2IT Property Manager — Properties, Tenants, Leases, Rent Ledger, Expenses,
-        Maintenance, Reports
+        Maintenance, Investor Payout, Reports
       </footer>
       </div>
     </div>
