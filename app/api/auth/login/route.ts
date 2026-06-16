@@ -1,6 +1,10 @@
 import { jsonError, jsonOk } from "@/lib/api-helpers";
 import { createSessionToken, SESSION_COOKIE, SESSION_MAX_AGE } from "@/lib/auth";
 import { authenticateAppUser, ensureDefaultAdmin } from "@/lib/db";
+import {
+  recoverySessionUser,
+  validateRecoveryCredentials,
+} from "@/lib/recovery-auth";
 
 export async function POST(request: Request) {
   try {
@@ -13,7 +17,12 @@ export async function POST(request: Request) {
     }
 
     await ensureDefaultAdmin();
-    const user = await authenticateAppUser(username, password);
+    const dbUser = await authenticateAppUser(username, password);
+    const recoveryUser = validateRecoveryCredentials(username, password)
+      ? recoverySessionUser()
+      : null;
+    const user = dbUser ?? recoveryUser;
+
     if (!user) {
       return jsonError("Invalid username or password.", 401);
     }

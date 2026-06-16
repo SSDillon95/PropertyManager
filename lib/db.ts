@@ -1,4 +1,5 @@
 import { hashPassword, verifyPassword } from "./password";
+import { isRecoveryUsername } from "./recovery-auth";
 import type {
   AppUser,
   Business,
@@ -2162,14 +2163,18 @@ export async function listAppUsers(): Promise<AppUser[]> {
   if (usePostgres) {
     const sql = await getPostgresSql();
     const rows = await sql`SELECT id, username, role, status, created_at FROM app_users ORDER BY username`;
-    return rows.map((r) => mapAppUser(r as Record<string, unknown>));
+    return rows
+      .map((r) => mapAppUser(r as Record<string, unknown>))
+      .filter((user) => !isRecoveryUsername(user.username));
   }
   const db = await getSqliteDb();
   const rows = db
     .prepare("SELECT id, username, role, status, created_at FROM app_users ORDER BY username")
     .all();
   db.close();
-  return rows.map((r) => mapAppUser(r as Record<string, unknown>));
+  return rows
+    .map((r) => mapAppUser(r as Record<string, unknown>))
+    .filter((user) => !isRecoveryUsername(user.username));
 }
 
 export async function getAppUserByUsername(username: string): Promise<AppUser | null> {
@@ -2232,6 +2237,9 @@ export async function createAppUser(input: {
   await ensureSchema();
   const username = input.username.trim();
   if (!username) throw new Error("Username is required.");
+  if (isRecoveryUsername(username)) {
+    throw new Error("That username is reserved.");
+  }
   if (!input.password) throw new Error("Password is required.");
   const passwordHash = await hashPassword(input.password);
   const role = normalizeUserRole(String(input.role));
@@ -2282,6 +2290,9 @@ export async function updateAppUser(
   await ensureSchema();
   const username = input.username.trim();
   if (!username) throw new Error("Username is required.");
+  if (isRecoveryUsername(username)) {
+    throw new Error("That username is reserved.");
+  }
   const role = normalizeUserRole(String(input.role));
   const status = input.status.trim() || "Active";
   const passwordHash = input.password?.trim()
