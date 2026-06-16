@@ -29,6 +29,7 @@ export interface Property {
   annual_property_tax: number | null;
   annual_insurance: number | null;
   monthly_hoa: number | null;
+  monthly_rent: number | null;
   status: string;
   notes: string | null;
   created_at: string;

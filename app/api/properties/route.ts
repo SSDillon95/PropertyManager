@@ -38,6 +38,7 @@ export async function POST(request: Request) {
       annual_insurance:
         body.annual_insurance != null ? Number(body.annual_insurance) : null,
       monthly_hoa: body.monthly_hoa != null ? Number(body.monthly_hoa) : null,
+      monthly_rent: body.monthly_rent != null ? Number(body.monthly_rent) : null,
       status: String(body.status ?? "Vacant"),
       notes: body.notes ?? null,
     });

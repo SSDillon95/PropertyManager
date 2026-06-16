@@ -46,6 +46,7 @@ export const PROPERTY_COLUMNS: ColumnDef[] = [
   { key: "annual_property_tax", label: "Annual Property Tax", type: "currency", width: "140px" },
   { key: "annual_insurance", label: "Annual Insurance", type: "currency", width: "130px" },
   { key: "monthly_hoa", label: "Monthly HOA", type: "currency", width: "110px" },
+  { key: "monthly_rent", label: "Monthly Rent", type: "currency", width: "120px" },
   {
     key: "status",
     label: "Status",
@@ -108,7 +109,7 @@ export const LEASE_COLUMNS: ColumnDef[] = [
 
 export const RENT_LEDGER_COLUMNS: ColumnDef[] = [
   { key: "date", label: "Date", type: "date", required: true, width: "110px" },
-  { key: "property_name", label: "Property", type: "text", required: true, width: "150px" },
+  { key: "property_name", label: "Property", type: "property", required: true, width: "150px" },
   { key: "unit", label: "Unit", type: "text", width: "80px" },
   { key: "tenant_name", label: "Tenant", type: "text", required: true, width: "150px" },
   { key: "rent_due", label: "Rent Due", type: "currency", required: true, width: "100px" },

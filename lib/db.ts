@@ -47,6 +47,7 @@ const SQLITE_SCHEMA = `
     annual_property_tax REAL,
     annual_insurance REAL,
     monthly_hoa REAL,
+    monthly_rent REAL,
     status TEXT DEFAULT 'Vacant',
     notes TEXT,
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
@@ -164,11 +165,13 @@ async function initSchema(): Promise<void> {
         annual_property_tax REAL,
         annual_insurance REAL,
         monthly_hoa REAL,
+        monthly_rent REAL,
         status TEXT DEFAULT 'Vacant',
         notes TEXT,
         created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
       )
     `;
+    await sql`ALTER TABLE properties ADD COLUMN IF NOT EXISTS monthly_rent REAL`;
     await sql`
       CREATE TABLE IF NOT EXISTS tenants (
         id SERIAL PRIMARY KEY,
@@ -270,6 +273,10 @@ async function initSchema(): Promise<void> {
   fs.mkdirSync(dataDir, { recursive: true });
   const db = new Database(dbPath);
   db.exec(SQLITE_SCHEMA);
+  const propertyCols = db.pragma("table_info(properties)") as { name: string }[];
+  if (!propertyCols.some((c) => c.name === "monthly_rent")) {
+    db.exec("ALTER TABLE properties ADD COLUMN monthly_rent REAL");
+  }
   db.close();
 }
 
@@ -324,6 +331,7 @@ function mapProperty(row: Record<string, unknown>): Property {
     annual_property_tax: num(row.annual_property_tax),
     annual_insurance: num(row.annual_insurance),
     monthly_hoa: num(row.monthly_hoa),
+    monthly_rent: num(row.monthly_rent),
     status: String(row.status ?? "Vacant"),
     notes: str(row.notes),
     created_at: String(row.created_at),
@@ -448,14 +456,14 @@ export async function createProperty(
         property_id, property_name, address, city, state, zip, property_type,
         units, bedrooms, bathrooms, sq_ft, year_built, purchase_date,
         purchase_price, current_value, mortgage_balance, monthly_mortgage,
-        annual_property_tax, annual_insurance, monthly_hoa, status, notes
+        annual_property_tax, annual_insurance, monthly_hoa, monthly_rent, status, notes
       ) VALUES (
         ${data.property_id}, ${data.property_name}, ${data.address}, ${data.city},
         ${data.state}, ${data.zip}, ${data.property_type}, ${data.units},
         ${data.bedrooms}, ${data.bathrooms}, ${data.sq_ft}, ${data.year_built},
         ${data.purchase_date}, ${data.purchase_price}, ${data.current_value},
         ${data.mortgage_balance}, ${data.monthly_mortgage}, ${data.annual_property_tax},
-        ${data.annual_insurance}, ${data.monthly_hoa}, ${data.status}, ${data.notes}
+        ${data.annual_insurance}, ${data.monthly_hoa}, ${data.monthly_rent}, ${data.status}, ${data.notes}
       ) RETURNING *
     `;
     return mapProperty(rows[0] as Record<string, unknown>);
@@ -467,12 +475,12 @@ export async function createProperty(
         property_id, property_name, address, city, state, zip, property_type,
         units, bedrooms, bathrooms, sq_ft, year_built, purchase_date,
         purchase_price, current_value, mortgage_balance, monthly_mortgage,
-        annual_property_tax, annual_insurance, monthly_hoa, status, notes
+        annual_property_tax, annual_insurance, monthly_hoa, monthly_rent, status, notes
       ) VALUES (
         @property_id, @property_name, @address, @city, @state, @zip, @property_type,
         @units, @bedrooms, @bathrooms, @sq_ft, @year_built, @purchase_date,
         @purchase_price, @current_value, @mortgage_balance, @monthly_mortgage,
-        @annual_property_tax, @annual_insurance, @monthly_hoa, @status, @notes
+        @annual_property_tax, @annual_insurance, @monthly_hoa, @monthly_rent, @status, @notes
       ) RETURNING *`
     )
     .get(data);

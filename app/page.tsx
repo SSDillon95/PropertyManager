@@ -4,11 +4,8 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import SpreadsheetTable from "@/components/SpreadsheetTable";
 import { getColumnsForTab, SHEET_TABS, type ColumnDef } from "@/lib/columns";
 import { formatCurrency, todayIso } from "@/lib/format";
-import type { DashboardSummary, Property, SheetTab, Tenant } from "@/lib/types";
-
-function tenantDisplayName(tenant: Tenant): string {
-  return `${tenant.first_name} ${tenant.last_name}`.trim();
-}
+import { rentDetailsForProperty, tenantDisplayName } from "@/lib/rent-ledger";
+import type { DashboardSummary, Lease, Property, SheetTab, Tenant } from "@/lib/types";
 
 const API_MAP: Record<Exclude<SheetTab, "dashboard">, string> = {
   properties: "/api/properties",
@@ -63,6 +60,7 @@ export default function PropertyManagerApp() {
   );
   const [properties, setProperties] = useState<Property[]>([]);
   const [tenants, setTenants] = useState<Tenant[]>([]);
+  const [leases, setLeases] = useState<Lease[]>([]);
 
   const columns = useMemo(() => getColumnsForTab(tab), [tab]);
 
@@ -89,6 +87,12 @@ export default function PropertyManagerApp() {
     if (json.success) setTenants(json.data);
   }, []);
 
+  const loadLeases = useCallback(async () => {
+    const res = await fetch("/api/leases");
+    const json = await res.json();
+    if (json.success) setLeases(json.data);
+  }, []);
+
   const loadTabData = useCallback(async (activeTab: SheetTab) => {
     if (activeTab === "dashboard") {
       await loadDashboard();
@@ -101,11 +105,44 @@ export default function PropertyManagerApp() {
     if (activeTab === "leases") {
       await Promise.all([loadProperties(), loadTenants()]);
     }
+    if (activeTab === "rent_ledger") {
+      await Promise.all([loadProperties(), loadTenants(), loadLeases()]);
+    }
     const endpoint = API_MAP[activeTab];
     const res = await fetch(endpoint);
     const json = await res.json();
     if (json.success) setRows(json.data);
-  }, [loadDashboard, loadProperties, loadTenants]);
+  }, [loadDashboard, loadProperties, loadTenants, loadLeases]);
+
+  const handlePropertySelect = (propertyName: string, fieldKey: string) => {
+    if (tab === "rent_ledger" && fieldKey === "property_name") {
+      if (!propertyName) {
+        setForm((prev) => ({
+          ...prev,
+          property_name: "",
+          rent_due: "",
+          tenant_name: "",
+          unit: "",
+        }));
+        return;
+      }
+      const { rentDue, tenantName, unit } = rentDetailsForProperty(
+        propertyName,
+        properties,
+        tenants,
+        leases
+      );
+      setForm((prev) => ({
+        ...prev,
+        property_name: propertyName,
+        rent_due: rentDue != null ? String(rentDue) : "",
+        tenant_name: tenantName,
+        unit: unit ?? "",
+      }));
+      return;
+    }
+    setForm((prev) => ({ ...prev, [fieldKey]: propertyName }));
+  };
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -300,6 +337,8 @@ export default function PropertyManagerApp() {
                   <h2 className="font-semibold text-lg">Add New Row</h2>
                   <p className="text-xs text-zinc-500 mt-1">
                     Yellow headers match spreadsheet input columns. Required fields are marked.
+                    {tab === "rent_ledger" &&
+                      " Selecting a property auto-fills rent due and tenant from the Properties tab."}
                   </p>
                 </div>
               </div>
@@ -314,9 +353,7 @@ export default function PropertyManagerApp() {
                       {col.type === "property" ? (
                         <select
                           value={form[col.key] ?? ""}
-                          onChange={(e) =>
-                            setForm((prev) => ({ ...prev, [col.key]: e.target.value }))
-                          }
+                          onChange={(e) => handlePropertySelect(e.target.value, col.key)}
                           className="w-full bg-zinc-950 border border-white/10 rounded-lg px-3 py-2 text-sm"
                         >
                           <option value="">
@@ -375,10 +412,21 @@ export default function PropertyManagerApp() {
                           }
                           step={col.type === "currency" ? "0.01" : undefined}
                           value={form[col.key] ?? ""}
+                          readOnly={
+                            tab === "rent_ledger" &&
+                            col.key === "tenant_name" &&
+                            Boolean(form.property_name)
+                          }
                           onChange={(e) =>
                             setForm((prev) => ({ ...prev, [col.key]: e.target.value }))
                           }
-                          className="w-full bg-zinc-950 border border-white/10 rounded-lg px-3 py-2 text-sm"
+                          className={`w-full bg-zinc-950 border border-white/10 rounded-lg px-3 py-2 text-sm ${
+                            tab === "rent_ledger" &&
+                            col.key === "tenant_name" &&
+                            form.property_name
+                              ? "text-zinc-400 cursor-not-allowed"
+                              : ""
+                          }`}
                         />
                       )}
                     </label>
