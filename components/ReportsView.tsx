@@ -5,24 +5,35 @@ import { formatCurrency } from "@/lib/format";
 import {
   downloadExpensePdf,
   downloadIncomePdf,
+  downloadInvestorPayoutReportPdf,
   downloadPLPdf,
   downloadVendorPayoutPdf,
 } from "@/lib/pdf-reports";
 import {
   buildExpenseReport,
   buildIncomeReport,
+  buildInvestorPayoutReport,
   buildPLReport,
   buildVendorPayoutReport,
   defaultReportRange,
   type ReportKind,
 } from "@/lib/reports";
-import type { Expense, MaintenanceRecord, Property, RentPayment } from "@/lib/types";
+import type {
+  Expense,
+  Investor,
+  InvestorPayout,
+  MaintenanceRecord,
+  Property,
+  RentPayment,
+} from "@/lib/types";
 
 interface ReportsViewProps {
   properties: Property[];
   rentPayments: RentPayment[];
   expenses: Expense[];
   maintenance: MaintenanceRecord[];
+  investorPayouts: InvestorPayout[];
+  investors: Investor[];
 }
 
 const REPORT_OPTIONS: { id: ReportKind; label: string; description: string }[] = [
@@ -46,6 +57,11 @@ const REPORT_OPTIONS: { id: ReportKind; label: string; description: string }[] =
     label: "Vendor Payout Report",
     description: "Payments to vendors from Expenses and Maintenance, totaled by vendor.",
   },
+  {
+    id: "investor_payout",
+    label: "Investor Payout Report",
+    description: "Investor distributions from the Investor Payout tab, filterable by investor and property.",
+  },
 ];
 
 export default function ReportsView({
@@ -53,21 +69,37 @@ export default function ReportsView({
   rentPayments,
   expenses,
   maintenance,
+  investorPayouts,
+  investors,
 }: ReportsViewProps) {
   const defaults = defaultReportRange();
   const [reportKind, setReportKind] = useState<ReportKind>("pl");
   const [startDate, setStartDate] = useState(defaults.startDate);
   const [endDate, setEndDate] = useState(defaults.endDate);
   const [propertyName, setPropertyName] = useState("");
+  const [investorName, setInvestorName] = useState("");
   const [generating, setGenerating] = useState(false);
+
+  const investorOptions = useMemo(() => {
+    const names = new Set<string>();
+    for (const investor of investors) {
+      if (investor.investor_name?.trim()) names.add(investor.investor_name.trim());
+    }
+    for (const payout of investorPayouts) {
+      if (payout.investor_name?.trim()) names.add(payout.investor_name.trim());
+    }
+    return Array.from(names).sort((a, b) => a.localeCompare(b));
+  }, [investors, investorPayouts]);
 
   const filters = useMemo(
     () => ({
       startDate,
       endDate,
       propertyName: propertyName || undefined,
+      investorName:
+        reportKind === "investor_payout" && investorName ? investorName : undefined,
     }),
-    [startDate, endDate, propertyName]
+    [startDate, endDate, propertyName, investorName, reportKind]
   );
 
   const incomeReport = useMemo(
@@ -86,6 +118,10 @@ export default function ReportsView({
     () => buildVendorPayoutReport(expenses, maintenance, filters),
     [expenses, maintenance, filters]
   );
+  const investorPayoutReport = useMemo(
+    () => buildInvestorPayoutReport(investorPayouts, filters),
+    [investorPayouts, filters]
+  );
 
   const handleDownload = async () => {
     setGenerating(true);
@@ -93,6 +129,8 @@ export default function ReportsView({
       if (reportKind === "income") await downloadIncomePdf(incomeReport);
       else if (reportKind === "expense") await downloadExpensePdf(expenseReport);
       else if (reportKind === "vendor_payout") await downloadVendorPayoutPdf(vendorPayoutReport);
+      else if (reportKind === "investor_payout")
+        await downloadInvestorPayoutReportPdf(investorPayoutReport);
       else await downloadPLPdf(plReport);
     } finally {
       setGenerating(false);
@@ -147,36 +185,70 @@ export default function ReportsView({
               },
               { label: "Line Items", value: String(expenseReport.lines.length), tone: "zinc" },
             ]
-          : [
-              {
-                label: "Total Payouts",
-                value: formatCurrency(vendorPayoutReport.totalPayouts),
-                tone: "emerald",
-              },
-              { label: "Vendors", value: String(vendorPayoutReport.byVendor.length), tone: "zinc" },
-              {
-                label: "Properties",
-                value: String(vendorPayoutReport.byProperty.length),
-                tone: "zinc",
-              },
-              { label: "Line Items", value: String(vendorPayoutReport.lines.length), tone: "zinc" },
-            ];
+          : reportKind === "vendor_payout"
+            ? [
+                {
+                  label: "Total Payouts",
+                  value: formatCurrency(vendorPayoutReport.totalPayouts),
+                  tone: "emerald",
+                },
+                {
+                  label: "Vendors",
+                  value: String(vendorPayoutReport.byVendor.length),
+                  tone: "zinc",
+                },
+                {
+                  label: "Properties",
+                  value: String(vendorPayoutReport.byProperty.length),
+                  tone: "zinc",
+                },
+                {
+                  label: "Line Items",
+                  value: String(vendorPayoutReport.lines.length),
+                  tone: "zinc",
+                },
+              ]
+            : [
+                {
+                  label: "Total Payouts",
+                  value: formatCurrency(investorPayoutReport.totalPayouts),
+                  tone: "emerald",
+                },
+                {
+                  label: "Investors",
+                  value: String(investorPayoutReport.byInvestor.length),
+                  tone: "zinc",
+                },
+                {
+                  label: "Properties",
+                  value: String(investorPayoutReport.byProperty.length),
+                  tone: "zinc",
+                },
+                {
+                  label: "Payouts",
+                  value: String(investorPayoutReport.lines.length),
+                  tone: "zinc",
+                },
+              ];
 
   return (
     <div className="space-y-6">
       <div>
         <h1 className="text-3xl font-semibold tracking-tighter mb-2">Reports</h1>
         <p className="text-sm text-zinc-400">
-          Generate P/L, income, expense, and vendor payout reports as PDF downloads.
+          Generate P/L, income, expense, vendor payout, and investor payout reports as PDF downloads.
         </p>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
         {REPORT_OPTIONS.map((opt) => (
           <button
             key={opt.id}
             type="button"
-            onClick={() => setReportKind(opt.id)}
+            onClick={() => {
+              setReportKind(opt.id);
+              if (opt.id !== "investor_payout") setInvestorName("");
+            }}
             className={`rounded-xl border p-4 text-left transition ${
               reportKind === opt.id
                 ? "border-emerald-500/70 bg-emerald-950/30"
@@ -220,7 +292,9 @@ export default function ReportsView({
               className="form-field"
             />
           </label>
-          <label className="block sm:col-span-2">
+          <label
+            className={`block ${reportKind === "investor_payout" ? "" : "sm:col-span-2"}`}
+          >
             <span className="text-xs font-semibold uppercase tracking-wide text-amber-400 mb-1 block">
               Property (optional)
             </span>
@@ -237,6 +311,25 @@ export default function ReportsView({
               ))}
             </select>
           </label>
+          {reportKind === "investor_payout" && (
+            <label className="block">
+              <span className="text-xs font-semibold uppercase tracking-wide text-amber-400 mb-1 block">
+                Investor (optional)
+              </span>
+              <select
+                value={investorName}
+                onChange={(e) => setInvestorName(e.target.value)}
+                className="form-select"
+              >
+                <option value="">All investors</option>
+                {investorOptions.map((name) => (
+                  <option key={name} value={name}>
+                    {name}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
         </div>
 
         <button

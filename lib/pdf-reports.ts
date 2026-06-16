@@ -3,6 +3,7 @@ import autoTable from "jspdf-autotable";
 import type {
   ExpenseReport,
   IncomeReport,
+  InvestorPayoutReportSummary,
   PLReport,
   ReportKind,
   VendorPayoutReport,
@@ -315,6 +316,85 @@ export async function downloadVendorPayoutPdf(report: VendorPayoutReport): Promi
   });
 
   savePdf(doc, "vendor_payout", startDate, endDate);
+}
+
+export async function downloadInvestorPayoutReportPdf(
+  report: InvestorPayoutReportSummary
+): Promise<void> {
+  const doc = new jsPDF();
+  const { startDate, endDate, propertyName, investorName } = report.period;
+
+  await addHeader(doc, "Investor Payout Report", startDate, endDate);
+
+  doc.setFontSize(9);
+  doc.setTextColor(80, 80, 80);
+  const filterParts = [
+    propertyName ? `Property: ${propertyName}` : null,
+    investorName ? `Investor: ${investorName}` : null,
+  ].filter(Boolean);
+  doc.text(
+    filterParts.length
+      ? `Filters: ${filterParts.join(" · ")}`
+      : "Filters: All properties and investors",
+    14,
+    44
+  );
+
+  autoTable(doc, {
+    startY: 50,
+    head: [
+      [
+        "Date",
+        "Payout ID",
+        "Investor",
+        "Property",
+        "Type",
+        "Amount",
+        "Status",
+      ],
+    ],
+    body: report.lines.map((l) => [
+      l.date,
+      l.payout_id,
+      l.investor_name,
+      l.property_name,
+      l.payout_type,
+      money(l.payout_amount),
+      l.status,
+    ]),
+    styles: { fontSize: 8, cellPadding: 2 },
+    headStyles: { fillColor: [251, 191, 36], textColor: [24, 24, 27] },
+    alternateRowStyles: { fillColor: [245, 245, 245] },
+  });
+
+  const summaryY = (doc as jsPDF & { lastAutoTable?: { finalY: number } }).lastAutoTable
+    ?.finalY ?? 50;
+
+  autoTable(doc, {
+    startY: summaryY + 10,
+    head: [["Investor", "Total Payout"]],
+    body: [
+      ...report.byInvestor.map((r) => [r.investor_name, money(r.total)]),
+      ["TOTAL", money(report.totalPayouts)],
+    ],
+    styles: { fontSize: 9 },
+    headStyles: { fillColor: REPORT_GREEN_RGB, textColor: [255, 255, 255] },
+  });
+
+  const investorSummaryY = (doc as jsPDF & { lastAutoTable?: { finalY: number } }).lastAutoTable
+    ?.finalY ?? summaryY + 10;
+
+  if (report.byProperty.length > 0) {
+    autoTable(doc, {
+      startY: investorSummaryY + 10,
+      head: [["Property", "Total Payout"]],
+      body: report.byProperty.map((r) => [r.property_name, money(r.total)]),
+      styles: { fontSize: 9 },
+      headStyles: { fillColor: REPORT_GREEN_RGB, textColor: [255, 255, 255] },
+    });
+  }
+
+  savePdf(doc, "investor_payout", startDate, endDate);
 }
 
 export async function downloadInvestorPayoutPdf(

@@ -109,6 +109,7 @@ export default function PropertyManagerApp() {
   const [expenseRows, setExpenseRows] = useState<Expense[]>([]);
   const [maintenanceRows, setMaintenanceRows] = useState<MaintenanceRecord[]>([]);
   const [investors, setInvestors] = useState<Investor[]>([]);
+  const [investorPayoutRows, setInvestorPayoutRows] = useState<InvestorPayout[]>([]);
   const [profitabilityProperty, setProfitabilityProperty] = useState<Property | null>(null);
   const [expandedProperty, setExpandedProperty] = useState<Property | null>(null);
 
@@ -171,6 +172,12 @@ export default function PropertyManagerApp() {
     if (json.success) setInvestors(json.data);
   }, []);
 
+  const loadInvestorPayoutRows = useCallback(async () => {
+    const res = await apiFetch("/api/investor-payouts");
+    const json = await res.json();
+    if (json.success) setInvestorPayoutRows(json.data);
+  }, []);
+
   const loadTabData = useCallback(
     async (activeTab: SheetTab, archived = false) => {
       if (activeTab === "dashboard") {
@@ -184,6 +191,8 @@ export default function PropertyManagerApp() {
           loadRentPayments(),
           loadExpenseRows(),
           loadMaintenanceRows(),
+          loadInvestors(),
+          loadInvestorPayoutRows(),
         ]);
         setRows([]);
         return;
@@ -225,6 +234,7 @@ export default function PropertyManagerApp() {
       loadExpenseRows,
       loadMaintenanceRows,
       loadInvestors,
+      loadInvestorPayoutRows,
     ]
   );
 
@@ -554,6 +564,8 @@ export default function PropertyManagerApp() {
             rentPayments={rentPayments}
             expenses={expenseRows}
             maintenance={maintenanceRows}
+            investorPayouts={investorPayoutRows}
+            investors={investors}
           />
         ) : (
           <div className="space-y-6">

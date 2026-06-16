@@ -1,11 +1,18 @@
-import type { Expense, MaintenanceRecord, Property, RentPayment } from "./types";
+import type {
+  Expense,
+  InvestorPayout,
+  MaintenanceRecord,
+  Property,
+  RentPayment,
+} from "./types";
 
-export type ReportKind = "pl" | "income" | "expense" | "vendor_payout";
+export type ReportKind = "pl" | "income" | "expense" | "vendor_payout" | "investor_payout";
 
 export interface ReportFilters {
   startDate: string;
   endDate: string;
   propertyName?: string;
+  investorName?: string;
 }
 
 function n(value: number | null | undefined): number {
@@ -43,6 +50,10 @@ function monthlyFixedCosts(property: Property): number {
 
 function matchesProperty(propertyName: string, filter?: string): boolean {
   return !filter || propertyName === filter;
+}
+
+function matchesInvestor(investorName: string, filter?: string): boolean {
+  return !filter || investorName === filter;
 }
 
 export interface IncomeLine {
@@ -337,5 +348,86 @@ export function buildVendorPayoutReport(
       .map(([property_name, total]) => ({ property_name, total }))
       .sort((a, b) => b.total - a.total),
     totalPayouts: lines.reduce((sum, l) => sum + l.amount, 0),
+  };
+}
+
+export interface InvestorPayoutReportLine {
+  date: string;
+  payout_id: string;
+  property_name: string;
+  investor_name: string;
+  payout_type: string;
+  payout_amount: number;
+  payment_method: string;
+  payment_date: string;
+  tax_year: string;
+  status: string;
+}
+
+export interface InvestorPayoutReportSummary {
+  period: ReportFilters;
+  lines: InvestorPayoutReportLine[];
+  byInvestor: { investor_name: string; total: number }[];
+  byProperty: { property_name: string; total: number }[];
+  byPayoutType: { payout_type: string; total: number }[];
+  totalPayouts: number;
+}
+
+export function buildInvestorPayoutReport(
+  payouts: InvestorPayout[],
+  filters: ReportFilters
+): InvestorPayoutReportSummary {
+  const lines = payouts
+    .filter(
+      (p) =>
+        isDateInRange(p.date, filters.startDate, filters.endDate) &&
+        matchesProperty(p.property_name, filters.propertyName) &&
+        matchesInvestor(p.investor_name, filters.investorName)
+    )
+    .map((p) => ({
+      date: p.date,
+      payout_id: p.payout_id,
+      property_name: p.property_name,
+      investor_name: p.investor_name,
+      payout_type: p.payout_type,
+      payout_amount: n(p.payout_amount),
+      payment_method: p.payment_method ?? "",
+      payment_date: p.payment_date ?? "",
+      tax_year: p.tax_year != null ? String(p.tax_year) : "",
+      status: p.status,
+    }))
+    .sort((a, b) => b.date.localeCompare(a.date));
+
+  const investorTotals = new Map<string, number>();
+  const propertyTotals = new Map<string, number>();
+  const typeTotals = new Map<string, number>();
+  for (const line of lines) {
+    investorTotals.set(
+      line.investor_name,
+      (investorTotals.get(line.investor_name) ?? 0) + line.payout_amount
+    );
+    propertyTotals.set(
+      line.property_name,
+      (propertyTotals.get(line.property_name) ?? 0) + line.payout_amount
+    );
+    typeTotals.set(
+      line.payout_type,
+      (typeTotals.get(line.payout_type) ?? 0) + line.payout_amount
+    );
+  }
+
+  return {
+    period: filters,
+    lines,
+    byInvestor: [...investorTotals.entries()]
+      .map(([investor_name, total]) => ({ investor_name, total }))
+      .sort((a, b) => b.total - a.total),
+    byProperty: [...propertyTotals.entries()]
+      .map(([property_name, total]) => ({ property_name, total }))
+      .sort((a, b) => b.total - a.total),
+    byPayoutType: [...typeTotals.entries()]
+      .map(([payout_type, total]) => ({ payout_type, total }))
+      .sort((a, b) => b.total - a.total),
+    totalPayouts: lines.reduce((sum, l) => sum + l.payout_amount, 0),
   };
 }
