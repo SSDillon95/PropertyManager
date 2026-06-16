@@ -17,6 +17,7 @@ export const SHEET_TABS: { id: SheetTab; label: string }[] = [
   { id: "rent_ledger", label: "Rent Ledger" },
   { id: "expenses", label: "Expenses" },
   { id: "maintenance", label: "Maintenance" },
+  { id: "investors", label: "Investor" },
   { id: "investor_payout", label: "Investor Payout" },
   { id: "reports", label: "Reports" },
 ];
@@ -207,6 +208,35 @@ export const MAINTENANCE_COLUMNS: ColumnDef[] = [
   { key: "notes", label: "Notes", type: "text", width: "200px" },
 ];
 
+export const INVESTOR_COLUMNS: ColumnDef[] = [
+  { key: "investor_id", label: "Investor ID", type: "text", required: true, width: "100px" },
+  { key: "investor_name", label: "Investor Name", type: "text", required: true, width: "160px" },
+  { key: "email", label: "Email", type: "text", width: "180px" },
+  { key: "phone", label: "Phone", type: "text", width: "120px" },
+  {
+    key: "entity_type",
+    label: "Entity Type",
+    type: "select",
+    options: ["Individual", "LLC", "Trust", "Partnership", "Corporation"],
+    width: "130px",
+  },
+  { key: "tax_id", label: "Tax ID", type: "text", width: "120px" },
+  { key: "address", label: "Address", type: "text", width: "180px" },
+  { key: "city", label: "City", type: "text", width: "120px" },
+  { key: "state", label: "State", type: "text", width: "70px" },
+  { key: "zip", label: "ZIP", type: "text", width: "80px" },
+  { key: "property_name", label: "Property", type: "property", width: "150px" },
+  { key: "ownership_pct", label: "Ownership %", type: "number", width: "100px" },
+  {
+    key: "status",
+    label: "Status",
+    type: "select",
+    options: ["Active", "Inactive"],
+    width: "100px",
+  },
+  { key: "notes", label: "Notes", type: "text", width: "200px" },
+];
+
 export const INVESTOR_PAYOUT_COLUMNS: ColumnDef[] = [
   { key: "payout_id", label: "Payout ID", type: "text", required: true, width: "100px" },
   { key: "date", label: "Date", type: "date", required: true, width: "110px" },
@@ -261,6 +291,8 @@ export function getColumnsForTab(tab: SheetTab): ColumnDef[] {
       return EXPENSE_COLUMNS;
     case "maintenance":
       return MAINTENANCE_COLUMNS;
+    case "investors":
+      return INVESTOR_COLUMNS;
     case "investor_payout":
       return INVESTOR_PAYOUT_COLUMNS;
     default:

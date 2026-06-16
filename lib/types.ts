@@ -6,6 +6,7 @@ export type SheetTab =
   | "rent_ledger"
   | "expenses"
   | "maintenance"
+  | "investors"
   | "investor_payout"
   | "reports";
 
@@ -119,6 +120,25 @@ export interface MaintenanceRecord {
   estimated_cost: number | null;
   actual_cost: number | null;
   date_completed: string | null;
+  notes: string | null;
+  created_at: string;
+}
+
+export interface Investor {
+  id: number;
+  investor_id: string;
+  investor_name: string;
+  email: string | null;
+  phone: string | null;
+  entity_type: string;
+  tax_id: string | null;
+  address: string | null;
+  city: string | null;
+  state: string | null;
+  zip: string | null;
+  property_name: string | null;
+  ownership_pct: number | null;
+  status: string;
   notes: string | null;
   created_at: string;
 }

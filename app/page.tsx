@@ -13,6 +13,7 @@ import { rentDetailsForProperty, tenantDisplayName } from "@/lib/rent-ledger";
 import type {
   DashboardSummary,
   Expense,
+  Investor,
   InvestorPayout,
   Lease,
   Property,
@@ -34,6 +35,7 @@ const API_MAP: Record<DataTab, string> = {
   rent_ledger: "/api/rent-payments",
   expenses: "/api/expenses",
   maintenance: "/api/maintenance",
+  investors: "/api/investors",
   investor_payout: "/api/investor-payouts",
 };
 
@@ -87,6 +89,7 @@ export default function PropertyManagerApp() {
   const [leases, setLeases] = useState<Lease[]>([]);
   const [rentPayments, setRentPayments] = useState<RentPayment[]>([]);
   const [expenseRows, setExpenseRows] = useState<Expense[]>([]);
+  const [investors, setInvestors] = useState<Investor[]>([]);
   const [profitabilityProperty, setProfitabilityProperty] = useState<Property | null>(null);
   const [expandedProperty, setExpandedProperty] = useState<Property | null>(null);
 
@@ -95,18 +98,6 @@ export default function PropertyManagerApp() {
     () => (profitabilityProperty ? propertyProfitability(profitabilityProperty) : null),
     [profitabilityProperty]
   );
-
-  const investorOptions = useMemo(() => {
-    const names = new Set<string>();
-    for (const property of properties) {
-      if (property.lien_holder?.trim()) names.add(property.lien_holder.trim());
-    }
-    for (const row of rows) {
-      const investor = row.investor_name;
-      if (typeof investor === "string" && investor.trim()) names.add(investor.trim());
-    }
-    return Array.from(names).sort((a, b) => a.localeCompare(b));
-  }, [properties, rows]);
 
   const showMessage = (type: "success" | "error", text: string) => {
     setMessage({ type, text });
@@ -149,6 +140,12 @@ export default function PropertyManagerApp() {
     if (json.success) setExpenseRows(json.data);
   }, []);
 
+  const loadInvestors = useCallback(async () => {
+    const res = await apiFetch("/api/investors");
+    const json = await res.json();
+    if (json.success) setInvestors(json.data);
+  }, []);
+
   const loadTabData = useCallback(
     async (activeTab: SheetTab, archived = false) => {
       if (activeTab === "dashboard") {
@@ -170,6 +167,9 @@ export default function PropertyManagerApp() {
       if (activeTab === "rent_ledger") {
         await Promise.all([loadProperties(), loadTenants(), loadLeases()]);
       }
+      if (activeTab === "investors") {
+        await loadProperties();
+      }
       if (
         activeTab === "expenses" ||
         activeTab === "maintenance" ||
@@ -177,13 +177,24 @@ export default function PropertyManagerApp() {
       ) {
         await loadProperties();
       }
+      if (activeTab === "investor_payout") {
+        await loadInvestors();
+      }
       const endpoint = API_MAP[activeTab];
       const url = archived ? `${endpoint}?archived=1` : endpoint;
       const res = await apiFetch(url);
       const json = await res.json();
       if (json.success) setRows(json.data);
     },
-    [loadDashboard, loadProperties, loadTenants, loadLeases, loadRentPayments, loadExpenseRows]
+    [
+      loadDashboard,
+      loadProperties,
+      loadTenants,
+      loadLeases,
+      loadRentPayments,
+      loadExpenseRows,
+      loadInvestors,
+    ]
   );
 
   const handlePropertySelect = (propertyName: string, fieldKey: string) => {
@@ -222,11 +233,14 @@ export default function PropertyManagerApp() {
         }));
         return;
       }
-      const property = properties.find((p) => p.property_name === propertyName);
+      const linkedInvestor = investors.find(
+        (investor) =>
+          investor.property_name === propertyName && investor.status === "Active"
+      );
       setForm((prev) => ({
         ...prev,
         property_name: propertyName,
-        investor_name: property?.lien_holder?.trim() ?? prev.investor_name,
+        investor_name: linkedInvestor?.investor_name ?? prev.investor_name,
       }));
       return;
     }
@@ -497,7 +511,7 @@ export default function PropertyManagerApp() {
                   )}
                   {tab === "investor_payout" && (
                     <p className="text-xs text-zinc-400 mt-1">
-                      Selecting a property auto-fills the investor from the property lien holder.
+                      Selecting a property auto-fills the investor linked on the Investor tab.
                     </p>
                   )}
                 </div>
@@ -563,15 +577,18 @@ export default function PropertyManagerApp() {
                           className="form-select"
                         >
                           <option value="">
-                            {investorOptions.length
+                            {investors.length
                               ? "Select investor..."
-                              : "No investors — set lien holder on Properties tab"}
+                              : "No investors — add one on the Investor tab"}
                           </option>
-                          {investorOptions.map((name) => (
-                            <option key={name} value={name}>
-                              {name}
-                            </option>
-                          ))}
+                          {investors
+                            .filter((investor) => investor.status === "Active")
+                            .map((investor) => (
+                              <option key={investor.id} value={investor.investor_name}>
+                                {investor.investor_name}
+                                {investor.property_name ? ` (${investor.property_name})` : ""}
+                              </option>
+                            ))}
                         </select>
                       ) : col.type === "select" ? (
                         <select
@@ -792,7 +809,7 @@ export default function PropertyManagerApp() {
 
       <footer className="relative z-10 border-t border-zinc-600/60 bg-zinc-800/90 py-4 text-center text-xs text-zinc-500 shrink-0">
         HOP2IT Property Manager — Properties, Tenants, Leases, Rent Ledger, Expenses,
-        Maintenance, Investor Payout, Reports
+        Maintenance, Investor, Investor Payout, Reports
       </footer>
       </div>
     </div>

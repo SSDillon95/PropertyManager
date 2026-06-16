@@ -1,6 +1,7 @@
 import type {
   DashboardSummary,
   Expense,
+  Investor,
   InvestorPayout,
   Lease,
   MaintenanceRecord,
@@ -154,6 +155,26 @@ const SQLITE_SCHEMA = `
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
   );
 
+  CREATE TABLE IF NOT EXISTS investors (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    investor_id TEXT NOT NULL UNIQUE,
+    investor_name TEXT NOT NULL,
+    email TEXT,
+    phone TEXT,
+    entity_type TEXT DEFAULT 'Individual',
+    tax_id TEXT,
+    address TEXT,
+    city TEXT,
+    state TEXT,
+    zip TEXT,
+    property_name TEXT,
+    ownership_pct REAL,
+    status TEXT DEFAULT 'Active',
+    notes TEXT,
+    archived INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+
   CREATE TABLE IF NOT EXISTS investor_payouts (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     payout_id TEXT NOT NULL UNIQUE,
@@ -179,6 +200,7 @@ const ARCHIVED_TABLES = [
   "rent_payments",
   "expenses",
   "maintenance_records",
+  "investors",
   "investor_payouts",
 ] as const;
 
@@ -320,6 +342,26 @@ async function initSchema(): Promise<void> {
       )
     `;
     await sql`
+      CREATE TABLE IF NOT EXISTS investors (
+        id SERIAL PRIMARY KEY,
+        investor_id TEXT NOT NULL UNIQUE,
+        investor_name TEXT NOT NULL,
+        email TEXT,
+        phone TEXT,
+        entity_type TEXT DEFAULT 'Individual',
+        tax_id TEXT,
+        address TEXT,
+        city TEXT,
+        state TEXT,
+        zip TEXT,
+        property_name TEXT,
+        ownership_pct REAL,
+        status TEXT DEFAULT 'Active',
+        notes TEXT,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `;
+    await sql`
       CREATE TABLE IF NOT EXISTS investor_payouts (
         id SERIAL PRIMARY KEY,
         payout_id TEXT NOT NULL UNIQUE,
@@ -342,6 +384,7 @@ async function initSchema(): Promise<void> {
     await sql`ALTER TABLE rent_payments ADD COLUMN IF NOT EXISTS archived BOOLEAN NOT NULL DEFAULT FALSE`;
     await sql`ALTER TABLE expenses ADD COLUMN IF NOT EXISTS archived BOOLEAN NOT NULL DEFAULT FALSE`;
     await sql`ALTER TABLE maintenance_records ADD COLUMN IF NOT EXISTS archived BOOLEAN NOT NULL DEFAULT FALSE`;
+    await sql`ALTER TABLE investors ADD COLUMN IF NOT EXISTS archived BOOLEAN NOT NULL DEFAULT FALSE`;
     await sql`ALTER TABLE investor_payouts ADD COLUMN IF NOT EXISTS archived BOOLEAN NOT NULL DEFAULT FALSE`;
     return;
   }
@@ -524,6 +567,27 @@ function mapMaintenance(row: Record<string, unknown>): MaintenanceRecord {
     estimated_cost: num(row.estimated_cost),
     actual_cost: num(row.actual_cost),
     date_completed: str(row.date_completed),
+    notes: str(row.notes),
+    created_at: String(row.created_at),
+  };
+}
+
+function mapInvestor(row: Record<string, unknown>): Investor {
+  return {
+    id: Number(row.id),
+    investor_id: String(row.investor_id),
+    investor_name: String(row.investor_name),
+    email: str(row.email),
+    phone: str(row.phone),
+    entity_type: String(row.entity_type ?? "Individual"),
+    tax_id: str(row.tax_id),
+    address: str(row.address),
+    city: str(row.city),
+    state: str(row.state),
+    zip: str(row.zip),
+    property_name: str(row.property_name),
+    ownership_pct: num(row.ownership_pct),
+    status: String(row.status ?? "Active"),
     notes: str(row.notes),
     created_at: String(row.created_at),
   };
@@ -1058,6 +1122,82 @@ export async function restoreMaintenance(id: number): Promise<void> {
   }
   const db = await getSqliteDb();
   db.prepare("UPDATE maintenance_records SET archived = 0 WHERE id = ?").run(id);
+  db.close();
+}
+
+export async function listInvestors(archived = false): Promise<Investor[]> {
+  await ensureSchema();
+  if (usePostgres) {
+    const sql = await getPostgresSql();
+    const rows = archived
+      ? await sql`SELECT * FROM investors WHERE archived = TRUE ORDER BY investor_name`
+      : await sql`SELECT * FROM investors WHERE archived = FALSE ORDER BY investor_name`;
+    return rows.map((r) => mapInvestor(r as Record<string, unknown>));
+  }
+  const db = await getSqliteDb();
+  const rows = db
+    .prepare("SELECT * FROM investors WHERE archived = ? ORDER BY investor_name")
+    .all(archived ? 1 : 0);
+  db.close();
+  return rows.map((r) => mapInvestor(r as Record<string, unknown>));
+}
+
+export async function createInvestor(
+  data: Omit<Investor, "id" | "created_at">
+): Promise<Investor> {
+  await ensureSchema();
+  if (usePostgres) {
+    const sql = await getPostgresSql();
+    const rows = await sql`
+      INSERT INTO investors (
+        investor_id, investor_name, email, phone, entity_type, tax_id,
+        address, city, state, zip, property_name, ownership_pct, status, notes
+      ) VALUES (
+        ${data.investor_id}, ${data.investor_name}, ${data.email}, ${data.phone},
+        ${data.entity_type}, ${data.tax_id}, ${data.address}, ${data.city},
+        ${data.state}, ${data.zip}, ${data.property_name}, ${data.ownership_pct},
+        ${data.status}, ${data.notes}
+      ) RETURNING *
+    `;
+    return mapInvestor(rows[0] as Record<string, unknown>);
+  }
+  const db = await getSqliteDb();
+  const row = db
+    .prepare(
+      `INSERT INTO investors (
+        investor_id, investor_name, email, phone, entity_type, tax_id,
+        address, city, state, zip, property_name, ownership_pct, status, notes
+      ) VALUES (
+        @investor_id, @investor_name, @email, @phone, @entity_type, @tax_id,
+        @address, @city, @state, @zip, @property_name, @ownership_pct, @status, @notes
+      ) RETURNING *`
+    )
+    .get(data);
+  db.close();
+  return mapInvestor(row as Record<string, unknown>);
+}
+
+export async function archiveInvestor(id: number): Promise<void> {
+  await ensureSchema();
+  if (usePostgres) {
+    const sql = await getPostgresSql();
+    await sql`UPDATE investors SET archived = TRUE WHERE id = ${id}`;
+    return;
+  }
+  const db = await getSqliteDb();
+  db.prepare("UPDATE investors SET archived = 1 WHERE id = ?").run(id);
+  db.close();
+}
+
+export async function restoreInvestor(id: number): Promise<void> {
+  await ensureSchema();
+  if (usePostgres) {
+    const sql = await getPostgresSql();
+    await sql`UPDATE investors SET archived = FALSE WHERE id = ${id}`;
+    return;
+  }
+  const db = await getSqliteDb();
+  db.prepare("UPDATE investors SET archived = 0 WHERE id = ?").run(id);
   db.close();
 }
 
