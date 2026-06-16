@@ -1,6 +1,6 @@
 import { jsonError, jsonOk } from "@/lib/api-helpers";
 import { createSessionToken, SESSION_COOKIE, SESSION_MAX_AGE } from "@/lib/auth";
-import { authenticateAppUser } from "@/lib/db";
+import { authenticateAppUser, ensureDefaultAdmin } from "@/lib/db";
 
 export async function POST(request: Request) {
   try {
@@ -12,6 +12,7 @@ export async function POST(request: Request) {
       return jsonError("Username and password are required.", 400);
     }
 
+    await ensureDefaultAdmin();
     const user = await authenticateAppUser(username, password);
     if (!user) {
       return jsonError("Invalid username or password.", 401);

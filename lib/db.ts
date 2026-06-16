@@ -504,7 +504,6 @@ async function initSchema(): Promise<void> {
         created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
       )
     `;
-    await ensureDefaultAdmin();
     return;
   }
 
@@ -600,7 +599,6 @@ async function initSchema(): Promise<void> {
     `);
   }
   db.close();
-  await ensureDefaultAdmin();
 }
 
 async function getSqliteDb() {
@@ -2132,14 +2130,31 @@ function mapAppUser(row: Record<string, unknown>): AppUser {
 }
 
 export async function ensureDefaultAdmin(): Promise<void> {
+  await ensureSchema();
   const existing = await getAppUserByUsername("Hop2it");
-  if (existing) return;
-  await createAppUser({
-    username: "Hop2it",
-    password: "legroom",
-    role: "admin",
-    status: "Active",
-  });
+  if (!existing) {
+    await createAppUser({
+      username: "Hop2it",
+      password: "legroom",
+      role: "admin",
+      status: "Active",
+    });
+    return;
+  }
+
+  const needsUpdate =
+    existing.status !== "Active" ||
+    existing.role !== "admin" ||
+    !(await verifyPassword("legroom", (await getAppUserPasswordHash(existing.username)) ?? ""));
+
+  if (needsUpdate) {
+    await updateAppUser(existing.id, {
+      username: "Hop2it",
+      role: "admin",
+      status: "Active",
+      password: "legroom",
+    });
+  }
 }
 
 export async function listAppUsers(): Promise<AppUser[]> {
