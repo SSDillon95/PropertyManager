@@ -3,7 +3,7 @@ import type { SheetTab } from "./types";
 export interface ColumnDef {
   key: string;
   label: string;
-  type: "text" | "number" | "date" | "currency" | "select" | "property";
+  type: "text" | "number" | "date" | "currency" | "select" | "property" | "tenant";
   options?: string[];
   required?: boolean;
   width?: string;
@@ -80,9 +80,9 @@ export const TENANT_COLUMNS: ColumnDef[] = [
 
 export const LEASE_COLUMNS: ColumnDef[] = [
   { key: "lease_id", label: "Lease ID", type: "text", required: true, width: "100px" },
-  { key: "property_name", label: "Property", type: "text", required: true, width: "150px" },
+  { key: "property_name", label: "Property", type: "property", required: true, width: "150px" },
   { key: "unit", label: "Unit", type: "text", width: "80px" },
-  { key: "tenant_name", label: "Tenant", type: "text", required: true, width: "150px" },
+  { key: "tenant_name", label: "Tenant", type: "tenant", required: true, width: "150px" },
   { key: "lease_start", label: "Lease Start", type: "date", required: true, width: "120px" },
   { key: "lease_end", label: "Lease End", type: "date", width: "120px" },
   { key: "monthly_rent", label: "Monthly Rent", type: "currency", required: true, width: "120px" },

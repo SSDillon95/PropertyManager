@@ -4,7 +4,11 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import SpreadsheetTable from "@/components/SpreadsheetTable";
 import { getColumnsForTab, SHEET_TABS, type ColumnDef } from "@/lib/columns";
 import { formatCurrency, todayIso } from "@/lib/format";
-import type { DashboardSummary, Property, SheetTab } from "@/lib/types";
+import type { DashboardSummary, Property, SheetTab, Tenant } from "@/lib/types";
+
+function tenantDisplayName(tenant: Tenant): string {
+  return `${tenant.first_name} ${tenant.last_name}`.trim();
+}
 
 const API_MAP: Record<Exclude<SheetTab, "dashboard">, string> = {
   properties: "/api/properties",
@@ -58,6 +62,7 @@ export default function PropertyManagerApp() {
     null
   );
   const [properties, setProperties] = useState<Property[]>([]);
+  const [tenants, setTenants] = useState<Tenant[]>([]);
 
   const columns = useMemo(() => getColumnsForTab(tab), [tab]);
 
@@ -78,6 +83,12 @@ export default function PropertyManagerApp() {
     if (json.success) setProperties(json.data);
   }, []);
 
+  const loadTenants = useCallback(async () => {
+    const res = await fetch("/api/tenants");
+    const json = await res.json();
+    if (json.success) setTenants(json.data);
+  }, []);
+
   const loadTabData = useCallback(async (activeTab: SheetTab) => {
     if (activeTab === "dashboard") {
       await loadDashboard();
@@ -87,11 +98,14 @@ export default function PropertyManagerApp() {
     if (activeTab === "tenants") {
       await loadProperties();
     }
+    if (activeTab === "leases") {
+      await Promise.all([loadProperties(), loadTenants()]);
+    }
     const endpoint = API_MAP[activeTab];
     const res = await fetch(endpoint);
     const json = await res.json();
     if (json.success) setRows(json.data);
-  }, [loadDashboard, loadProperties]);
+  }, [loadDashboard, loadProperties, loadTenants]);
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -313,6 +327,26 @@ export default function PropertyManagerApp() {
                           {properties.map((property) => (
                             <option key={property.id} value={property.property_name}>
                               {property.property_name}
+                            </option>
+                          ))}
+                        </select>
+                      ) : col.type === "tenant" ? (
+                        <select
+                          value={form[col.key] ?? ""}
+                          onChange={(e) =>
+                            setForm((prev) => ({ ...prev, [col.key]: e.target.value }))
+                          }
+                          className="w-full bg-zinc-950 border border-white/10 rounded-lg px-3 py-2 text-sm"
+                        >
+                          <option value="">
+                            {tenants.length
+                              ? "Select tenant..."
+                              : "No tenants — add one in Tenants tab"}
+                          </option>
+                          {tenants.map((tenant) => (
+                            <option key={tenant.id} value={tenantDisplayName(tenant)}>
+                              {tenantDisplayName(tenant)}
+                              {tenant.property_name ? ` (${tenant.property_name})` : ""}
                             </option>
                           ))}
                         </select>
