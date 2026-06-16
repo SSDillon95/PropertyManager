@@ -47,26 +47,25 @@ export default function LoginForm() {
         aria-hidden
       />
 
-      <div className="relative z-10 min-h-screen flex flex-col lg:flex-row">
-        <div className="flex flex-1 items-center justify-center px-6 py-10 lg:py-0">
-          <Image
-            src="/hop2it-logo.png"
-            alt="HOP2IT Property Manager"
-            width={800}
-            height={300}
-            className="h-44 sm:h-56 lg:h-72 w-auto max-w-[min(100%,28rem)] object-contain drop-shadow-[0_2px_12px_rgba(255,255,255,0.25)]"
-            style={{ objectPosition: "43% 45%" }}
-            priority
-          />
-        </div>
+      <header className="absolute top-0 left-0 z-20 pl-3 pt-3 sm:pl-5 sm:pt-4 pointer-events-none max-w-[95vw]">
+        <Image
+          src="/hop2it-logo.png"
+          alt="HOP2IT Property Manager"
+          width={800}
+          height={300}
+          className="h-[20rem] sm:h-[28rem] md:h-[36rem] lg:h-[44rem] w-auto object-contain object-left-top drop-shadow-[0_2px_12px_rgba(255,255,255,0.25)]"
+          style={{ objectPosition: "43% 45%" }}
+          priority
+        />
+      </header>
 
-        <div className="flex flex-1 items-center justify-center px-4 pb-10 lg:pb-0 lg:px-8">
-          <div className="w-full max-w-md rounded-2xl border border-zinc-600/70 bg-zinc-900/85 backdrop-blur shadow-2xl shadow-black/40 p-8 sm:p-10">
-            <div className="text-center mb-8">
-              <p className="text-sm text-zinc-400">Sign in to continue</p>
-            </div>
+      <div className="relative z-30 min-h-screen flex items-center justify-center px-4">
+        <div className="w-full max-w-md rounded-2xl border border-zinc-600/70 bg-zinc-900/85 backdrop-blur shadow-2xl shadow-black/40 p-8 sm:p-10">
+          <div className="text-center mb-8">
+            <p className="text-sm text-zinc-400">Sign in to continue</p>
+          </div>
 
-            <form onSubmit={handleSubmit} className="space-y-5">
+          <form onSubmit={handleSubmit} className="space-y-5">
             <div>
               <label htmlFor="username" className="block text-sm font-medium text-zinc-300 mb-2">
                 Username
@@ -115,7 +114,6 @@ export default function LoginForm() {
               {submitting ? "Signing in..." : "Sign In"}
             </button>
           </form>
-          </div>
         </div>
       </div>
     </div>
