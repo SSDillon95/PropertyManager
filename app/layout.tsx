@@ -14,7 +14,8 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: "PropertyManager",
-  description: "Property management platform for landlords and property managers.",
+  description:
+    "Rental property management app with spreadsheet-format tabs for properties, tenants, leases, rent, expenses, and maintenance.",
 };
 
 export default function RootLayout({
