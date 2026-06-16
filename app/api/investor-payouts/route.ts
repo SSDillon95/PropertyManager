@@ -3,6 +3,7 @@ import {
   createInvestorPayout,
   listInvestorPayouts,
   restoreInvestorPayout,
+  updateInvestorPayout,
 } from "@/lib/db";
 import {
   handleRoute,
@@ -39,6 +40,33 @@ export async function POST(request: Request) {
       notes: body.notes ?? null,
     });
     return jsonOk(payout, 201);
+  } catch (error) {
+    return jsonError((error as Error).message, 400);
+  }
+}
+
+export async function PUT(request: Request) {
+  try {
+    const id = parseIdParam(request);
+    if (!id) return jsonError("Investor payout id is required.");
+    const body = await request.json();
+    if (!body.payout_id || !body.date || !body.property_name || !body.investor_name || !body.payout_type) {
+      return jsonError("Payout ID, date, property, investor, and payout type are required.");
+    }
+    const payout = await updateInvestorPayout(id, {
+      payout_id: String(body.payout_id),
+      date: String(body.date),
+      property_name: String(body.property_name),
+      investor_name: String(body.investor_name),
+      payout_type: String(body.payout_type),
+      payout_amount: Number(body.payout_amount ?? 0),
+      payment_method: body.payment_method ?? null,
+      payment_date: body.payment_date ?? null,
+      tax_year: body.tax_year != null && body.tax_year !== "" ? Number(body.tax_year) : null,
+      status: body.status ?? "Pending",
+      notes: body.notes ?? null,
+    });
+    return jsonOk(payout);
   } catch (error) {
     return jsonError((error as Error).message, 400);
   }

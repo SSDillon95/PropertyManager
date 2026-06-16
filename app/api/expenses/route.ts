@@ -3,6 +3,7 @@ import {
   createExpense,
   listExpenses,
   restoreExpense,
+  updateExpense,
 } from "@/lib/db";
 import {
   handleRoute,
@@ -37,6 +38,31 @@ export async function POST(request: Request) {
       notes: body.notes ?? null,
     });
     return jsonOk(expense, 201);
+  } catch (error) {
+    return jsonError((error as Error).message, 400);
+  }
+}
+
+export async function PUT(request: Request) {
+  try {
+    const id = parseIdParam(request);
+    if (!id) return jsonError("Expense id is required.");
+    const body = await request.json();
+    if (!body.date || !body.property_name || !body.category) {
+      return jsonError("Date, property, and category are required.");
+    }
+    const expense = await updateExpense(id, {
+      date: String(body.date),
+      property_name: String(body.property_name),
+      category: String(body.category),
+      vendor: body.vendor ?? null,
+      description: body.description ?? null,
+      amount: Number(body.amount ?? 0),
+      payment_method: body.payment_method ?? null,
+      receipt_number: body.receipt_number ?? null,
+      notes: body.notes ?? null,
+    });
+    return jsonOk(expense);
   } catch (error) {
     return jsonError((error as Error).message, 400);
   }

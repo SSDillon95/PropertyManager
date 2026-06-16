@@ -7,11 +7,13 @@ import type { Property } from "@/lib/types";
 interface PropertyDetailPanelProps {
   property: Property;
   onCollapse: () => void;
+  onEdit: () => void;
 }
 
 export default function PropertyDetailPanel({
   property,
   onCollapse,
+  onEdit,
 }: PropertyDetailPanelProps) {
   return (
     <section className="rounded-xl border border-emerald-600/40 bg-zinc-800/95 p-4 sm:p-6 mb-4">
@@ -23,13 +25,22 @@ export default function PropertyDetailPanel({
             {property.status ? ` · ${property.status}` : ""}
           </p>
         </div>
-        <button
-          type="button"
-          onClick={onCollapse}
-          className="text-xs px-3 py-1.5 rounded-lg border border-zinc-600 bg-zinc-700/80 text-zinc-200 hover:bg-zinc-700 shrink-0"
-        >
-          Collapse
-        </button>
+        <div className="flex items-center gap-2 shrink-0">
+          <button
+            type="button"
+            onClick={onEdit}
+            className="text-xs px-3 py-1.5 rounded-lg border border-sky-600/60 bg-sky-950/40 text-sky-300 hover:bg-sky-900/50"
+          >
+            Edit
+          </button>
+          <button
+            type="button"
+            onClick={onCollapse}
+            className="text-xs px-3 py-1.5 rounded-lg border border-zinc-600 bg-zinc-700/80 text-zinc-200 hover:bg-zinc-700"
+          >
+            Collapse
+          </button>
+        </div>
       </div>
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
         {PROPERTY_COLUMNS.map((col) => (

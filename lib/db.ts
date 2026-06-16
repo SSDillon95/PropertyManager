@@ -1276,6 +1276,335 @@ export async function restoreInvestorPayout(id: number): Promise<void> {
   db.close();
 }
 
+export async function updateProperty(
+  id: number,
+  data: Omit<Property, "id" | "created_at">
+): Promise<Property> {
+  await ensureSchema();
+  if (usePostgres) {
+    const sql = await getPostgresSql();
+    const legacyCols = await sql`
+      SELECT 1 FROM information_schema.columns
+      WHERE table_schema = 'public' AND table_name = 'properties' AND column_name = 'property_id'
+      LIMIT 1
+    `;
+    const hasLegacyPropertyId = legacyCols.length > 0;
+    const rows = hasLegacyPropertyId
+      ? await sql`
+          UPDATE properties SET
+            legal_id = ${data.legal_id}, property_id = ${data.legal_id},
+            property_name = ${data.property_name}, lien_holder = ${data.lien_holder},
+            account_number = ${data.account_number}, address = ${data.address},
+            city = ${data.city}, state = ${data.state}, zip = ${data.zip},
+            property_type = ${data.property_type}, units = ${data.units},
+            bedrooms = ${data.bedrooms}, bathrooms = ${data.bathrooms}, sq_ft = ${data.sq_ft},
+            year_built = ${data.year_built}, purchase_date = ${data.purchase_date},
+            purchase_price = ${data.purchase_price}, current_value = ${data.current_value},
+            mortgage_balance = ${data.mortgage_balance}, monthly_mortgage = ${data.monthly_mortgage},
+            annual_property_tax = ${data.annual_property_tax},
+            annual_insurance = ${data.annual_insurance}, monthly_hoa = ${data.monthly_hoa},
+            monthly_rent = ${data.monthly_rent}, status = ${data.status}, notes = ${data.notes}
+          WHERE id = ${id} RETURNING *
+        `
+      : await sql`
+          UPDATE properties SET
+            legal_id = ${data.legal_id}, property_name = ${data.property_name},
+            lien_holder = ${data.lien_holder}, account_number = ${data.account_number},
+            address = ${data.address}, city = ${data.city}, state = ${data.state}, zip = ${data.zip},
+            property_type = ${data.property_type}, units = ${data.units},
+            bedrooms = ${data.bedrooms}, bathrooms = ${data.bathrooms}, sq_ft = ${data.sq_ft},
+            year_built = ${data.year_built}, purchase_date = ${data.purchase_date},
+            purchase_price = ${data.purchase_price}, current_value = ${data.current_value},
+            mortgage_balance = ${data.mortgage_balance}, monthly_mortgage = ${data.monthly_mortgage},
+            annual_property_tax = ${data.annual_property_tax},
+            annual_insurance = ${data.annual_insurance}, monthly_hoa = ${data.monthly_hoa},
+            monthly_rent = ${data.monthly_rent}, status = ${data.status}, notes = ${data.notes}
+          WHERE id = ${id} RETURNING *
+        `;
+    if (!rows[0]) throw new Error("Property not found.");
+    return mapProperty(rows[0] as Record<string, unknown>);
+  }
+  const db = await getSqliteDb();
+  const tableCols = db.pragma("table_info(properties)") as { name: string }[];
+  const hasLegacyPropertyId = tableCols.some((c) => c.name === "property_id");
+  const payload = { ...data, id, property_id: data.legal_id };
+  const row = hasLegacyPropertyId
+    ? db
+        .prepare(
+          `UPDATE properties SET
+            legal_id = @legal_id, property_id = @property_id, property_name = @property_name,
+            lien_holder = @lien_holder, account_number = @account_number, address = @address,
+            city = @city, state = @state, zip = @zip, property_type = @property_type,
+            units = @units, bedrooms = @bedrooms, bathrooms = @bathrooms, sq_ft = @sq_ft,
+            year_built = @year_built, purchase_date = @purchase_date,
+            purchase_price = @purchase_price, current_value = @current_value,
+            mortgage_balance = @mortgage_balance, monthly_mortgage = @monthly_mortgage,
+            annual_property_tax = @annual_property_tax, annual_insurance = @annual_insurance,
+            monthly_hoa = @monthly_hoa, monthly_rent = @monthly_rent, status = @status, notes = @notes
+          WHERE id = @id RETURNING *`
+        )
+        .get(payload)
+    : db
+        .prepare(
+          `UPDATE properties SET
+            legal_id = @legal_id, property_name = @property_name, lien_holder = @lien_holder,
+            account_number = @account_number, address = @address, city = @city, state = @state,
+            zip = @zip, property_type = @property_type, units = @units, bedrooms = @bedrooms,
+            bathrooms = @bathrooms, sq_ft = @sq_ft, year_built = @year_built,
+            purchase_date = @purchase_date, purchase_price = @purchase_price,
+            current_value = @current_value, mortgage_balance = @mortgage_balance,
+            monthly_mortgage = @monthly_mortgage, annual_property_tax = @annual_property_tax,
+            annual_insurance = @annual_insurance, monthly_hoa = @monthly_hoa,
+            monthly_rent = @monthly_rent, status = @status, notes = @notes
+          WHERE id = @id RETURNING *`
+        )
+        .get({ ...data, id });
+  db.close();
+  if (!row) throw new Error("Property not found.");
+  return mapProperty(row as Record<string, unknown>);
+}
+
+export async function updateTenant(
+  id: number,
+  data: Omit<Tenant, "id" | "created_at">
+): Promise<Tenant> {
+  await ensureSchema();
+  if (usePostgres) {
+    const sql = await getPostgresSql();
+    const rows = await sql`
+      UPDATE tenants SET
+        tenant_id = ${data.tenant_id}, first_name = ${data.first_name}, last_name = ${data.last_name},
+        email = ${data.email}, phone = ${data.phone}, emergency_contact = ${data.emergency_contact},
+        emergency_phone = ${data.emergency_phone}, property_name = ${data.property_name},
+        unit = ${data.unit}, move_in_date = ${data.move_in_date}, move_out_date = ${data.move_out_date},
+        status = ${data.status}, notes = ${data.notes}
+      WHERE id = ${id} RETURNING *
+    `;
+    if (!rows[0]) throw new Error("Tenant not found.");
+    return mapTenant(rows[0] as Record<string, unknown>);
+  }
+  const db = await getSqliteDb();
+  const row = db
+    .prepare(
+      `UPDATE tenants SET
+        tenant_id = @tenant_id, first_name = @first_name, last_name = @last_name,
+        email = @email, phone = @phone, emergency_contact = @emergency_contact,
+        emergency_phone = @emergency_phone, property_name = @property_name, unit = @unit,
+        move_in_date = @move_in_date, move_out_date = @move_out_date, status = @status, notes = @notes
+      WHERE id = @id RETURNING *`
+    )
+    .get({ ...data, id });
+  db.close();
+  if (!row) throw new Error("Tenant not found.");
+  return mapTenant(row as Record<string, unknown>);
+}
+
+export async function updateLease(
+  id: number,
+  data: Omit<Lease, "id" | "created_at">
+): Promise<Lease> {
+  await ensureSchema();
+  if (usePostgres) {
+    const sql = await getPostgresSql();
+    const rows = await sql`
+      UPDATE leases SET
+        lease_id = ${data.lease_id}, property_name = ${data.property_name}, unit = ${data.unit},
+        tenant_name = ${data.tenant_name}, lease_start = ${data.lease_start}, lease_end = ${data.lease_end},
+        monthly_rent = ${data.monthly_rent}, security_deposit = ${data.security_deposit},
+        pet_deposit = ${data.pet_deposit}, lease_type = ${data.lease_type}, status = ${data.status},
+        renewal_date = ${data.renewal_date}, notes = ${data.notes}
+      WHERE id = ${id} RETURNING *
+    `;
+    if (!rows[0]) throw new Error("Lease not found.");
+    return mapLease(rows[0] as Record<string, unknown>);
+  }
+  const db = await getSqliteDb();
+  const row = db
+    .prepare(
+      `UPDATE leases SET
+        lease_id = @lease_id, property_name = @property_name, unit = @unit,
+        tenant_name = @tenant_name, lease_start = @lease_start, lease_end = @lease_end,
+        monthly_rent = @monthly_rent, security_deposit = @security_deposit,
+        pet_deposit = @pet_deposit, lease_type = @lease_type, status = @status,
+        renewal_date = @renewal_date, notes = @notes
+      WHERE id = @id RETURNING *`
+    )
+    .get({ ...data, id });
+  db.close();
+  if (!row) throw new Error("Lease not found.");
+  return mapLease(row as Record<string, unknown>);
+}
+
+export async function updateRentPayment(
+  id: number,
+  data: Omit<RentPayment, "id" | "created_at">
+): Promise<RentPayment> {
+  await ensureSchema();
+  if (usePostgres) {
+    const sql = await getPostgresSql();
+    const rows = await sql`
+      UPDATE rent_payments SET
+        date = ${data.date}, property_name = ${data.property_name}, unit = ${data.unit},
+        tenant_name = ${data.tenant_name}, rent_due = ${data.rent_due}, amount_paid = ${data.amount_paid},
+        payment_date = ${data.payment_date}, payment_method = ${data.payment_method},
+        late_fee = ${data.late_fee}, balance = ${data.balance}, status = ${data.status}, notes = ${data.notes}
+      WHERE id = ${id} RETURNING *
+    `;
+    if (!rows[0]) throw new Error("Rent payment not found.");
+    return mapRentPayment(rows[0] as Record<string, unknown>);
+  }
+  const db = await getSqliteDb();
+  const row = db
+    .prepare(
+      `UPDATE rent_payments SET
+        date = @date, property_name = @property_name, unit = @unit, tenant_name = @tenant_name,
+        rent_due = @rent_due, amount_paid = @amount_paid, payment_date = @payment_date,
+        payment_method = @payment_method, late_fee = @late_fee, balance = @balance,
+        status = @status, notes = @notes
+      WHERE id = @id RETURNING *`
+    )
+    .get({ ...data, id });
+  db.close();
+  if (!row) throw new Error("Rent payment not found.");
+  return mapRentPayment(row as Record<string, unknown>);
+}
+
+export async function updateExpense(
+  id: number,
+  data: Omit<Expense, "id" | "created_at">
+): Promise<Expense> {
+  await ensureSchema();
+  if (usePostgres) {
+    const sql = await getPostgresSql();
+    const rows = await sql`
+      UPDATE expenses SET
+        date = ${data.date}, property_name = ${data.property_name}, category = ${data.category},
+        vendor = ${data.vendor}, description = ${data.description}, amount = ${data.amount},
+        payment_method = ${data.payment_method}, receipt_number = ${data.receipt_number}, notes = ${data.notes}
+      WHERE id = ${id} RETURNING *
+    `;
+    if (!rows[0]) throw new Error("Expense not found.");
+    return mapExpense(rows[0] as Record<string, unknown>);
+  }
+  const db = await getSqliteDb();
+  const row = db
+    .prepare(
+      `UPDATE expenses SET
+        date = @date, property_name = @property_name, category = @category, vendor = @vendor,
+        description = @description, amount = @amount, payment_method = @payment_method,
+        receipt_number = @receipt_number, notes = @notes
+      WHERE id = @id RETURNING *`
+    )
+    .get({ ...data, id });
+  db.close();
+  if (!row) throw new Error("Expense not found.");
+  return mapExpense(row as Record<string, unknown>);
+}
+
+export async function updateMaintenance(
+  id: number,
+  data: Omit<MaintenanceRecord, "id" | "created_at">
+): Promise<MaintenanceRecord> {
+  await ensureSchema();
+  if (usePostgres) {
+    const sql = await getPostgresSql();
+    const rows = await sql`
+      UPDATE maintenance_records SET
+        date_reported = ${data.date_reported}, property_name = ${data.property_name}, unit = ${data.unit},
+        category = ${data.category}, description = ${data.description}, priority = ${data.priority},
+        status = ${data.status}, vendor = ${data.vendor}, estimated_cost = ${data.estimated_cost},
+        actual_cost = ${data.actual_cost}, date_completed = ${data.date_completed}, notes = ${data.notes}
+      WHERE id = ${id} RETURNING *
+    `;
+    if (!rows[0]) throw new Error("Maintenance record not found.");
+    return mapMaintenance(rows[0] as Record<string, unknown>);
+  }
+  const db = await getSqliteDb();
+  const row = db
+    .prepare(
+      `UPDATE maintenance_records SET
+        date_reported = @date_reported, property_name = @property_name, unit = @unit,
+        category = @category, description = @description, priority = @priority, status = @status,
+        vendor = @vendor, estimated_cost = @estimated_cost, actual_cost = @actual_cost,
+        date_completed = @date_completed, notes = @notes
+      WHERE id = @id RETURNING *`
+    )
+    .get({ ...data, id });
+  db.close();
+  if (!row) throw new Error("Maintenance record not found.");
+  return mapMaintenance(row as Record<string, unknown>);
+}
+
+export async function updateInvestor(
+  id: number,
+  data: Omit<Investor, "id" | "created_at">
+): Promise<Investor> {
+  await ensureSchema();
+  if (usePostgres) {
+    const sql = await getPostgresSql();
+    const rows = await sql`
+      UPDATE investors SET
+        investor_id = ${data.investor_id}, investor_name = ${data.investor_name},
+        email = ${data.email}, phone = ${data.phone}, entity_type = ${data.entity_type},
+        tax_id = ${data.tax_id}, address = ${data.address}, city = ${data.city},
+        state = ${data.state}, zip = ${data.zip}, property_name = ${data.property_name},
+        ownership_pct = ${data.ownership_pct}, status = ${data.status}, notes = ${data.notes}
+      WHERE id = ${id} RETURNING *
+    `;
+    if (!rows[0]) throw new Error("Investor not found.");
+    return mapInvestor(rows[0] as Record<string, unknown>);
+  }
+  const db = await getSqliteDb();
+  const row = db
+    .prepare(
+      `UPDATE investors SET
+        investor_id = @investor_id, investor_name = @investor_name, email = @email, phone = @phone,
+        entity_type = @entity_type, tax_id = @tax_id, address = @address, city = @city,
+        state = @state, zip = @zip, property_name = @property_name, ownership_pct = @ownership_pct,
+        status = @status, notes = @notes
+      WHERE id = @id RETURNING *`
+    )
+    .get({ ...data, id });
+  db.close();
+  if (!row) throw new Error("Investor not found.");
+  return mapInvestor(row as Record<string, unknown>);
+}
+
+export async function updateInvestorPayout(
+  id: number,
+  data: Omit<InvestorPayout, "id" | "created_at">
+): Promise<InvestorPayout> {
+  await ensureSchema();
+  if (usePostgres) {
+    const sql = await getPostgresSql();
+    const rows = await sql`
+      UPDATE investor_payouts SET
+        payout_id = ${data.payout_id}, date = ${data.date}, property_name = ${data.property_name},
+        investor_name = ${data.investor_name}, payout_type = ${data.payout_type},
+        payout_amount = ${data.payout_amount}, payment_method = ${data.payment_method},
+        payment_date = ${data.payment_date}, tax_year = ${data.tax_year},
+        status = ${data.status}, notes = ${data.notes}
+      WHERE id = ${id} RETURNING *
+    `;
+    if (!rows[0]) throw new Error("Investor payout not found.");
+    return mapInvestorPayout(rows[0] as Record<string, unknown>);
+  }
+  const db = await getSqliteDb();
+  const row = db
+    .prepare(
+      `UPDATE investor_payouts SET
+        payout_id = @payout_id, date = @date, property_name = @property_name,
+        investor_name = @investor_name, payout_type = @payout_type, payout_amount = @payout_amount,
+        payment_method = @payment_method, payment_date = @payment_date, tax_year = @tax_year,
+        status = @status, notes = @notes
+      WHERE id = @id RETURNING *`
+    )
+    .get({ ...data, id });
+  db.close();
+  if (!row) throw new Error("Investor payout not found.");
+  return mapInvestorPayout(row as Record<string, unknown>);
+}
+
 export async function getDashboardSummary(): Promise<DashboardSummary> {
   await ensureSchema();
   const now = new Date();

@@ -17,6 +17,9 @@ interface SpreadsheetTableProps {
   showPrintForm?: boolean;
   onPrintForm?: (row: Record<string, unknown>) => void;
   printFormId?: number | null;
+  showEdit?: boolean;
+  onEdit?: (row: Record<string, unknown>) => void;
+  editingId?: number | null;
 }
 
 export default function SpreadsheetTable({
@@ -33,6 +36,9 @@ export default function SpreadsheetTable({
   showPrintForm = false,
   onPrintForm,
   printFormId = null,
+  showEdit = false,
+  onEdit,
+  editingId = null,
 }: SpreadsheetTableProps) {
   if (rows.length === 0) {
     return (
@@ -66,7 +72,7 @@ export default function SpreadsheetTable({
               ))}
               <th
                 className={`px-3 py-2 text-left font-semibold text-xs uppercase tracking-wide ${
-                  showPrintForm ? "min-w-[7.5rem]" : "min-w-[5.5rem]"
+                  showPrintForm || showEdit ? "min-w-[7.5rem]" : "min-w-[5.5rem]"
                 }`}
               >
                 Actions
@@ -129,6 +135,20 @@ export default function SpreadsheetTable({
                     </button>
                   ) : (
                     <div className="flex flex-col gap-1">
+                      {showEdit && (
+                        <button
+                          type="button"
+                          onClick={() => onEdit?.(row)}
+                          disabled={editingId === Number(row.id)}
+                          className={`text-xs px-2 py-1 rounded-md border whitespace-nowrap disabled:opacity-50 ${
+                            editingId === Number(row.id)
+                              ? "border-sky-600/60 bg-sky-950/40 text-sky-300"
+                              : "border-sky-600/60 bg-sky-950/40 text-sky-300 hover:bg-sky-900/50"
+                          }`}
+                        >
+                          {editingId === Number(row.id) ? "..." : "Edit"}
+                        </button>
+                      )}
                       {showPrintForm && (
                         <button
                           type="button"

@@ -3,6 +3,7 @@ import {
   createInvestor,
   listInvestors,
   restoreInvestor,
+  updateInvestor,
 } from "@/lib/db";
 import {
   handleRoute,
@@ -45,6 +46,39 @@ export async function POST(request: Request) {
       notes: body.notes ?? null,
     });
     return jsonOk(investor, 201);
+  } catch (error) {
+    return jsonError((error as Error).message, 400);
+  }
+}
+
+export async function PUT(request: Request) {
+  try {
+    const id = parseIdParam(request);
+    if (!id) return jsonError("Investor id is required.");
+    const body = await request.json();
+    if (!body.investor_id || !body.investor_name) {
+      return jsonError("Investor ID and investor name are required.");
+    }
+    const investor = await updateInvestor(id, {
+      investor_id: String(body.investor_id),
+      investor_name: String(body.investor_name),
+      email: body.email ?? null,
+      phone: body.phone ?? null,
+      entity_type: String(body.entity_type ?? "Individual"),
+      tax_id: body.tax_id ?? null,
+      address: body.address ?? null,
+      city: body.city ?? null,
+      state: body.state ?? null,
+      zip: body.zip ?? null,
+      property_name: body.property_name ?? null,
+      ownership_pct:
+        body.ownership_pct != null && body.ownership_pct !== ""
+          ? Number(body.ownership_pct)
+          : null,
+      status: String(body.status ?? "Active"),
+      notes: body.notes ?? null,
+    });
+    return jsonOk(investor);
   } catch (error) {
     return jsonError((error as Error).message, 400);
   }

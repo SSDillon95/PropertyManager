@@ -50,6 +50,22 @@ function emptyForm(columns: ColumnDef[]): Record<string, string> {
   return form;
 }
 
+function rowToForm(
+  row: Record<string, unknown>,
+  columns: ColumnDef[]
+): Record<string, string> {
+  const form: Record<string, string> = {};
+  for (const col of columns) {
+    const value = row[col.key];
+    if (value == null || value === "") {
+      form[col.key] = "";
+    } else {
+      form[col.key] = String(value);
+    }
+  }
+  return form;
+}
+
 function payloadFromForm(
   form: Record<string, string>,
   columns: ColumnDef[]
@@ -79,6 +95,7 @@ export default function PropertyManagerApp() {
   const [saving, setSaving] = useState(false);
   const [actionId, setActionId] = useState<number | null>(null);
   const [printFormId, setPrintFormId] = useState<number | null>(null);
+  const [editingId, setEditingId] = useState<number | null>(null);
   const [showArchived, setShowArchived] = useState(false);
   const [formOpen, setFormOpen] = useState(false);
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(
@@ -266,12 +283,27 @@ export default function PropertyManagerApp() {
     if (tab !== "dashboard" && tab !== "reports") {
       setForm(emptyForm(columns));
       setFormOpen(false);
+      setEditingId(null);
     }
   }, [tab, columns]);
 
+  const closeForm = () => {
+    setFormOpen(false);
+    setEditingId(null);
+    setForm(emptyForm(columns));
+  };
+
   const openEntryForm = () => {
+    setEditingId(null);
     setForm(emptyForm(columns));
     setFormOpen(true);
+  };
+
+  const openEditForm = (row: Record<string, unknown>) => {
+    setEditingId(Number(row.id));
+    setForm(rowToForm(row, columns));
+    setFormOpen(true);
+    setExpandedProperty(null);
   };
 
   const handleTabChange = async (next: SheetTab) => {
@@ -314,19 +346,30 @@ export default function PropertyManagerApp() {
     setSaving(true);
     try {
       const endpoint = API_MAP[tab];
-      const res = await apiFetch(endpoint, {
-        method: "POST",
+      const isEdit = editingId != null;
+      const url = isEdit ? `${endpoint}?id=${editingId}` : endpoint;
+      const res = await apiFetch(url, {
+        method: isEdit ? "PUT" : "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payloadFromForm(form, columns)),
       });
       const json = await res.json();
       if (!json.success) throw new Error(json.error || "Save failed");
       if (json.data && typeof json.data === "object") {
-        setRows((prev) => [...prev, json.data as Record<string, unknown>]);
+        const saved = json.data as Record<string, unknown>;
+        if (isEdit) {
+          setRows((prev) =>
+            prev.map((row) => (Number(row.id) === editingId ? saved : row))
+          );
+          if (tab === "properties" && expandedProperty?.id === editingId) {
+            setExpandedProperty(saved as unknown as Property);
+          }
+        } else {
+          setRows((prev) => [...prev, saved]);
+        }
       }
-      showMessage("success", "Row saved.");
-      setForm(emptyForm(columns));
-      setFormOpen(false);
+      showMessage("success", isEdit ? "Row updated." : "Row saved.");
+      closeForm();
       await Promise.all([loadTabData(tab, showArchived), loadDashboard()]);
     } catch (error) {
       showMessage("error", (error as Error).message);
@@ -503,7 +546,9 @@ export default function PropertyManagerApp() {
             <section className="rounded-xl border border-zinc-600/60 bg-zinc-800/90 p-4 sm:p-6">
               <div className="flex items-start justify-between gap-3 mb-4">
                 <div>
-                  <h2 className="font-semibold text-lg">New Entry</h2>
+                  <h2 className="font-semibold text-lg">
+                    {editingId ? "Edit Entry" : "New Entry"}
+                  </h2>
                   {tab === "rent_ledger" && (
                     <p className="text-xs text-zinc-400 mt-1">
                       Selecting a property auto-fills rent due and tenant from the Properties tab.
@@ -517,7 +562,7 @@ export default function PropertyManagerApp() {
                 </div>
                 <button
                   type="button"
-                  onClick={() => setFormOpen(false)}
+                  onClick={closeForm}
                   className="text-xs px-3 py-1.5 rounded-lg border border-zinc-600 bg-zinc-700/80 text-zinc-300 hover:bg-zinc-700 shrink-0"
                 >
                   Close
@@ -640,7 +685,7 @@ export default function PropertyManagerApp() {
                   disabled={saving}
                   className="mt-4 px-5 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-medium disabled:opacity-50"
                 >
-                  {saving ? "Saving..." : "Save"}
+                  {saving ? "Saving..." : editingId ? "Update" : "Save"}
                 </button>
               </form>
             </section>
@@ -683,6 +728,7 @@ export default function PropertyManagerApp() {
                 <PropertyDetailPanel
                   property={expandedProperty}
                   onCollapse={() => setExpandedProperty(null)}
+                  onEdit={() => openEditForm(expandedProperty as unknown as Record<string, unknown>)}
                 />
               )}
               <SpreadsheetTable
@@ -699,6 +745,9 @@ export default function PropertyManagerApp() {
                 showPrintForm={tab === "investor_payout" && !showArchived}
                 onPrintForm={handlePrintForm}
                 printFormId={printFormId}
+                showEdit={!showArchived}
+                onEdit={openEditForm}
+                editingId={editingId}
               />
             </section>
           </div>
