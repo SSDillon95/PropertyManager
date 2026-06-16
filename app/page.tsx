@@ -1526,7 +1526,11 @@ export default function PropertyManagerApp() {
                           : "border-emerald-600/60 bg-emerald-900/30 text-emerald-300 hover:bg-emerald-900/50"
                       }`}
                     >
-                      {tab === "users" ? "Add User" : "Add Row"}
+                      {tab === "users"
+                        ? "Add User"
+                        : tab === "tenants"
+                          ? "Add Tenants"
+                          : "Add Row"}
                     </button>
                   )}
                   {tab !== "users" && (

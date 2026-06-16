@@ -20,7 +20,6 @@ export interface ColumnDef {
 }
 
 export const MANAGEMENT_TABS: { id: SheetTab; label: string }[] = [
-  { id: "tenants", label: "Tenants" },
   { id: "leases", label: "Leases" },
   { id: "rent_ledger", label: "Rent Ledger" },
   { id: "expenses", label: "Expenses" },
@@ -29,6 +28,7 @@ export const MANAGEMENT_TABS: { id: SheetTab; label: string }[] = [
 
 export const SETTINGS_TABS: { id: SheetTab; label: string }[] = [
   { id: "businesses", label: "Business" },
+  { id: "tenants", label: "Tenants" },
   { id: "investors", label: "Investor Contacts" },
   { id: "users", label: "User Setup" },
 ];
@@ -66,7 +66,10 @@ export function isInvestorTab(tab: SheetTab): boolean {
 
 export function isSettingsTab(tab: SheetTab): boolean {
   return (
-    tab === "businesses" || tab === "investors" || tab === "users"
+    tab === "businesses" ||
+    tab === "tenants" ||
+    tab === "investors" ||
+    tab === "users"
   );
 }
 

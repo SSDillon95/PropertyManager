@@ -18,7 +18,10 @@ export function canAccessTab(role: UserRole, tab: SheetTab): boolean {
 }
 
 export function settingsTabsForRole(role: UserRole): { id: SheetTab; label: string }[] {
-  const tabs: { id: SheetTab; label: string }[] = [{ id: "businesses", label: "Business" }];
+  const tabs: { id: SheetTab; label: string }[] = [
+    { id: "businesses", label: "Business" },
+    { id: "tenants", label: "Tenants" },
+  ];
   if (isAdminRole(role)) {
     tabs.push({ id: "investors", label: "Investor Contacts" });
     tabs.push({ id: "users", label: "User Setup" });
