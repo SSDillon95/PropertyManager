@@ -252,8 +252,14 @@ export default function PropertyManagerApp() {
   };
 
   return (
-    <div className="min-h-screen bg-zinc-950 text-white font-sans flex flex-col">
-      <header className="border-b border-white/10 bg-zinc-950/95 backdrop-blur sticky top-0 z-50">
+    <div className="min-h-screen bg-zinc-950 text-white font-sans flex flex-col relative">
+      <div
+        className="fixed inset-0 bg-cover bg-center bg-no-repeat opacity-20 pointer-events-none"
+        style={{ backgroundImage: "url('/apartment-bg.jpg')" }}
+        aria-hidden
+      />
+      <div className="relative z-10 flex flex-col flex-1 min-h-screen">
+      <header className="border-b border-white/10 bg-zinc-950/90 backdrop-blur sticky top-0 z-50">
         <div className="max-w-[1600px] mx-auto px-4 sm:px-6 py-3 min-h-[9rem] sm:min-h-[11rem] flex items-center justify-between gap-4">
           <div className="flex items-center min-w-0">
             <Image
@@ -286,7 +292,7 @@ export default function PropertyManagerApp() {
         </div>
       </header>
 
-      <div className="border-b border-white/10 bg-zinc-900/80 overflow-x-auto">
+      <div className="border-b border-white/10 bg-zinc-900/90 overflow-x-auto">
         <div className="max-w-[1600px] mx-auto px-2 flex">
           {SHEET_TABS.map((sheet) => (
             <button
@@ -452,10 +458,11 @@ export default function PropertyManagerApp() {
         )}
       </main>
 
-      <footer className="border-t border-white/10 py-4 text-center text-xs text-zinc-600">
+      <footer className="border-t border-white/10 bg-zinc-950/90 py-4 text-center text-xs text-zinc-600">
         HOP2IT Property Manager — Properties, Tenants, Leases, Rent Ledger, Expenses,
         Maintenance
       </footer>
+      </div>
     </div>
   );
 }
@@ -520,11 +527,6 @@ function DashboardView({ summary }: { summary: DashboardSummary | null }) {
         </div>
       </div>
 
-      <div className="rounded-2xl border border-amber-500/30 bg-amber-950/20 p-5 text-sm text-amber-200/80">
-        <strong className="text-amber-300">Spreadsheet format:</strong> Use the tabs above to
-        manage each sheet. Column headers match standard rental property manager templates
-        (Property ID, Tenant ID, Lease ID, Rent Ledger, Expenses, Maintenance).
-      </div>
     </div>
   );
 }
