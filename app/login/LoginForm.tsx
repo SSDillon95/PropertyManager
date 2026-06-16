@@ -47,7 +47,7 @@ export default function LoginForm() {
         aria-hidden
       />
 
-      <div className="relative z-10 w-full max-w-md">
+      <div className="relative z-10 w-full max-w-xl">
         <div className="rounded-2xl border border-zinc-600/70 bg-zinc-900/85 backdrop-blur shadow-2xl shadow-black/40 p-8 sm:p-10">
           <div className="flex flex-col items-center text-center mb-8">
             <Image
@@ -55,7 +55,7 @@ export default function LoginForm() {
               alt="HOP2IT Property Manager"
               width={800}
               height={300}
-              className="h-16 sm:h-20 w-auto object-contain drop-shadow-[0_2px_12px_rgba(255,255,255,0.25)]"
+              className="h-48 sm:h-60 w-auto max-w-full object-contain drop-shadow-[0_2px_12px_rgba(255,255,255,0.25)]"
               priority
             />
             <h1 className="mt-5 text-xl font-semibold text-zinc-100">Property Manager</h1>
