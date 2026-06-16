@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import SpreadsheetTable from "@/components/SpreadsheetTable";
 import { getColumnsForTab, SHEET_TABS, type ColumnDef } from "@/lib/columns";
 import { formatCurrency, todayIso } from "@/lib/format";
-import type { DashboardSummary, SheetTab } from "@/lib/types";
+import type { DashboardSummary, Property, SheetTab } from "@/lib/types";
 
 const API_MAP: Record<Exclude<SheetTab, "dashboard">, string> = {
   properties: "/api/properties",
@@ -57,6 +57,7 @@ export default function PropertyManagerApp() {
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(
     null
   );
+  const [properties, setProperties] = useState<Property[]>([]);
 
   const columns = useMemo(() => getColumnsForTab(tab), [tab]);
 
@@ -71,17 +72,26 @@ export default function PropertyManagerApp() {
     if (json.success) setSummary(json.data);
   }, []);
 
+  const loadProperties = useCallback(async () => {
+    const res = await fetch("/api/properties");
+    const json = await res.json();
+    if (json.success) setProperties(json.data);
+  }, []);
+
   const loadTabData = useCallback(async (activeTab: SheetTab) => {
     if (activeTab === "dashboard") {
       await loadDashboard();
       setRows([]);
       return;
     }
+    if (activeTab === "tenants") {
+      await loadProperties();
+    }
     const endpoint = API_MAP[activeTab];
     const res = await fetch(endpoint);
     const json = await res.json();
     if (json.success) setRows(json.data);
-  }, [loadDashboard]);
+  }, [loadDashboard, loadProperties]);
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -287,7 +297,26 @@ export default function PropertyManagerApp() {
                         {col.label}
                         {col.required ? " *" : ""}
                       </span>
-                      {col.type === "select" ? (
+                      {col.type === "property" ? (
+                        <select
+                          value={form[col.key] ?? ""}
+                          onChange={(e) =>
+                            setForm((prev) => ({ ...prev, [col.key]: e.target.value }))
+                          }
+                          className="w-full bg-zinc-950 border border-white/10 rounded-lg px-3 py-2 text-sm"
+                        >
+                          <option value="">
+                            {properties.length
+                              ? "Select property..."
+                              : "No properties — add one in Properties tab"}
+                          </option>
+                          {properties.map((property) => (
+                            <option key={property.id} value={property.property_name}>
+                              {property.property_name}
+                            </option>
+                          ))}
+                        </select>
+                      ) : col.type === "select" ? (
                         <select
                           value={form[col.key] ?? ""}
                           onChange={(e) =>
