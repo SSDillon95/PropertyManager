@@ -300,7 +300,7 @@ export default function PropertyManagerApp() {
               alt="HOP2IT Property Manager"
               width={800}
               height={300}
-              className="h-10 sm:h-12 md:h-14 w-auto object-contain drop-shadow-[0_2px_10px_rgba(16,185,129,0.45)] brightness-110 contrast-110 saturate-125"
+              className="h-10 sm:h-12 md:h-14 w-auto object-contain drop-shadow-[0_2px_8px_rgba(255,255,255,0.35)]"
               priority
             />
           </div>
@@ -331,11 +331,11 @@ export default function PropertyManagerApp() {
               <div className="flex items-center justify-between mb-4">
                 <div>
                   <h2 className="font-semibold text-lg">Add New Row</h2>
-                  <p className="text-xs text-zinc-400 mt-1">
-                    Yellow headers match spreadsheet input columns. Required fields are marked.
-                    {tab === "rent_ledger" &&
-                      " Selecting a property auto-fills rent due and tenant from the Properties tab."}
-                  </p>
+                  {tab === "rent_ledger" && (
+                    <p className="text-xs text-zinc-400 mt-1">
+                      Selecting a property auto-fills rent due and tenant from the Properties tab.
+                    </p>
+                  )}
                 </div>
               </div>
               <form onSubmit={handleSubmit}>
