@@ -2,13 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { formatCurrency } from "@/lib/format";
-import {
-  downloadExpensePdf,
-  downloadIncomePdf,
-  downloadInvestorPayoutReportPdf,
-  downloadPLPdf,
-  downloadVendorPayoutPdf,
-} from "@/lib/pdf-reports";
+import { requestReportPdf } from "@/lib/pdf-client";
 import {
   buildExpenseReport,
   buildIncomeReport,
@@ -133,12 +127,17 @@ export default function ReportsView({
   const handleDownload = async () => {
     setGenerating(true);
     try {
-      if (reportKind === "income") await downloadIncomePdf(incomeReport);
-      else if (reportKind === "expense") await downloadExpensePdf(expenseReport);
-      else if (reportKind === "vendor_payout") await downloadVendorPayoutPdf(vendorPayoutReport);
-      else if (reportKind === "investor_payout")
-        await downloadInvestorPayoutReportPdf(investorPayoutReport);
-      else await downloadPLPdf(plReport);
+      if (reportKind === "income") {
+        await requestReportPdf("income", { report: incomeReport });
+      } else if (reportKind === "expense") {
+        await requestReportPdf("expense", { report: expenseReport });
+      } else if (reportKind === "vendor_payout") {
+        await requestReportPdf("vendor_payout", { report: vendorPayoutReport });
+      } else if (reportKind === "investor_payout") {
+        await requestReportPdf("investor_payout", { report: investorPayoutReport });
+      } else {
+        await requestReportPdf("pl", { report: plReport });
+      }
     } finally {
       setGenerating(false);
     }

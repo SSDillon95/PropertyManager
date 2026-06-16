@@ -51,12 +51,7 @@ function recolorWhiteToGreen(imageData: ImageData): void {
   }
 }
 
-async function loadLogoDataUrl(): Promise<string> {
-  if (logoDataUrl) return logoDataUrl;
-  if (typeof document === "undefined") {
-    throw new Error("PDF logo rendering requires a browser environment.");
-  }
-
+async function loadLogoFromBrowser(): Promise<string> {
   const img = new Image();
   img.crossOrigin = "anonymous";
   await new Promise<void>((resolve, reject) => {
@@ -78,7 +73,22 @@ async function loadLogoDataUrl(): Promise<string> {
   recolorWhiteToGreen(imageData);
   ctx.putImageData(imageData, 0, 0);
 
-  logoDataUrl = canvas.toDataURL("image/png");
+  return canvas.toDataURL("image/png");
+}
+
+async function loadLogoFromServer(): Promise<string> {
+  const { readFileSync } = await import("fs");
+  const { join } = await import("path");
+  const buffer = readFileSync(join(process.cwd(), "public", "hop2it-logo.png"));
+  return `data:image/png;base64,${buffer.toString("base64")}`;
+}
+
+async function loadLogoDataUrl(): Promise<string> {
+  if (logoDataUrl) return logoDataUrl;
+  logoDataUrl =
+    typeof document !== "undefined"
+      ? await loadLogoFromBrowser()
+      : await loadLogoFromServer();
   return logoDataUrl;
 }
 
@@ -190,11 +200,26 @@ function standardReportMeta(start: string, end: string): string[] {
   ];
 }
 
-function savePdf(doc: jsPDF, kind: ReportKind, start: string, end: string) {
-  doc.save(`hop2it-${kind}-report-${start}-to-${end}.pdf`);
+export interface PdfResult {
+  buffer: ArrayBuffer;
+  filename: string;
 }
 
-export async function downloadIncomePdf(report: IncomeReport): Promise<void> {
+function finishPdf(doc: jsPDF, filename: string): PdfResult {
+  return { buffer: doc.output("arraybuffer"), filename };
+}
+
+function triggerBrowserDownload({ buffer, filename }: PdfResult) {
+  const blob = new Blob([buffer], { type: "application/pdf" });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = filename;
+  anchor.click();
+  URL.revokeObjectURL(url);
+}
+
+export async function buildIncomePdf(report: IncomeReport): Promise<PdfResult> {
   const doc = new jsPDF();
   const { startDate, endDate } = report.period;
 
@@ -235,10 +260,14 @@ export async function downloadIncomePdf(report: IncomeReport): Promise<void> {
     headStyles: { fillColor: REPORT_GREEN_RGB, textColor: [255, 255, 255] },
   });
 
-  savePdf(doc, "income", startDate, endDate);
+  return finishPdf(doc, `hop2it-income-report-${startDate}-to-${endDate}.pdf`);
 }
 
-export async function downloadExpensePdf(report: ExpenseReport): Promise<void> {
+export async function downloadIncomePdf(report: IncomeReport): Promise<void> {
+  triggerBrowserDownload(await buildIncomePdf(report));
+}
+
+export async function buildExpensePdf(report: ExpenseReport): Promise<PdfResult> {
   const doc = new jsPDF();
   const { startDate, endDate } = report.period;
 
@@ -278,10 +307,14 @@ export async function downloadExpensePdf(report: ExpenseReport): Promise<void> {
     headStyles: { fillColor: [180, 60, 60], textColor: [255, 255, 255] },
   });
 
-  savePdf(doc, "expense", startDate, endDate);
+  return finishPdf(doc, `hop2it-expense-report-${startDate}-to-${endDate}.pdf`);
 }
 
-export async function downloadPLPdf(report: PLReport): Promise<void> {
+export async function downloadExpensePdf(report: ExpenseReport): Promise<void> {
+  triggerBrowserDownload(await buildExpensePdf(report));
+}
+
+export async function buildPLPdf(report: PLReport): Promise<PdfResult> {
   const doc = new jsPDF();
   const { startDate, endDate } = report.period;
 
@@ -330,10 +363,14 @@ export async function downloadPLPdf(report: PLReport): Promise<void> {
     { fontSize: 8, color: [100, 100, 100] }
   );
 
-  savePdf(doc, "pl", startDate, endDate);
+  return finishPdf(doc, `hop2it-pl-report-${startDate}-to-${endDate}.pdf`);
 }
 
-export async function downloadVendorPayoutPdf(report: VendorPayoutReport): Promise<void> {
+export async function downloadPLPdf(report: PLReport): Promise<void> {
+  triggerBrowserDownload(await buildPLPdf(report));
+}
+
+export async function buildVendorPayoutPdf(report: VendorPayoutReport): Promise<PdfResult> {
   const doc = new jsPDF();
   const { startDate, endDate } = report.period;
 
@@ -379,12 +416,16 @@ export async function downloadVendorPayoutPdf(report: VendorPayoutReport): Promi
     headStyles: { fillColor: REPORT_GREEN_RGB, textColor: [255, 255, 255] },
   });
 
-  savePdf(doc, "vendor_payout", startDate, endDate);
+  return finishPdf(doc, `hop2it-vendor_payout-report-${startDate}-to-${endDate}.pdf`);
 }
 
-export async function downloadInvestorPayoutReportPdf(
+export async function downloadVendorPayoutPdf(report: VendorPayoutReport): Promise<void> {
+  triggerBrowserDownload(await buildVendorPayoutPdf(report));
+}
+
+export async function buildInvestorPayoutReportPdf(
   report: InvestorPayoutReportSummary
-): Promise<void> {
+): Promise<PdfResult> {
   const doc = new jsPDF();
   const { startDate, endDate, propertyName, investorName } = report.period;
 
@@ -449,10 +490,16 @@ export async function downloadInvestorPayoutReportPdf(
     });
   }
 
-  savePdf(doc, "investor_payout", startDate, endDate);
+  return finishPdf(doc, `hop2it-investor_payout-report-${startDate}-to-${endDate}.pdf`);
 }
 
-export async function downloadInvestorPayoutPdf(
+export async function downloadInvestorPayoutReportPdf(
+  report: InvestorPayoutReportSummary
+): Promise<void> {
+  triggerBrowserDownload(await buildInvestorPayoutReportPdf(report));
+}
+
+export async function buildInvestorPayoutPdf(
   payout: Pick<
     InvestorPayout,
     | "payout_id"
@@ -467,7 +514,7 @@ export async function downloadInvestorPayoutPdf(
     | "status"
     | "notes"
   >
-): Promise<void> {
+): Promise<PdfResult> {
   const doc = new jsPDF();
   const contentStartY = await renderPdfHeader(
     doc,
@@ -527,5 +574,24 @@ export async function downloadInvestorPayoutPdf(
   );
 
   const safeId = payout.payout_id.replace(/[^a-zA-Z0-9_-]+/g, "-");
-  doc.save(`hop2it-investor-payout-${safeId}.pdf`);
+  return finishPdf(doc, `hop2it-investor-payout-${safeId}.pdf`);
+}
+
+export async function downloadInvestorPayoutPdf(
+  payout: Pick<
+    InvestorPayout,
+    | "payout_id"
+    | "date"
+    | "property_name"
+    | "investor_name"
+    | "payout_type"
+    | "payout_amount"
+    | "payment_method"
+    | "payment_date"
+    | "tax_year"
+    | "status"
+    | "notes"
+  >
+): Promise<void> {
+  triggerBrowserDownload(await buildInvestorPayoutPdf(payout));
 }

@@ -7,7 +7,7 @@ import ReportsView from "@/components/ReportsView";
 import SpreadsheetTable from "@/components/SpreadsheetTable";
 import { getColumnsForTab, SHEET_TABS, type ColumnDef } from "@/lib/columns";
 import { formatCurrency, todayIso } from "@/lib/format";
-import { downloadInvestorPayoutPdf } from "@/lib/pdf-reports";
+import { requestReportPdf } from "@/lib/pdf-client";
 import { propertyProfitability } from "@/lib/profitability";
 import { rentDetailsForProperty, tenantDisplayName } from "@/lib/rent-ledger";
 import type {
@@ -423,18 +423,20 @@ export default function PropertyManagerApp() {
     const payout = row as unknown as InvestorPayout;
     setPrintFormId(payout.id);
     try {
-      await downloadInvestorPayoutPdf({
-        payout_id: payout.payout_id,
-        date: payout.date,
-        property_name: payout.property_name,
-        investor_name: payout.investor_name,
-        payout_type: payout.payout_type,
-        payout_amount: payout.payout_amount,
-        payment_method: payout.payment_method,
-        payment_date: payout.payment_date,
-        tax_year: payout.tax_year,
-        status: payout.status,
-        notes: payout.notes,
+      await requestReportPdf("investor_payout_form", {
+        payout: {
+          payout_id: payout.payout_id,
+          date: payout.date,
+          property_name: payout.property_name,
+          investor_name: payout.investor_name,
+          payout_type: payout.payout_type,
+          payout_amount: payout.payout_amount,
+          payment_method: payout.payment_method,
+          payment_date: payout.payment_date,
+          tax_year: payout.tax_year,
+          status: payout.status,
+          notes: payout.notes,
+        },
       });
     } catch (error) {
       showMessage("error", (error as Error).message);
