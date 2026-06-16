@@ -3,21 +3,57 @@ import autoTable from "jspdf-autotable";
 import type { ExpenseReport, IncomeReport, PLReport, ReportKind } from "./reports";
 
 const LOGO_PATH = "/hop2it-logo.png";
-const LOGO_WIDTH = 48;
-const LOGO_HEIGHT = 18;
+const LOGO_WIDTH = 144;
+const LOGO_HEIGHT = 54;
+const LOGO_GREEN = { r: 5, g: 150, b: 105 };
 let logoDataUrl: string | null = null;
+
+function recolorWhiteToGreen(imageData: ImageData): void {
+  const { data } = imageData;
+  for (let i = 0; i < data.length; i += 4) {
+    const r = data[i];
+    const g = data[i + 1];
+    const b = data[i + 2];
+    const a = data[i + 3];
+    if (a < 8) continue;
+
+    const avg = (r + g + b) / 3;
+    const isWhite = avg > 165 && Math.max(r, g, b) - Math.min(r, g, b) < 55;
+    if (!isWhite) continue;
+
+    const blend = Math.min(1, (avg - 165) / 90);
+    data[i] = Math.round(r * (1 - blend) + LOGO_GREEN.r * blend);
+    data[i + 1] = Math.round(g * (1 - blend) + LOGO_GREEN.g * blend);
+    data[i + 2] = Math.round(b * (1 - blend) + LOGO_GREEN.b * blend);
+  }
+}
 
 async function loadLogoDataUrl(): Promise<string> {
   if (logoDataUrl) return logoDataUrl;
-  const res = await fetch(LOGO_PATH);
-  if (!res.ok) throw new Error("Failed to load report logo.");
-  const blob = await res.blob();
-  logoDataUrl = await new Promise<string>((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(reader.result as string);
-    reader.onerror = () => reject(new Error("Failed to read report logo."));
-    reader.readAsDataURL(blob);
+  if (typeof document === "undefined") {
+    throw new Error("PDF logo rendering requires a browser environment.");
+  }
+
+  const img = new Image();
+  img.crossOrigin = "anonymous";
+  await new Promise<void>((resolve, reject) => {
+    img.onload = () => resolve();
+    img.onerror = () => reject(new Error("Failed to load report logo."));
+    img.src = LOGO_PATH;
   });
+
+  const canvas = document.createElement("canvas");
+  canvas.width = img.naturalWidth;
+  canvas.height = img.naturalHeight;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) throw new Error("Failed to prepare report logo.");
+
+  ctx.drawImage(img, 0, 0);
+  const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+  recolorWhiteToGreen(imageData);
+  ctx.putImageData(imageData, 0, 0);
+
+  logoDataUrl = canvas.toDataURL("image/png");
   return logoDataUrl;
 }
 
@@ -37,22 +73,27 @@ function periodLabel(start: string, end: string): string {
 async function addHeader(doc: jsPDF, title: string, start: string, end: string) {
   const logo = await loadLogoDataUrl();
   const pageWidth = doc.internal.pageSize.getWidth();
-  doc.addImage(logo, "PNG", pageWidth - 14 - LOGO_WIDTH, 10, LOGO_WIDTH, LOGO_HEIGHT);
+  const logoX = pageWidth - 14 - LOGO_WIDTH;
+  doc.addImage(logo, "PNG", logoX, 8, LOGO_WIDTH, LOGO_HEIGHT);
 
   doc.setFont("helvetica", "bold");
   doc.setFontSize(16);
   doc.setTextColor(16, 120, 80);
-  doc.text("HOP2IT Property Manager", 14, 18);
+  doc.text("HOP2IT Property Manager", 14, 22);
 
   doc.setFontSize(13);
   doc.setTextColor(30, 30, 30);
-  doc.text(title, 14, 28);
+  doc.text(title, 14, 32);
 
   doc.setFont("helvetica", "normal");
   doc.setFontSize(10);
   doc.setTextColor(80, 80, 80);
-  doc.text(`Period: ${periodLabel(start, end)}`, 14, 36);
-  doc.text(`Generated: ${new Date().toLocaleString()}`, 14, 42);
+  doc.text(`Period: ${periodLabel(start, end)}`, 14, 40);
+  doc.text(`Generated: ${new Date().toLocaleString()}`, 14, 46);
+}
+
+function tableStartY(): number {
+  return 68;
 }
 
 function savePdf(doc: jsPDF, kind: ReportKind, start: string, end: string) {
@@ -66,7 +107,7 @@ export async function downloadIncomePdf(report: IncomeReport): Promise<void> {
   await addHeader(doc, "Income Report", startDate, endDate);
 
   autoTable(doc, {
-    startY: 50,
+    startY: tableStartY(),
     head: [["Date", "Property", "Tenant", "Paid", "Late Fee", "Total", "Status"]],
     body: report.lines.map((l) => [
       l.date,
@@ -83,7 +124,7 @@ export async function downloadIncomePdf(report: IncomeReport): Promise<void> {
   });
 
   const summaryY = (doc as jsPDF & { lastAutoTable?: { finalY: number } }).lastAutoTable
-    ?.finalY ?? 50;
+    ?.finalY ?? tableStartY();
 
   autoTable(doc, {
     startY: summaryY + 10,
@@ -106,7 +147,7 @@ export async function downloadExpensePdf(report: ExpenseReport): Promise<void> {
   await addHeader(doc, "Expense Report", startDate, endDate);
 
   autoTable(doc, {
-    startY: 50,
+    startY: tableStartY(),
     head: [["Date", "Property", "Category", "Vendor", "Description", "Amount"]],
     body: report.lines.map((l) => [
       l.date,
@@ -122,7 +163,7 @@ export async function downloadExpensePdf(report: ExpenseReport): Promise<void> {
   });
 
   const summaryY = (doc as jsPDF & { lastAutoTable?: { finalY: number } }).lastAutoTable
-    ?.finalY ?? 50;
+    ?.finalY ?? tableStartY();
 
   autoTable(doc, {
     startY: summaryY + 10,
@@ -146,10 +187,10 @@ export async function downloadPLPdf(report: PLReport): Promise<void> {
 
   doc.setFontSize(9);
   doc.setTextColor(80, 80, 80);
-  doc.text(`Carrying costs prorated over ${report.months} month(s)`, 14, 48);
+  doc.text(`Carrying costs prorated over ${report.months} month(s)`, 14, 54);
 
   autoTable(doc, {
-    startY: 54,
+    startY: 60,
     head: [["Property", "Rental Income", "Operating Exp.", "Fixed Costs", "Net P/L"]],
     body: [
       ...report.rows.map((r) => [
@@ -173,7 +214,7 @@ export async function downloadPLPdf(report: PLReport): Promise<void> {
   });
 
   const notesY = (doc as jsPDF & { lastAutoTable?: { finalY: number } }).lastAutoTable
-    ?.finalY ?? 54;
+    ?.finalY ?? 60;
 
   doc.setFontSize(8);
   doc.setTextColor(100, 100, 100);
