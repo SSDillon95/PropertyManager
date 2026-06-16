@@ -29,7 +29,6 @@ export const MANAGEMENT_TABS: { id: SheetTab; label: string }[] = [
 export const SETTINGS_TABS: { id: SheetTab; label: string }[] = [
   { id: "businesses", label: "Business" },
   { id: "investors", label: "Investor" },
-  { id: "investor_payout", label: "Investor Payout" },
 ];
 
 export const NAV_TABS_BEFORE_MANAGEMENT: { id: SheetTab; label: string }[] = [
@@ -38,13 +37,14 @@ export const NAV_TABS_BEFORE_MANAGEMENT: { id: SheetTab; label: string }[] = [
 ];
 
 export const NAV_TABS_AFTER_MANAGEMENT: { id: SheetTab; label: string }[] = [
+  { id: "investor_payout", label: "Investor Payout" },
   { id: "reports", label: "Reports" },
 ];
 
 export const SHEET_TABS: { id: SheetTab; label: string }[] = [
+  ...SETTINGS_TABS,
   ...NAV_TABS_BEFORE_MANAGEMENT,
   ...MANAGEMENT_TABS,
-  ...SETTINGS_TABS,
   ...NAV_TABS_AFTER_MANAGEMENT,
 ];
 
