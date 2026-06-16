@@ -186,6 +186,8 @@ export interface InvestorPayout {
   payout_seq: number | null;
   payout_id: string;
   date: string;
+  business_name: string | null;
+  business_address: string | null;
   property_name: string;
   property_address: string | null;
   loan_date: string | null;

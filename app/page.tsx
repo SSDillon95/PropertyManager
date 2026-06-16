@@ -10,7 +10,9 @@ import SpreadsheetTable from "@/components/SpreadsheetTable";
 import { loanSummaryFromPayout } from "@/lib/investor-payout-summary";
 import {
   capitalOptionLabel,
+  formatBusinessAddress,
   isCapitalRecord,
+  nextCapitalId,
   nextPayoutSequence,
 } from "@/lib/investor-records";
 import {
@@ -168,6 +170,7 @@ export default function PropertyManagerApp() {
   const [businesses, setBusinesses] = useState<Business[]>([]);
   const [properties, setProperties] = useState<Property[]>([]);
   const [propertyBusinessFilter, setPropertyBusinessFilter] = useState("");
+  const [capitalBusinessFilter, setCapitalBusinessFilter] = useState("");
   const [managementMenuOpen, setManagementMenuOpen] = useState(false);
   const [managementMenuPosition, setManagementMenuPosition] = useState<{
     top: number;
@@ -233,9 +236,32 @@ export default function PropertyManagerApp() {
     };
   }, [tab, formOpen, form]);
   const displayRows = useMemo(() => {
-    if (tab !== "properties" || !propertyBusinessFilter) return rows;
-    return rows.filter((row) => row.business_name === propertyBusinessFilter);
-  }, [tab, rows, propertyBusinessFilter]);
+    if (tab === "properties" && propertyBusinessFilter) {
+      return rows.filter((row) => row.business_name === propertyBusinessFilter);
+    }
+    if (tab === "investor_capital" && capitalBusinessFilter) {
+      return rows.filter((row) => row.business_name === capitalBusinessFilter);
+    }
+    return rows;
+  }, [tab, rows, propertyBusinessFilter, capitalBusinessFilter]);
+  const capitalFormProperties = useMemo(() => {
+    if (tab !== "investor_capital" || !form.business_name?.trim()) return properties;
+    return properties.filter(
+      (property) => property.business_name === form.business_name
+    );
+  }, [tab, form.business_name, properties]);
+  const businessFilterOptions = useMemo(
+    () =>
+      businesses
+        .filter((business) => business.status === "Active")
+        .map((business) => business.business_name)
+        .sort((a, b) => a.localeCompare(b)),
+    [businesses]
+  );
+  const nextCapitalIdPreview = useMemo(() => {
+    if (tab !== "investor_capital" || editingId != null) return "";
+    return String(nextCapitalId(rows.map((row) => row as unknown as InvestorPayout)));
+  }, [tab, editingId, rows]);
 
   const propertyBusinessOptions = useMemo(() => {
     const names = new Set<string>();
@@ -403,7 +429,10 @@ export default function PropertyManagerApp() {
         activeTab === "maintenance" ||
         isInvestorRecordTab(activeTab)
       ) {
-        await loadProperties();
+        await Promise.all([
+          loadProperties(),
+          activeTab === "investor_capital" ? loadBusinesses() : Promise.resolve(),
+        ]);
       }
       if (isInvestorRecordTab(activeTab)) {
         await loadInvestors();
@@ -483,6 +512,9 @@ export default function PropertyManagerApp() {
             .filter(Boolean)
             .join(", ")
         : "";
+      const linkedBusiness = property?.business_name
+        ? businesses.find((business) => business.business_name === property.business_name)
+        : undefined;
       const linkedInvestor = investors.find(
         (investor) =>
           investor.property_name === propertyName && investor.status === "Active"
@@ -491,11 +523,44 @@ export default function PropertyManagerApp() {
         ...prev,
         property_name: propertyName,
         property_address: propertyAddress || prev.property_address,
+        business_name: property?.business_name ?? prev.business_name,
+        business_address: linkedBusiness
+          ? formatBusinessAddress(linkedBusiness)
+          : prev.business_address,
         investor_name: linkedInvestor?.investor_name ?? prev.investor_name,
       }));
       return;
     }
     setForm((prev) => ({ ...prev, [fieldKey]: propertyName }));
+  };
+
+  const handleBusinessSelect = (businessName: string) => {
+    if (tab !== "investor_capital") {
+      setForm((prev) => ({ ...prev, business_name: businessName }));
+      return;
+    }
+    if (!businessName) {
+      setForm((prev) => ({
+        ...prev,
+        business_name: "",
+        business_address: "",
+        property_name: "",
+        property_address: "",
+      }));
+      return;
+    }
+    const business = businesses.find((item) => item.business_name === businessName);
+    const selectedProperty = form.property_name
+      ? properties.find((property) => property.property_name === form.property_name)
+      : undefined;
+    const propertyMatchesBusiness = selectedProperty?.business_name === businessName;
+    setForm((prev) => ({
+      ...prev,
+      business_name: businessName,
+      business_address: business ? formatBusinessAddress(business) : "",
+      property_name: propertyMatchesBusiness ? prev.property_name : "",
+      property_address: propertyMatchesBusiness ? prev.property_address : "",
+    }));
   };
 
   const handleCapitalSelect = (capitalId: string) => {
@@ -738,6 +803,13 @@ export default function PropertyManagerApp() {
     setEditingId(null);
     const nextForm = emptyForm(columns);
     if (tab === "investor_capital" || tab === "investor_payout") nextForm.days_in_year = "365";
+    if (tab === "investor_capital" && capitalBusinessFilter) {
+      const business = businesses.find(
+        (item) => item.business_name === capitalBusinessFilter
+      );
+      nextForm.business_name = capitalBusinessFilter;
+      nextForm.business_address = business ? formatBusinessAddress(business) : "";
+    }
     if (tab === "users") nextForm.password = "";
     setForm(nextForm);
     setFormOpen(true);
@@ -746,6 +818,12 @@ export default function PropertyManagerApp() {
   const openEditForm = (row: Record<string, unknown>) => {
     setEditingId(Number(row.id));
     const nextForm = rowToForm(row, columns);
+    if (tab === "investor_capital" && nextForm.business_name && !nextForm.business_address) {
+      const business = businesses.find(
+        (item) => item.business_name === nextForm.business_name
+      );
+      if (business) nextForm.business_address = formatBusinessAddress(business);
+    }
     if (tab === "users") nextForm.password = "";
     setForm(nextForm);
     setFormOpen(true);
@@ -764,6 +842,7 @@ export default function PropertyManagerApp() {
     closeInvestorMenu();
     closeSettingsMenu();
     if (next !== "properties") setPropertyBusinessFilter("");
+    if (next !== "investor_capital") setCapitalBusinessFilter("");
     setTab(next);
     setLoading(true);
     try {
@@ -795,6 +874,12 @@ export default function PropertyManagerApp() {
       if (
         tab === "investor_payout" &&
         (c.key === "payout_id" || c.key === "property_name" || c.key === "investor_name")
+      ) {
+        return false;
+      }
+      if (
+        tab === "investor_capital" &&
+        (c.key === "payout_id" || c.key === "business_address")
       ) {
         return false;
       }
@@ -932,7 +1017,8 @@ export default function PropertyManagerApp() {
     }
   };
 
-  const tableRows = tab === "properties" ? displayRows : rows;
+  const tableRows =
+    tab === "properties" || tab === "investor_capital" ? displayRows : rows;
 
   const exportCsv = () => {
     if (tab === "dashboard" || tab === "reports" || tab === "communication" || tableRows.length === 0)
@@ -1251,9 +1337,9 @@ export default function PropertyManagerApp() {
                   )}
                   {tab === "investor_capital" && (
                     <p className="text-xs text-zinc-400 mt-1">
-                      Record capital raised for a property. Enter capital received, 12-month rate
-                      (e.g. 0.12 = 12%), loan date, and sell estimate — the payout calculator
-                      preview updates automatically.
+                      Select the business and property for this capital investment. Capital ID is
+                      assigned automatically. Business address is filled from the Business tab and
+                      cannot be edited here.
                     </p>
                   )}
                   {tab === "investor_payout" && (
@@ -1297,15 +1383,22 @@ export default function PropertyManagerApp() {
                           }`}
                         >
                           <option value="">
-                            {properties.length
-                              ? "Select property..."
-                              : "No properties — add one in Properties tab"}
+                            {tab === "investor_capital" && !form.business_name
+                              ? "Select business first..."
+                              : (tab === "investor_capital"
+                                  ? capitalFormProperties
+                                  : properties
+                                ).length
+                                ? "Select property..."
+                                : "No properties — add one in Properties tab"}
                           </option>
-                          {properties.map((property) => (
-                            <option key={property.id} value={property.property_name}>
-                              {property.property_name}
-                            </option>
-                          ))}
+                          {(tab === "investor_capital" ? capitalFormProperties : properties).map(
+                            (property) => (
+                              <option key={property.id} value={property.property_name}>
+                                {property.property_name}
+                              </option>
+                            )
+                          )}
                         </select>
                       ) : col.type === "tenant" ? (
                         <select
@@ -1372,9 +1465,7 @@ export default function PropertyManagerApp() {
                       ) : col.type === "business" ? (
                         <select
                           value={form[col.key] ?? ""}
-                          onChange={(e) =>
-                            setForm((prev) => ({ ...prev, [col.key]: e.target.value }))
-                          }
+                          onChange={(e) => handleBusinessSelect(e.target.value)}
                           className="form-select"
                         >
                           <option value="">
@@ -1417,13 +1508,17 @@ export default function PropertyManagerApp() {
                           value={
                             tab === "investor_payout" && col.key === "payout_id" && !editingId
                               ? nextPayoutIdPreview || form[col.key] || ""
-                              : form[col.key] ?? ""
+                              : tab === "investor_capital" && col.key === "payout_id" && !editingId
+                                ? nextCapitalIdPreview || form[col.key] || ""
+                                : form[col.key] ?? ""
                           }
                           readOnly={
                             (tab === "rent_ledger" &&
                               col.key === "tenant_name" &&
                               Boolean(form.property_name)) ||
                             (tab === "investor_payout" && col.key === "payout_id") ||
+                            (tab === "investor_capital" && col.key === "payout_id") ||
+                            (tab === "investor_capital" && col.key === "business_address") ||
                             (tab === "investor_payout" &&
                               col.key === "property_name" &&
                               Boolean(form.capital_id))
@@ -1432,7 +1527,9 @@ export default function PropertyManagerApp() {
                             setForm((prev) => ({ ...prev, [col.key]: e.target.value }))
                           }
                           placeholder={
-                            tab === "investor_payout" && col.key === "payout_id" && !editingId
+                            (tab === "investor_payout" || tab === "investor_capital") &&
+                            col.key === "payout_id" &&
+                            !editingId
                               ? "Auto-assigned"
                               : undefined
                           }
@@ -1442,7 +1539,9 @@ export default function PropertyManagerApp() {
                               form.property_name) ||
                             (tab === "investor_payout" &&
                               (col.key === "payout_id" ||
-                                (col.key === "property_name" && form.capital_id)))
+                                (col.key === "property_name" && form.capital_id))) ||
+                            (tab === "investor_capital" &&
+                              (col.key === "payout_id" || col.key === "business_address"))
                               ? "text-zinc-400 cursor-not-allowed bg-zinc-700/50"
                               : ""
                           }`}
@@ -1493,7 +1592,9 @@ export default function PropertyManagerApp() {
                 <h2 className="font-semibold text-lg">
                   {showArchived ? "Archive — " : ""}
                   {SHEET_TABS.find((s) => s.id === tab)?.label} ({tableRows.length}
-                  {tab === "properties" && propertyBusinessFilter && rows.length !== tableRows.length
+                  {((tab === "properties" && propertyBusinessFilter) ||
+                    (tab === "investor_capital" && capitalBusinessFilter)) &&
+                  rows.length !== tableRows.length
                     ? ` of ${rows.length}`
                     : ""}
                   )
@@ -1509,6 +1610,23 @@ export default function PropertyManagerApp() {
                       >
                         <option value="">All businesses</option>
                         {propertyBusinessOptions.map((name) => (
+                          <option key={name} value={name}>
+                            {name}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  )}
+                  {tab === "investor_capital" && !showArchived && (
+                    <label className="flex items-center gap-2 text-xs text-zinc-300">
+                      <span className="whitespace-nowrap">Filter by business</span>
+                      <select
+                        value={capitalBusinessFilter}
+                        onChange={(e) => setCapitalBusinessFilter(e.target.value)}
+                        className="form-select py-1.5 min-w-[10rem]"
+                      >
+                        <option value="">All businesses</option>
+                        {businessFilterOptions.map((name) => (
                           <option key={name} value={name}>
                             {name}
                           </option>

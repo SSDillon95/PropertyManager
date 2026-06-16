@@ -2,6 +2,7 @@ import {
   archiveInvestorPayout,
   createInvestorPayout,
   getInvestorCapitalByCapitalId,
+  getNextCapitalId,
   getNextPayoutSequenceForCapital,
   listInvestorPayouts,
   restoreInvestorPayout,
@@ -27,9 +28,10 @@ function parseKindParam(request: Request): "capital" | "payout" | undefined {
   return undefined;
 }
 
-function parseCapitalBody(
-  body: Record<string, unknown>
-): Omit<InvestorPayout, "id" | "created_at"> {
+async function parseCapitalBody(
+  body: Record<string, unknown>,
+  existing?: InvestorPayout
+): Promise<Omit<InvestorPayout, "id" | "created_at">> {
   const loanFields = {
     property_address: body.property_address != null ? String(body.property_address) : null,
     loan_date: body.loan_date != null ? String(body.loan_date) : null,
@@ -64,12 +66,22 @@ function parseCapitalBody(
     days_in_year: loanFields.days_in_year,
   });
 
+  const payoutId = existing?.payout_id ?? String(await getNextCapitalId());
+
   return {
     record_kind: "capital",
     capital_id: null,
     payout_seq: null,
-    payout_id: String(body.payout_id),
+    payout_id: payoutId,
     date: String(body.date),
+    business_name:
+      body.business_name != null && body.business_name !== ""
+        ? String(body.business_name)
+        : null,
+    business_address:
+      body.business_address != null && body.business_address !== ""
+        ? String(body.business_address)
+        : null,
     property_name: String(body.property_name),
     investor_name: String(body.investor_name),
     payout_type: String(body.payout_type ?? "Return of Capital"),
@@ -115,6 +127,8 @@ async function parsePayoutBody(
     payout_seq: payoutSeq,
     payout_id: String(payoutSeq),
     date: String(body.date),
+    business_name: capital.business_name,
+    business_address: capital.business_address,
     property_name: capital.property_name,
     property_address: capital.property_address,
     loan_date: capital.loan_date,
@@ -166,10 +180,10 @@ export async function POST(request: Request) {
       return jsonOk(payout, 201);
     }
 
-    if (!body.payout_id || !body.date || !body.property_name || !body.investor_name) {
-      return jsonError("Capital ID, date, property, and investor are required.");
+    if (!body.date || !body.business_name || !body.property_name || !body.investor_name) {
+      return jsonError("Date, business, property, and investor are required.");
     }
-    const payout = await createInvestorPayout(parseCapitalBody(body));
+    const payout = await createInvestorPayout(await parseCapitalBody(body));
     return jsonOk(payout, 201);
   } catch (error) {
     return jsonError((error as Error).message, 400);
@@ -199,10 +213,16 @@ export async function PUT(request: Request) {
       return jsonOk(payout);
     }
 
-    if (!body.payout_id || !body.date || !body.property_name || !body.investor_name) {
-      return jsonError("Capital ID, date, property, and investor are required.");
+    if (!body.date || !body.business_name || !body.property_name || !body.investor_name) {
+      return jsonError("Date, business, property, and investor are required.");
     }
-    const payout = await updateInvestorPayout(id, parseCapitalBody(body));
+    const existing = (await listInvestorPayouts(false, "capital")).find(
+      (row) => row.id === id
+    );
+    const payout = await updateInvestorPayout(
+      id,
+      await parseCapitalBody(body, existing)
+    );
     return jsonOk(payout);
   } catch (error) {
     return jsonError((error as Error).message, 400);

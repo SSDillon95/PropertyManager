@@ -314,8 +314,10 @@ export const INVESTOR_COLUMNS: ColumnDef[] = [
 ];
 
 export const INVESTOR_CAPITAL_COLUMNS: ColumnDef[] = [
-  { key: "payout_id", label: "Capital ID", type: "text", required: true, width: "100px" },
+  { key: "payout_id", label: "Capital ID", type: "text", width: "100px" },
   { key: "date", label: "Date", type: "date", required: true, width: "110px" },
+  { key: "business_name", label: "Business", type: "business", required: true, width: "160px" },
+  { key: "business_address", label: "Business Address", type: "text", width: "200px" },
   { key: "property_name", label: "Property", type: "property", required: true, width: "150px" },
   { key: "property_address", label: "Property Address", type: "text", width: "180px" },
   { key: "loan_date", label: "Loan Date", type: "date", width: "110px" },
