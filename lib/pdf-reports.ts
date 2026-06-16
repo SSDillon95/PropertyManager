@@ -12,8 +12,11 @@ import type { InvestorPayout } from "./types";
 
 const LOGO_PATH = "/hop2it-logo.png";
 const PAGE_MARGIN = 14;
-const LOGO_WIDTH = 118;
-const LOGO_HEIGHT = 44;
+const LOGO_WIDTH = 108;
+const LOGO_BOTTOM_GAP = 18;
+const TITLE_META_GAP = 10;
+const META_LINE_GAP = 7;
+const DIVIDER_CONTENT_GAP = 14;
 const REPORT_GREEN = { r: 16, g: 120, b: 80 };
 const REPORT_GREEN_RGB: [number, number, number] = [
   REPORT_GREEN.r,
@@ -21,6 +24,12 @@ const REPORT_GREEN_RGB: [number, number, number] = [
   REPORT_GREEN.b,
 ];
 let logoDataUrl: string | null = null;
+let logoNaturalWidth = 800;
+let logoNaturalHeight = 300;
+
+function logoDisplayHeight(): number {
+  return LOGO_WIDTH * (logoNaturalHeight / logoNaturalWidth);
+}
 
 function recolorWhiteToGreen(imageData: ImageData): void {
   const { data } = imageData;
@@ -55,6 +64,8 @@ async function loadLogoDataUrl(): Promise<string> {
     img.onerror = () => reject(new Error("Failed to load report logo."));
     img.src = LOGO_PATH;
   });
+  logoNaturalWidth = img.naturalWidth || logoNaturalWidth;
+  logoNaturalHeight = img.naturalHeight || logoNaturalHeight;
 
   const canvas = document.createElement("canvas");
   canvas.width = img.naturalWidth;
@@ -89,16 +100,18 @@ function pageCenterX(doc: jsPDF): number {
   return doc.internal.pageSize.getWidth() / 2;
 }
 
-function placeLogoTopCenter(doc: jsPDF, logo: string) {
+function placeLogoTopCenter(doc: jsPDF, logo: string): number {
   const pageWidth = doc.internal.pageSize.getWidth();
+  const logoHeight = logoDisplayHeight();
   doc.addImage(
     logo,
     "PNG",
     (pageWidth - LOGO_WIDTH) / 2,
     PAGE_MARGIN,
     LOGO_WIDTH,
-    LOGO_HEIGHT
+    logoHeight
   );
+  return PAGE_MARGIN + logoHeight;
 }
 
 function drawCenteredText(
@@ -123,27 +136,28 @@ function drawHeaderDivider(doc: jsPDF, y: number) {
 async function renderPdfHeader(
   doc: jsPDF,
   title: string,
-  metaLines: string[]
+  metaLines: string[],
+  options?: { contentGap?: number }
 ): Promise<number> {
   const logo = await loadLogoDataUrl();
-  placeLogoTopCenter(doc, logo);
+  const logoBottom = placeLogoTopCenter(doc, logo);
 
-  let y = PAGE_MARGIN + LOGO_HEIGHT + 12;
+  let y = logoBottom + LOGO_BOTTOM_GAP;
   drawCenteredText(doc, title, y, {
     fontSize: 15,
     bold: true,
     color: [REPORT_GREEN.r, REPORT_GREEN.g, REPORT_GREEN.b],
   });
 
-  y += 10;
+  y += TITLE_META_GAP;
   for (const line of metaLines) {
     drawCenteredText(doc, line, y, { color: [80, 80, 80] });
-    y += 6;
+    y += META_LINE_GAP;
   }
 
-  y += 4;
+  y += 6;
   drawHeaderDivider(doc, y);
-  return y + 10;
+  return y + (options?.contentGap ?? DIVIDER_CONTENT_GAP);
 }
 
 function addCenteredSubtitle(doc: jsPDF, y: number, text: string): number {
@@ -443,10 +457,15 @@ export async function downloadInvestorPayoutPdf(
   >
 ): Promise<void> {
   const doc = new jsPDF();
-  const contentStartY = await renderPdfHeader(doc, "Investor Payout Form", [
-    `Payout ID: ${payout.payout_id}`,
-    `Generated: ${new Date().toLocaleString()}`,
-  ]);
+  const contentStartY = await renderPdfHeader(
+    doc,
+    "Investor Payout Form",
+    [
+      `Payout ID: ${payout.payout_id}`,
+      `Generated: ${new Date().toLocaleString()}`,
+    ],
+    { contentGap: 18 }
+  );
 
   autoTable(doc, {
     startY: contentStartY,
