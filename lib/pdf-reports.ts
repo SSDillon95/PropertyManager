@@ -1,6 +1,7 @@
 import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
 import type { ExpenseReport, IncomeReport, PLReport, ReportKind } from "./reports";
+import type { InvestorPayout } from "./types";
 
 const LOGO_PATH = "/hop2it-logo.png";
 const LOGO_WIDTH = 144;
@@ -69,6 +70,36 @@ function money(value: number): string {
     minimumFractionDigits: 0,
     maximumFractionDigits: 0,
   }).format(value);
+}
+
+function displayField(value: string | number | null | undefined): string {
+  if (value == null || value === "") return "—";
+  return String(value);
+}
+
+async function addPayoutFormHeader(doc: jsPDF, payoutId: string) {
+  const logo = await loadLogoDataUrl();
+  const pageWidth = doc.internal.pageSize.getWidth();
+  const margin = 14;
+  doc.addImage(
+    logo,
+    "PNG",
+    pageWidth - margin - LOGO_WIDTH,
+    10,
+    LOGO_WIDTH,
+    LOGO_HEIGHT
+  );
+
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(16);
+  doc.setTextColor(REPORT_GREEN.r, REPORT_GREEN.g, REPORT_GREEN.b);
+  doc.text("Investor Payout Form", margin, 22);
+
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(10);
+  doc.setTextColor(80, 80, 80);
+  doc.text(`Payout ID: ${payoutId}`, margin, 30);
+  doc.text(`Generated: ${new Date().toLocaleString()}`, margin, 36);
 }
 
 function periodLabel(start: string, end: string): string {
@@ -234,4 +265,77 @@ export async function downloadPLPdf(report: PLReport): Promise<void> {
   );
 
   savePdf(doc, "pl", startDate, endDate);
+}
+
+export async function downloadInvestorPayoutPdf(
+  payout: Pick<
+    InvestorPayout,
+    | "payout_id"
+    | "date"
+    | "property_name"
+    | "investor_name"
+    | "payout_type"
+    | "payout_amount"
+    | "payment_method"
+    | "payment_date"
+    | "tax_year"
+    | "status"
+    | "notes"
+  >
+): Promise<void> {
+  const doc = new jsPDF();
+  await addPayoutFormHeader(doc, payout.payout_id);
+
+  autoTable(doc, {
+    startY: 48,
+    head: [["Field", "Value"]],
+    body: [
+      ["Payout ID", payout.payout_id],
+      ["Record Date", payout.date],
+      ["Property", payout.property_name],
+      ["Investor", payout.investor_name],
+      ["Payout Type", payout.payout_type],
+      ["Payout Amount", money(payout.payout_amount)],
+      ["Payment Method", displayField(payout.payment_method)],
+      ["Payment Date", displayField(payout.payment_date)],
+      ["Tax Year", displayField(payout.tax_year)],
+      ["Status", payout.status],
+      ["Notes", displayField(payout.notes)],
+    ],
+    styles: { fontSize: 10, cellPadding: 4 },
+    headStyles: { fillColor: REPORT_GREEN_RGB, textColor: [255, 255, 255] },
+    columnStyles: {
+      0: { fontStyle: "bold", cellWidth: 52, fillColor: [245, 245, 245] },
+      1: { cellWidth: "auto" },
+    },
+    alternateRowStyles: { fillColor: [252, 252, 252] },
+  });
+
+  const tableEnd =
+    (doc as jsPDF & { lastAutoTable?: { finalY: number } }).lastAutoTable?.finalY ?? 48;
+
+  doc.setDrawColor(REPORT_GREEN.r, REPORT_GREEN.g, REPORT_GREEN.b);
+  doc.setLineWidth(0.6);
+  doc.roundedRect(14, tableEnd + 10, 182, 22, 2, 2);
+
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(11);
+  doc.setTextColor(REPORT_GREEN.r, REPORT_GREEN.g, REPORT_GREEN.b);
+  doc.text("Total Payout Amount", 20, tableEnd + 22);
+
+  doc.setFontSize(14);
+  doc.text(money(payout.payout_amount), 20, tableEnd + 30);
+
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(8);
+  doc.setTextColor(100, 100, 100);
+  doc.text(
+    "This document confirms investor payout details recorded in HOP2IT Property Manager.",
+    14,
+    tableEnd + 42,
+    { maxWidth: 180 }
+  );
+
+  const safeId = payout.payout_id.replace(/[^a-zA-Z0-9_-]+/g, "-");
+  doc.save(`hop2it-investor-payout-${safeId}.pdf`);
 }

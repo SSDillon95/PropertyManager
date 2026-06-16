@@ -7,11 +7,13 @@ import ReportsView from "@/components/ReportsView";
 import SpreadsheetTable from "@/components/SpreadsheetTable";
 import { getColumnsForTab, SHEET_TABS, type ColumnDef } from "@/lib/columns";
 import { formatCurrency, todayIso } from "@/lib/format";
+import { downloadInvestorPayoutPdf } from "@/lib/pdf-reports";
 import { propertyProfitability } from "@/lib/profitability";
 import { rentDetailsForProperty, tenantDisplayName } from "@/lib/rent-ledger";
 import type {
   DashboardSummary,
   Expense,
+  InvestorPayout,
   Lease,
   Property,
   RentPayment,
@@ -74,6 +76,7 @@ export default function PropertyManagerApp() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [actionId, setActionId] = useState<number | null>(null);
+  const [printFormId, setPrintFormId] = useState<number | null>(null);
   const [showArchived, setShowArchived] = useState(false);
   const [formOpen, setFormOpen] = useState(false);
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(
@@ -332,6 +335,30 @@ export default function PropertyManagerApp() {
       showMessage("error", (error as Error).message);
     } finally {
       setActionId(null);
+    }
+  };
+
+  const handlePrintForm = async (row: Record<string, unknown>) => {
+    const payout = row as unknown as InvestorPayout;
+    setPrintFormId(payout.id);
+    try {
+      await downloadInvestorPayoutPdf({
+        payout_id: payout.payout_id,
+        date: payout.date,
+        property_name: payout.property_name,
+        investor_name: payout.investor_name,
+        payout_type: payout.payout_type,
+        payout_amount: payout.payout_amount,
+        payment_method: payout.payment_method,
+        payment_date: payout.payment_date,
+        tax_year: payout.tax_year,
+        status: payout.status,
+        notes: payout.notes,
+      });
+    } catch (error) {
+      showMessage("error", (error as Error).message);
+    } finally {
+      setPrintFormId(null);
     }
   };
 
@@ -652,6 +679,9 @@ export default function PropertyManagerApp() {
                 onProfitability={(row) => setProfitabilityProperty(row as unknown as Property)}
                 showExpand={tab === "properties" && !showArchived}
                 onExpand={(row) => setExpandedProperty(row as unknown as Property)}
+                showPrintForm={tab === "investor_payout" && !showArchived}
+                onPrintForm={handlePrintForm}
+                printFormId={printFormId}
               />
             </section>
           </div>

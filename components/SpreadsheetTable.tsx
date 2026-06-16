@@ -14,6 +14,9 @@ interface SpreadsheetTableProps {
   onProfitability?: (row: Record<string, unknown>) => void;
   showExpand?: boolean;
   onExpand?: (row: Record<string, unknown>) => void;
+  showPrintForm?: boolean;
+  onPrintForm?: (row: Record<string, unknown>) => void;
+  printFormId?: number | null;
 }
 
 export default function SpreadsheetTable({
@@ -27,6 +30,9 @@ export default function SpreadsheetTable({
   onProfitability,
   showExpand = false,
   onExpand,
+  showPrintForm = false,
+  onPrintForm,
+  printFormId = null,
 }: SpreadsheetTableProps) {
   if (rows.length === 0) {
     return (
@@ -58,7 +64,11 @@ export default function SpreadsheetTable({
                   {col.label}
                 </th>
               ))}
-              <th className="px-3 py-2 text-left font-semibold text-xs uppercase tracking-wide min-w-[5.5rem]">
+              <th
+                className={`px-3 py-2 text-left font-semibold text-xs uppercase tracking-wide ${
+                  showPrintForm ? "min-w-[7.5rem]" : "min-w-[5.5rem]"
+                }`}
+              >
                 Actions
               </th>
             </tr>
@@ -118,14 +128,26 @@ export default function SpreadsheetTable({
                       {actionId === Number(row.id) ? "..." : "Restore"}
                     </button>
                   ) : (
-                    <button
-                      type="button"
-                      onClick={() => onArchive?.(Number(row.id))}
-                      disabled={actionId === Number(row.id)}
-                      className="text-xs text-amber-400 hover:text-amber-300 disabled:opacity-50 whitespace-nowrap"
-                    >
-                      {actionId === Number(row.id) ? "..." : "Archive"}
-                    </button>
+                    <div className="flex flex-col gap-1">
+                      {showPrintForm && (
+                        <button
+                          type="button"
+                          onClick={() => onPrintForm?.(row)}
+                          disabled={printFormId === Number(row.id)}
+                          className="text-xs px-2 py-1 rounded-md border border-emerald-600/60 bg-emerald-950/40 text-emerald-300 hover:bg-emerald-900/50 whitespace-nowrap disabled:opacity-50"
+                        >
+                          {printFormId === Number(row.id) ? "..." : "Print Form"}
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => onArchive?.(Number(row.id))}
+                        disabled={actionId === Number(row.id)}
+                        className="text-xs text-amber-400 hover:text-amber-300 disabled:opacity-50 whitespace-nowrap"
+                      >
+                        {actionId === Number(row.id) ? "..." : "Archive"}
+                      </button>
+                    </div>
                   )}
                 </td>
               </tr>
