@@ -171,6 +171,9 @@ export default function PropertyManagerApp() {
   const [properties, setProperties] = useState<Property[]>([]);
   const [propertyBusinessFilter, setPropertyBusinessFilter] = useState("");
   const [capitalBusinessFilter, setCapitalBusinessFilter] = useState("");
+  const [capitalBusinessConfirm, setCapitalBusinessConfirm] = useState<{
+    businessName: string;
+  } | null>(null);
   const [managementMenuOpen, setManagementMenuOpen] = useState(false);
   const [managementMenuPosition, setManagementMenuPosition] = useState<{
     top: number;
@@ -567,13 +570,21 @@ export default function PropertyManagerApp() {
     const isBusinessChange = businessName !== previousBusiness;
 
     if (hasSelectedProperty && isBusinessChange) {
-      const confirmed = window.confirm(
-        "Please confirm this selection. Changing the business will clear the selected property so you can choose one for the new business."
-      );
-      if (!confirmed) return;
+      setCapitalBusinessConfirm({ businessName });
+      return;
     }
 
     applyCapitalBusinessSelection(businessName);
+  };
+
+  const confirmCapitalBusinessChange = () => {
+    if (!capitalBusinessConfirm) return;
+    applyCapitalBusinessSelection(capitalBusinessConfirm.businessName);
+    setCapitalBusinessConfirm(null);
+  };
+
+  const cancelCapitalBusinessChange = () => {
+    setCapitalBusinessConfirm(null);
   };
 
   const handleCapitalSelect = (capitalId: string) => {
@@ -809,6 +820,7 @@ export default function PropertyManagerApp() {
   const closeForm = () => {
     setFormOpen(false);
     setEditingId(null);
+    setCapitalBusinessConfirm(null);
     setForm(emptyForm(columns));
   };
 
@@ -851,6 +863,7 @@ export default function PropertyManagerApp() {
     setShowArchived(false);
     setFormOpen(false);
     setExpandedProperty(null);
+    setCapitalBusinessConfirm(null);
     closeManagementMenu();
     closeInvestorMenu();
     closeSettingsMenu();
@@ -1295,6 +1308,46 @@ export default function PropertyManagerApp() {
         </div>
       )}
       </div>
+
+      {capitalBusinessConfirm && (
+        <div
+          className="fixed inset-0 z-[200] flex items-center justify-center bg-black/70 p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="capital-business-confirm-title"
+        >
+          <div className="w-full max-w-md rounded-xl border-2 border-red-600 bg-zinc-900 shadow-2xl overflow-hidden">
+            <div className="bg-red-950 px-5 py-4 border-b border-red-700">
+              <h3
+                id="capital-business-confirm-title"
+                className="text-lg font-semibold text-red-300"
+              >
+                Please confirm this selection
+              </h3>
+            </div>
+            <p className="px-5 py-4 text-sm text-zinc-200 leading-relaxed">
+              Changing the business will clear the selected property so you can choose one for the
+              new business.
+            </p>
+            <div className="flex justify-end gap-2 px-5 pb-5">
+              <button
+                type="button"
+                onClick={cancelCapitalBusinessChange}
+                className="px-4 py-2 rounded-lg border border-zinc-600 bg-zinc-800 text-zinc-200 text-sm hover:bg-zinc-700"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={confirmCapitalBusinessChange}
+                className="px-4 py-2 rounded-lg bg-red-600 hover:bg-red-500 text-white text-sm font-medium"
+              >
+                Confirm
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {message && (
         <div
