@@ -12,12 +12,15 @@ export async function GET() {
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    if (!body.property_id || !body.property_name || !body.address) {
-      return jsonError("Property ID, name, and address are required.");
+    const legalId = body.legal_id ?? body.property_id;
+    if (!legalId || !body.property_name || !body.address) {
+      return jsonError("Legal ID, name, and address are required.");
     }
     const property = await createProperty({
-      property_id: String(body.property_id),
+      legal_id: String(legalId),
       property_name: String(body.property_name),
+      lien_holder: body.lien_holder ?? null,
+      account_number: body.account_number ?? null,
       address: String(body.address),
       city: String(body.city ?? ""),
       state: String(body.state ?? ""),

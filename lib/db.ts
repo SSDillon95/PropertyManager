@@ -27,8 +27,10 @@ function ensureSchema(): Promise<void> {
 const SQLITE_SCHEMA = `
   CREATE TABLE IF NOT EXISTS properties (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    property_id TEXT NOT NULL UNIQUE,
+    legal_id TEXT NOT NULL UNIQUE,
     property_name TEXT NOT NULL,
+    lien_holder TEXT,
+    account_number TEXT,
     address TEXT NOT NULL,
     city TEXT NOT NULL,
     state TEXT NOT NULL,
@@ -145,8 +147,10 @@ async function initSchema(): Promise<void> {
     await sql`
       CREATE TABLE IF NOT EXISTS properties (
         id SERIAL PRIMARY KEY,
-        property_id TEXT NOT NULL UNIQUE,
+        legal_id TEXT NOT NULL UNIQUE,
         property_name TEXT NOT NULL,
+        lien_holder TEXT,
+        account_number TEXT,
         address TEXT NOT NULL,
         city TEXT NOT NULL,
         state TEXT NOT NULL,
@@ -172,6 +176,17 @@ async function initSchema(): Promise<void> {
       )
     `;
     await sql`ALTER TABLE properties ADD COLUMN IF NOT EXISTS monthly_rent REAL`;
+    await sql`ALTER TABLE properties ADD COLUMN IF NOT EXISTS legal_id TEXT`;
+    await sql`ALTER TABLE properties ADD COLUMN IF NOT EXISTS lien_holder TEXT`;
+    await sql`ALTER TABLE properties ADD COLUMN IF NOT EXISTS account_number TEXT`;
+    try {
+      await sql`
+        UPDATE properties SET legal_id = property_id
+        WHERE legal_id IS NULL AND property_id IS NOT NULL
+      `;
+    } catch {
+      // property_id column may not exist on newer schemas
+    }
     await sql`
       CREATE TABLE IF NOT EXISTS tenants (
         id SERIAL PRIMARY KEY,
@@ -274,8 +289,15 @@ async function initSchema(): Promise<void> {
   const db = new Database(dbPath);
   db.exec(SQLITE_SCHEMA);
   const propertyCols = db.pragma("table_info(properties)") as { name: string }[];
-  if (!propertyCols.some((c) => c.name === "monthly_rent")) {
-    db.exec("ALTER TABLE properties ADD COLUMN monthly_rent REAL");
+  const hasCol = (name: string) => propertyCols.some((c) => c.name === name);
+  if (!hasCol("monthly_rent")) db.exec("ALTER TABLE properties ADD COLUMN monthly_rent REAL");
+  if (!hasCol("legal_id")) db.exec("ALTER TABLE properties ADD COLUMN legal_id TEXT");
+  if (!hasCol("lien_holder")) db.exec("ALTER TABLE properties ADD COLUMN lien_holder TEXT");
+  if (!hasCol("account_number")) db.exec("ALTER TABLE properties ADD COLUMN account_number TEXT");
+  if (hasCol("property_id") && hasCol("legal_id")) {
+    db.exec(
+      "UPDATE properties SET legal_id = property_id WHERE legal_id IS NULL AND property_id IS NOT NULL"
+    );
   }
   db.close();
 }
@@ -311,8 +333,10 @@ function str(v: unknown): string | null {
 function mapProperty(row: Record<string, unknown>): Property {
   return {
     id: Number(row.id),
-    property_id: String(row.property_id),
+    legal_id: String(row.legal_id ?? row.property_id ?? ""),
     property_name: String(row.property_name),
+    lien_holder: str(row.lien_holder),
+    account_number: str(row.account_number),
     address: String(row.address),
     city: String(row.city),
     state: String(row.state),
@@ -451,39 +475,88 @@ export async function createProperty(
   await ensureSchema();
   if (usePostgres) {
     const sql = await getPostgresSql();
-    const rows = await sql`
-      INSERT INTO properties (
-        property_id, property_name, address, city, state, zip, property_type,
-        units, bedrooms, bathrooms, sq_ft, year_built, purchase_date,
-        purchase_price, current_value, mortgage_balance, monthly_mortgage,
-        annual_property_tax, annual_insurance, monthly_hoa, monthly_rent, status, notes
-      ) VALUES (
-        ${data.property_id}, ${data.property_name}, ${data.address}, ${data.city},
-        ${data.state}, ${data.zip}, ${data.property_type}, ${data.units},
-        ${data.bedrooms}, ${data.bathrooms}, ${data.sq_ft}, ${data.year_built},
-        ${data.purchase_date}, ${data.purchase_price}, ${data.current_value},
-        ${data.mortgage_balance}, ${data.monthly_mortgage}, ${data.annual_property_tax},
-        ${data.annual_insurance}, ${data.monthly_hoa}, ${data.monthly_rent}, ${data.status}, ${data.notes}
-      ) RETURNING *
+    const legacyCols = await sql`
+      SELECT 1 FROM information_schema.columns
+      WHERE table_schema = 'public' AND table_name = 'properties' AND column_name = 'property_id'
+      LIMIT 1
     `;
+    const hasLegacyPropertyId = legacyCols.length > 0;
+    const rows = hasLegacyPropertyId
+      ? await sql`
+          INSERT INTO properties (
+            legal_id, property_id, property_name, lien_holder, account_number,
+            address, city, state, zip, property_type,
+            units, bedrooms, bathrooms, sq_ft, year_built, purchase_date,
+            purchase_price, current_value, mortgage_balance, monthly_mortgage,
+            annual_property_tax, annual_insurance, monthly_hoa, monthly_rent, status, notes
+          ) VALUES (
+            ${data.legal_id}, ${data.legal_id}, ${data.property_name}, ${data.lien_holder},
+            ${data.account_number}, ${data.address}, ${data.city},
+            ${data.state}, ${data.zip}, ${data.property_type}, ${data.units},
+            ${data.bedrooms}, ${data.bathrooms}, ${data.sq_ft}, ${data.year_built},
+            ${data.purchase_date}, ${data.purchase_price}, ${data.current_value},
+            ${data.mortgage_balance}, ${data.monthly_mortgage}, ${data.annual_property_tax},
+            ${data.annual_insurance}, ${data.monthly_hoa}, ${data.monthly_rent}, ${data.status}, ${data.notes}
+          ) RETURNING *
+        `
+      : await sql`
+          INSERT INTO properties (
+            legal_id, property_name, lien_holder, account_number,
+            address, city, state, zip, property_type,
+            units, bedrooms, bathrooms, sq_ft, year_built, purchase_date,
+            purchase_price, current_value, mortgage_balance, monthly_mortgage,
+            annual_property_tax, annual_insurance, monthly_hoa, monthly_rent, status, notes
+          ) VALUES (
+            ${data.legal_id}, ${data.property_name}, ${data.lien_holder},
+            ${data.account_number}, ${data.address}, ${data.city},
+            ${data.state}, ${data.zip}, ${data.property_type}, ${data.units},
+            ${data.bedrooms}, ${data.bathrooms}, ${data.sq_ft}, ${data.year_built},
+            ${data.purchase_date}, ${data.purchase_price}, ${data.current_value},
+            ${data.mortgage_balance}, ${data.monthly_mortgage}, ${data.annual_property_tax},
+            ${data.annual_insurance}, ${data.monthly_hoa}, ${data.monthly_rent}, ${data.status}, ${data.notes}
+          ) RETURNING *
+        `;
     return mapProperty(rows[0] as Record<string, unknown>);
   }
   const db = await getSqliteDb();
-  const row = db
-    .prepare(
-      `INSERT INTO properties (
-        property_id, property_name, address, city, state, zip, property_type,
-        units, bedrooms, bathrooms, sq_ft, year_built, purchase_date,
-        purchase_price, current_value, mortgage_balance, monthly_mortgage,
-        annual_property_tax, annual_insurance, monthly_hoa, monthly_rent, status, notes
-      ) VALUES (
-        @property_id, @property_name, @address, @city, @state, @zip, @property_type,
-        @units, @bedrooms, @bathrooms, @sq_ft, @year_built, @purchase_date,
-        @purchase_price, @current_value, @mortgage_balance, @monthly_mortgage,
-        @annual_property_tax, @annual_insurance, @monthly_hoa, @monthly_rent, @status, @notes
-      ) RETURNING *`
-    )
-    .get(data);
+  const tableCols = db.pragma("table_info(properties)") as { name: string }[];
+  const hasLegacyPropertyId = tableCols.some((c) => c.name === "property_id");
+  const payload = { ...data, property_id: data.legal_id };
+  const row = hasLegacyPropertyId
+    ? db
+        .prepare(
+          `INSERT INTO properties (
+            legal_id, property_id, property_name, lien_holder, account_number,
+            address, city, state, zip, property_type,
+            units, bedrooms, bathrooms, sq_ft, year_built, purchase_date,
+            purchase_price, current_value, mortgage_balance, monthly_mortgage,
+            annual_property_tax, annual_insurance, monthly_hoa, monthly_rent, status, notes
+          ) VALUES (
+            @legal_id, @property_id, @property_name, @lien_holder, @account_number,
+            @address, @city, @state, @zip, @property_type,
+            @units, @bedrooms, @bathrooms, @sq_ft, @year_built, @purchase_date,
+            @purchase_price, @current_value, @mortgage_balance, @monthly_mortgage,
+            @annual_property_tax, @annual_insurance, @monthly_hoa, @monthly_rent, @status, @notes
+          ) RETURNING *`
+        )
+        .get(payload)
+    : db
+        .prepare(
+          `INSERT INTO properties (
+            legal_id, property_name, lien_holder, account_number,
+            address, city, state, zip, property_type,
+            units, bedrooms, bathrooms, sq_ft, year_built, purchase_date,
+            purchase_price, current_value, mortgage_balance, monthly_mortgage,
+            annual_property_tax, annual_insurance, monthly_hoa, monthly_rent, status, notes
+          ) VALUES (
+            @legal_id, @property_name, @lien_holder, @account_number,
+            @address, @city, @state, @zip, @property_type,
+            @units, @bedrooms, @bathrooms, @sq_ft, @year_built, @purchase_date,
+            @purchase_price, @current_value, @mortgage_balance, @monthly_mortgage,
+            @annual_property_tax, @annual_insurance, @monthly_hoa, @monthly_rent, @status, @notes
+          ) RETURNING *`
+        )
+        .get(data);
   db.close();
   return mapProperty(row as Record<string, unknown>);
 }

@@ -20,8 +20,10 @@ export const SHEET_TABS: { id: SheetTab; label: string }[] = [
 ];
 
 export const PROPERTY_COLUMNS: ColumnDef[] = [
-  { key: "property_id", label: "Property ID", type: "text", required: true, width: "100px" },
+  { key: "legal_id", label: "Legal ID", type: "text", required: true, width: "100px" },
   { key: "property_name", label: "Property Name", type: "text", required: true, width: "160px" },
+  { key: "lien_holder", label: "Lien Holder", type: "text", width: "150px" },
+  { key: "account_number", label: "Account Number", type: "text", width: "130px" },
   { key: "address", label: "Address", type: "text", required: true, width: "180px" },
   { key: "city", label: "City", type: "text", required: true, width: "120px" },
   { key: "state", label: "State", type: "text", required: true, width: "70px" },

@@ -9,8 +9,10 @@ export type SheetTab =
 
 export interface Property {
   id: number;
-  property_id: string;
+  legal_id: string;
   property_name: string;
+  lien_holder: string | null;
+  account_number: string | null;
   address: string;
   city: string;
   state: string;
