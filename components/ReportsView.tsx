@@ -197,7 +197,7 @@ export default function ReportsView({
           : reportKind === "investor_capital"
             ? [
                 {
-                  label: "Total Loaned",
+                  label: "Total Capital Received",
                   value: formatCurrency(investorCapitalReport.totalLoaned),
                   tone: "emerald",
                 },
@@ -383,7 +383,7 @@ export default function ReportsView({
                       <th className="px-3 py-2 font-semibold text-emerald-200">Investor</th>
                       <th className="px-3 py-2 font-semibold text-emerald-200">Records</th>
                       <th className="px-3 py-2 font-semibold text-emerald-200 text-right">
-                        Total Loaned
+                        Total Capital Received
                       </th>
                     </tr>
                   </thead>

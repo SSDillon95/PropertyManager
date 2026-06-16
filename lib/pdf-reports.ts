@@ -176,7 +176,7 @@ function renderLoanSummaryTable(
   autoTable(doc, {
     startY: infoEnd + 6,
     head: [
-      ["Amount Loaned", "12-Mo Rate", "Total Interest (12 mo)", "Days in Year", "Interest / Day"],
+      ["Capital Received", "12-Mo Rate", "Total Interest (12 mo)", "Days in Year", "Interest / Day"],
     ],
     body: [
       [
@@ -509,7 +509,7 @@ export async function buildInvestorCapitalReportPdf(
 
   autoTable(doc, {
     startY: contentStartY,
-    head: [["Investor", "Records", "Total Loaned"]],
+    head: [["Investor", "Records", "Total Capital Received"]],
     body: [
       ...report.byInvestor.map((r) => [
         r.investor_name,
@@ -535,7 +535,7 @@ export async function buildInvestorCapitalReportPdf(
 
     autoTable(doc, {
       startY: summaryY + 18,
-      head: [["Date", "Capital ID", "Investor", "Property", "Loaned", "Rate", "Loan Date", "Sell Est."]],
+      head: [["Date", "Capital ID", "Investor", "Property", "Capital Received", "Rate", "Loan Date", "Sell Est."]],
       body: report.lines.map((l) => [
         l.date,
         l.capital_id,

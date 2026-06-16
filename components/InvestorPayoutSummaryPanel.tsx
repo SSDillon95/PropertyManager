@@ -58,7 +58,7 @@ function SummaryGrid({ summary }: { summary: InvestorPayoutLoanSummary }) {
         <table className="w-full text-sm">
           <tbody>
             <tr className="border-b border-zinc-700/60 bg-zinc-800/50">
-              <td className="px-3 py-2 text-zinc-400">Total Amount Loaned</td>
+              <td className="px-3 py-2 text-zinc-400">Capital Received</td>
               <td className="px-3 py-2 text-right text-zinc-100">
                 {formatCurrency(summary.amount_loaned)}
               </td>
@@ -122,7 +122,7 @@ export default function InvestorPayoutSummaryPanel({
       <div className="rounded-xl border border-zinc-600/60 bg-zinc-800/90 p-4">
         <h3 className="text-sm font-semibold text-emerald-300 mb-2">{title}</h3>
         <p className="text-sm text-zinc-400">
-          Enter amount loaned, 12-month rate (e.g. 0.12), loan date, and sell estimate to
+          Enter capital received, 12-month rate (e.g. 0.12), loan date, and sell estimate to
           calculate payout totals.
         </p>
       </div>
@@ -141,7 +141,7 @@ export default function InvestorPayoutSummaryPanel({
           </div>
         </div>
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs text-zinc-400">
-          <div>Loaned: {formatCurrency(summary.amount_loaned)}</div>
+          <div>Capital Received: {formatCurrency(summary.amount_loaned)}</div>
           <div>Days Held: {summary.days_held}</div>
           <div>Interest: {formatMoneyPrecise(summary.interest_without_kicker)}</div>
           <div>Kicker: {formatCurrency(summary.kicker)}</div>

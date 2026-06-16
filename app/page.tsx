@@ -1251,7 +1251,7 @@ export default function PropertyManagerApp() {
                   )}
                   {tab === "investor_capital" && (
                     <p className="text-xs text-zinc-400 mt-1">
-                      Record capital raised for a property. Enter loan amount, 12-month rate
+                      Record capital raised for a property. Enter capital received, 12-month rate
                       (e.g. 0.12 = 12%), loan date, and sell estimate — the payout calculator
                       preview updates automatically.
                     </p>

@@ -319,7 +319,7 @@ export const INVESTOR_CAPITAL_COLUMNS: ColumnDef[] = [
   { key: "sell_estimate_date", label: "Sell Estimate", type: "date", width: "120px" },
   { key: "investor_name", label: "Investor", type: "investor", required: true, width: "150px" },
   { key: "attorney", label: "Attorney", type: "text", width: "130px" },
-  { key: "amount_loaned", label: "Amount Loaned", type: "currency", width: "120px" },
+  { key: "amount_loaned", label: "Capital Received", type: "currency", width: "120px" },
   { key: "annual_interest_rate", label: "12-Mo Rate", type: "number", width: "100px" },
   { key: "kicker", label: "Kicker", type: "currency", width: "100px" },
   { key: "days_in_year", label: "Days in Year", type: "number", width: "100px" },
