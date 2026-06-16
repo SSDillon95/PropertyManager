@@ -47,22 +47,19 @@ export default function LoginForm() {
         aria-hidden
       />
 
-      <header className="absolute top-0 left-0 z-20 pl-3 pt-3 sm:pl-5 sm:pt-4 pointer-events-none max-w-[95vw]">
-        <Image
-          src="/hop2it-logo.png"
-          alt="HOP2IT Property Manager"
-          width={800}
-          height={300}
-          className="h-[20rem] sm:h-[28rem] md:h-[36rem] lg:h-[44rem] w-auto object-contain object-left-top drop-shadow-[0_2px_12px_rgba(255,255,255,0.25)]"
-          style={{ objectPosition: "43% 45%" }}
-          priority
-        />
-      </header>
-
-      <div className="relative z-30 min-h-screen flex items-center justify-center px-4">
+      <div className="relative z-10 min-h-screen flex items-center justify-center px-4 py-10">
         <div className="w-full max-w-md rounded-2xl border border-zinc-600/70 bg-zinc-900/85 backdrop-blur shadow-2xl shadow-black/40 p-8 sm:p-10">
-          <div className="text-center mb-8">
-            <p className="text-sm text-zinc-400">Sign in to continue</p>
+          <div className="flex flex-col items-center text-center mb-8">
+            <Image
+              src="/hop2it-logo.png"
+              alt="HOP2IT Property Manager"
+              width={800}
+              height={300}
+              className="h-48 sm:h-60 w-auto max-w-full object-contain drop-shadow-[0_2px_12px_rgba(255,255,255,0.25)]"
+              style={{ objectPosition: "43% 45%" }}
+              priority
+            />
+            <p className="mt-5 text-sm text-zinc-400">Sign in to continue</p>
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-5">
