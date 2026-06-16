@@ -40,29 +40,34 @@ export default function LoginForm() {
   };
 
   return (
-    <div className="min-h-screen bg-zinc-800 text-zinc-100 font-sans flex items-center justify-center relative px-4 py-10">
+    <div className="min-h-screen bg-zinc-800 text-zinc-100 font-sans relative">
       <div
         className="fixed inset-0 bg-cover bg-center bg-no-repeat opacity-28 pointer-events-none"
         style={{ backgroundImage: "url('/apartment-bg.jpg')" }}
         aria-hidden
       />
 
-      <div className="relative z-10 w-full max-w-xl">
-        <div className="rounded-2xl border border-zinc-600/70 bg-zinc-900/85 backdrop-blur shadow-2xl shadow-black/40 p-8 sm:p-10">
-          <div className="flex flex-col items-center text-center mb-8">
-            <Image
-              src="/hop2it-logo.png"
-              alt="HOP2IT Property Manager"
-              width={800}
-              height={300}
-              className="h-48 sm:h-60 w-auto max-w-full object-contain drop-shadow-[0_2px_12px_rgba(255,255,255,0.25)]"
-              priority
-            />
-            <h1 className="mt-5 text-xl font-semibold text-zinc-100">Property Manager</h1>
-            <p className="mt-2 text-sm text-zinc-400">Sign in to continue</p>
-          </div>
+      <div className="relative z-10 min-h-screen flex flex-col lg:flex-row">
+        <div className="flex flex-1 items-center justify-center px-6 py-10 lg:py-0">
+          <Image
+            src="/hop2it-logo.png"
+            alt="HOP2IT Property Manager"
+            width={800}
+            height={300}
+            className="h-44 sm:h-56 lg:h-72 w-auto max-w-[min(100%,28rem)] object-contain drop-shadow-[0_2px_12px_rgba(255,255,255,0.25)]"
+            style={{ objectPosition: "43% 45%" }}
+            priority
+          />
+        </div>
 
-          <form onSubmit={handleSubmit} className="space-y-5">
+        <div className="flex flex-1 items-center justify-center px-4 pb-10 lg:pb-0 lg:px-8">
+          <div className="w-full max-w-md rounded-2xl border border-zinc-600/70 bg-zinc-900/85 backdrop-blur shadow-2xl shadow-black/40 p-8 sm:p-10">
+            <div className="text-center mb-8">
+              <h1 className="text-xl font-semibold text-zinc-100">Property Manager</h1>
+              <p className="mt-2 text-sm text-zinc-400">Sign in to continue</p>
+            </div>
+
+            <form onSubmit={handleSubmit} className="space-y-5">
             <div>
               <label htmlFor="username" className="block text-sm font-medium text-zinc-300 mb-2">
                 Username
@@ -111,6 +116,7 @@ export default function LoginForm() {
               {submitting ? "Signing in..." : "Sign In"}
             </button>
           </form>
+          </div>
         </div>
       </div>
     </div>
