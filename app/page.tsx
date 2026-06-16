@@ -1526,7 +1526,7 @@ export default function PropertyManagerApp() {
                           : "border-emerald-600/60 bg-emerald-900/30 text-emerald-300 hover:bg-emerald-900/50"
                       }`}
                     >
-                      Add Row
+                      {tab === "users" ? "Add User" : "Add Row"}
                     </button>
                   )}
                   {tab !== "users" && (
