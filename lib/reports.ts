@@ -1,0 +1,248 @@
+import type { Expense, Property, RentPayment } from "./types";
+
+export type ReportKind = "pl" | "income" | "expense";
+
+export interface ReportFilters {
+  startDate: string;
+  endDate: string;
+  propertyName?: string;
+}
+
+function n(value: number | null | undefined): number {
+  return value ?? 0;
+}
+
+export function isDateInRange(date: string, start: string, end: string): boolean {
+  return date >= start && date <= end;
+}
+
+export function monthsInRange(start: string, end: string): number {
+  const s = new Date(`${start}T00:00:00`);
+  const e = new Date(`${end}T00:00:00`);
+  return Math.max(
+    1,
+    (e.getFullYear() - s.getFullYear()) * 12 + (e.getMonth() - s.getMonth()) + 1
+  );
+}
+
+export function defaultReportRange(): { startDate: string; endDate: string } {
+  const now = new Date();
+  const startDate = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-01`;
+  const endDate = now.toISOString().slice(0, 10);
+  return { startDate, endDate };
+}
+
+function monthlyFixedCosts(property: Property): number {
+  return (
+    n(property.monthly_mortgage) +
+    n(property.monthly_hoa) +
+    n(property.annual_property_tax) / 12 +
+    n(property.annual_insurance) / 12
+  );
+}
+
+function matchesProperty(propertyName: string, filter?: string): boolean {
+  return !filter || propertyName === filter;
+}
+
+export interface IncomeLine {
+  date: string;
+  property_name: string;
+  tenant_name: string;
+  amount_paid: number;
+  late_fee: number;
+  total: number;
+  status: string;
+}
+
+export interface IncomeReport {
+  period: ReportFilters;
+  lines: IncomeLine[];
+  byProperty: { property_name: string; total: number }[];
+  totalIncome: number;
+}
+
+export function buildIncomeReport(
+  payments: RentPayment[],
+  filters: ReportFilters
+): IncomeReport {
+  const lines = payments
+    .filter(
+      (p) =>
+        isDateInRange(p.date, filters.startDate, filters.endDate) &&
+        matchesProperty(p.property_name, filters.propertyName)
+    )
+    .map((p) => ({
+      date: p.date,
+      property_name: p.property_name,
+      tenant_name: p.tenant_name,
+      amount_paid: n(p.amount_paid),
+      late_fee: n(p.late_fee),
+      total: n(p.amount_paid) + n(p.late_fee),
+      status: p.status,
+    }))
+    .sort((a, b) => b.date.localeCompare(a.date));
+
+  const propertyTotals = new Map<string, number>();
+  for (const line of lines) {
+    propertyTotals.set(
+      line.property_name,
+      (propertyTotals.get(line.property_name) ?? 0) + line.total
+    );
+  }
+
+  const byProperty = [...propertyTotals.entries()]
+    .map(([property_name, total]) => ({ property_name, total }))
+    .sort((a, b) => b.total - a.total);
+
+  return {
+    period: filters,
+    lines,
+    byProperty,
+    totalIncome: lines.reduce((sum, l) => sum + l.total, 0),
+  };
+}
+
+export interface ExpenseLine {
+  date: string;
+  property_name: string;
+  category: string;
+  vendor: string;
+  description: string;
+  amount: number;
+}
+
+export interface ExpenseReport {
+  period: ReportFilters;
+  lines: ExpenseLine[];
+  byProperty: { property_name: string; total: number }[];
+  byCategory: { category: string; total: number }[];
+  totalExpenses: number;
+}
+
+export function buildExpenseReport(
+  expenses: Expense[],
+  filters: ReportFilters
+): ExpenseReport {
+  const lines = expenses
+    .filter(
+      (e) =>
+        isDateInRange(e.date, filters.startDate, filters.endDate) &&
+        matchesProperty(e.property_name, filters.propertyName)
+    )
+    .map((e) => ({
+      date: e.date,
+      property_name: e.property_name,
+      category: e.category,
+      vendor: e.vendor ?? "",
+      description: e.description ?? "",
+      amount: n(e.amount),
+    }))
+    .sort((a, b) => b.date.localeCompare(a.date));
+
+  const propertyTotals = new Map<string, number>();
+  const categoryTotals = new Map<string, number>();
+  for (const line of lines) {
+    propertyTotals.set(
+      line.property_name,
+      (propertyTotals.get(line.property_name) ?? 0) + line.amount
+    );
+    categoryTotals.set(
+      line.category,
+      (categoryTotals.get(line.category) ?? 0) + line.amount
+    );
+  }
+
+  return {
+    period: filters,
+    lines,
+    byProperty: [...propertyTotals.entries()]
+      .map(([property_name, total]) => ({ property_name, total }))
+      .sort((a, b) => b.total - a.total),
+    byCategory: [...categoryTotals.entries()]
+      .map(([category, total]) => ({ category, total }))
+      .sort((a, b) => b.total - a.total),
+    totalExpenses: lines.reduce((sum, l) => sum + l.amount, 0),
+  };
+}
+
+export interface PLPropertyRow {
+  property_name: string;
+  rentalIncome: number;
+  operatingExpenses: number;
+  fixedCosts: number;
+  netPL: number;
+}
+
+export interface PLReport {
+  period: ReportFilters;
+  months: number;
+  rows: PLPropertyRow[];
+  totalIncome: number;
+  totalOperatingExpenses: number;
+  totalFixedCosts: number;
+  netPL: number;
+}
+
+export function buildPLReport(
+  properties: Property[],
+  payments: RentPayment[],
+  expenses: Expense[],
+  filters: ReportFilters
+): PLReport {
+  const months = monthsInRange(filters.startDate, filters.endDate);
+  const incomeReport = buildIncomeReport(payments, filters);
+  const expenseReport = buildExpenseReport(expenses, filters);
+
+  const incomeByProperty = new Map(
+    incomeReport.byProperty.map((r) => [r.property_name, r.total])
+  );
+  const expenseByProperty = new Map(
+    expenseReport.byProperty.map((r) => [r.property_name, r.total])
+  );
+
+  const propertyNames = new Set<string>();
+  for (const p of properties) {
+    if (matchesProperty(p.property_name, filters.propertyName)) {
+      propertyNames.add(p.property_name);
+    }
+  }
+  for (const name of incomeByProperty.keys()) {
+    if (matchesProperty(name, filters.propertyName)) propertyNames.add(name);
+  }
+  for (const name of expenseByProperty.keys()) {
+    if (matchesProperty(name, filters.propertyName)) propertyNames.add(name);
+  }
+
+  const propertyByName = new Map(properties.map((p) => [p.property_name, p]));
+
+  const rows: PLPropertyRow[] = [...propertyNames]
+    .sort()
+    .map((property_name) => {
+      const property = propertyByName.get(property_name);
+      const rentalIncome = incomeByProperty.get(property_name) ?? 0;
+      const operatingExpenses = expenseByProperty.get(property_name) ?? 0;
+      const fixedCosts = property ? monthlyFixedCosts(property) * months : 0;
+      return {
+        property_name,
+        rentalIncome,
+        operatingExpenses,
+        fixedCosts,
+        netPL: rentalIncome - operatingExpenses - fixedCosts,
+      };
+    });
+
+  const totalIncome = rows.reduce((s, r) => s + r.rentalIncome, 0);
+  const totalOperatingExpenses = rows.reduce((s, r) => s + r.operatingExpenses, 0);
+  const totalFixedCosts = rows.reduce((s, r) => s + r.fixedCosts, 0);
+
+  return {
+    period: filters,
+    months,
+    rows,
+    totalIncome,
+    totalOperatingExpenses,
+    totalFixedCosts,
+    netPL: totalIncome - totalOperatingExpenses - totalFixedCosts,
+  };
+}

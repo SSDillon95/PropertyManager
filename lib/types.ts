@@ -5,7 +5,8 @@ export type SheetTab =
   | "leases"
   | "rent_ledger"
   | "expenses"
-  | "maintenance";
+  | "maintenance"
+  | "reports";
 
 export interface Property {
   id: number;

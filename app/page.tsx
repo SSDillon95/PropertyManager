@@ -2,18 +2,29 @@
 
 import Image from "next/image";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import ReportsView from "@/components/ReportsView";
 import SpreadsheetTable from "@/components/SpreadsheetTable";
 import { getColumnsForTab, SHEET_TABS, type ColumnDef } from "@/lib/columns";
 import { formatCurrency, todayIso } from "@/lib/format";
 import { propertyProfitability } from "@/lib/profitability";
 import { rentDetailsForProperty, tenantDisplayName } from "@/lib/rent-ledger";
-import type { DashboardSummary, Lease, Property, SheetTab, Tenant } from "@/lib/types";
+import type {
+  DashboardSummary,
+  Expense,
+  Lease,
+  Property,
+  RentPayment,
+  SheetTab,
+  Tenant,
+} from "@/lib/types";
 
 function apiFetch(input: RequestInfo | URL, init?: RequestInit) {
   return fetch(input, { cache: "no-store", ...init });
 }
 
-const API_MAP: Record<Exclude<SheetTab, "dashboard">, string> = {
+type DataTab = Exclude<SheetTab, "dashboard" | "reports">;
+
+const API_MAP: Record<DataTab, string> = {
   properties: "/api/properties",
   tenants: "/api/tenants",
   leases: "/api/leases",
@@ -69,6 +80,8 @@ export default function PropertyManagerApp() {
   const [properties, setProperties] = useState<Property[]>([]);
   const [tenants, setTenants] = useState<Tenant[]>([]);
   const [leases, setLeases] = useState<Lease[]>([]);
+  const [rentPayments, setRentPayments] = useState<RentPayment[]>([]);
+  const [expenseRows, setExpenseRows] = useState<Expense[]>([]);
   const [profitabilityProperty, setProfitabilityProperty] = useState<Property | null>(null);
 
   const columns = useMemo(() => getColumnsForTab(tab), [tab]);
@@ -106,10 +119,27 @@ export default function PropertyManagerApp() {
     if (json.success) setLeases(json.data);
   }, []);
 
+  const loadRentPayments = useCallback(async () => {
+    const res = await apiFetch("/api/rent-payments");
+    const json = await res.json();
+    if (json.success) setRentPayments(json.data);
+  }, []);
+
+  const loadExpenseRows = useCallback(async () => {
+    const res = await apiFetch("/api/expenses");
+    const json = await res.json();
+    if (json.success) setExpenseRows(json.data);
+  }, []);
+
   const loadTabData = useCallback(
     async (activeTab: SheetTab, archived = false) => {
       if (activeTab === "dashboard") {
         await loadDashboard();
+        setRows([]);
+        return;
+      }
+      if (activeTab === "reports") {
+        await Promise.all([loadProperties(), loadRentPayments(), loadExpenseRows()]);
         setRows([]);
         return;
       }
@@ -131,7 +161,7 @@ export default function PropertyManagerApp() {
       const json = await res.json();
       if (json.success) setRows(json.data);
     },
-    [loadDashboard, loadProperties, loadTenants, loadLeases]
+    [loadDashboard, loadProperties, loadTenants, loadLeases, loadRentPayments, loadExpenseRows]
   );
 
   const handlePropertySelect = (propertyName: string, fieldKey: string) => {
@@ -180,7 +210,7 @@ export default function PropertyManagerApp() {
   }, [refresh]);
 
   useEffect(() => {
-    if (tab !== "dashboard") {
+    if (tab !== "dashboard" && tab !== "reports") {
       setForm(emptyForm(columns));
       setFormOpen(false);
     }
@@ -218,7 +248,7 @@ export default function PropertyManagerApp() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (tab === "dashboard") return;
+    if (tab === "dashboard" || tab === "reports") return;
 
     const missing = columns.find((c) => c.required && !form[c.key]?.trim());
     if (missing) {
@@ -251,7 +281,7 @@ export default function PropertyManagerApp() {
   };
 
   const handleArchive = async (id: number) => {
-    if (tab === "dashboard") return;
+    if (tab === "dashboard" || tab === "reports") return;
     setActionId(id);
     try {
       const endpoint = API_MAP[tab];
@@ -268,7 +298,7 @@ export default function PropertyManagerApp() {
   };
 
   const handleRestore = async (id: number) => {
-    if (tab === "dashboard") return;
+    if (tab === "dashboard" || tab === "reports") return;
     setActionId(id);
     try {
       const endpoint = API_MAP[tab];
@@ -285,7 +315,7 @@ export default function PropertyManagerApp() {
   };
 
   const exportCsv = () => {
-    if (tab === "dashboard" || rows.length === 0) return;
+    if (tab === "dashboard" || tab === "reports" || rows.length === 0) return;
     const headers = columns.map((c) => c.label);
     const lines = [
       headers.join(","),
@@ -336,7 +366,7 @@ export default function PropertyManagerApp() {
             ))}
           </div>
           <div className="flex items-center gap-2 sm:gap-3 shrink-0">
-            {tab !== "dashboard" && rows.length > 0 && (
+            {tab !== "dashboard" && tab !== "reports" && rows.length > 0 && (
               <button
                 type="button"
                 onClick={exportCsv}
@@ -382,6 +412,12 @@ export default function PropertyManagerApp() {
           <div className="text-zinc-400 py-12 text-center">Loading...</div>
         ) : tab === "dashboard" ? (
           <DashboardView summary={summary} />
+        ) : tab === "reports" ? (
+          <ReportsView
+            properties={properties}
+            rentPayments={rentPayments}
+            expenses={expenseRows}
+          />
         ) : (
           <div className="space-y-6">
             {!showArchived && formOpen && (
@@ -656,7 +692,7 @@ export default function PropertyManagerApp() {
 
       <footer className="relative z-10 border-t border-zinc-600/60 bg-zinc-800/90 py-4 text-center text-xs text-zinc-500 shrink-0">
         HOP2IT Property Manager — Properties, Tenants, Leases, Rent Ledger, Expenses,
-        Maintenance
+        Maintenance, Reports
       </footer>
       </div>
     </div>

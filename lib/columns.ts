@@ -17,6 +17,7 @@ export const SHEET_TABS: { id: SheetTab; label: string }[] = [
   { id: "rent_ledger", label: "Rent Ledger" },
   { id: "expenses", label: "Expenses" },
   { id: "maintenance", label: "Maintenance" },
+  { id: "reports", label: "Reports" },
 ];
 
 export const PROPERTY_COLUMNS: ColumnDef[] = [
