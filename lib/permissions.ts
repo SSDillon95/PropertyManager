@@ -23,7 +23,7 @@ export function settingsTabsForRole(role: UserRole): { id: SheetTab; label: stri
     { id: "tenants", label: "Tenants" },
   ];
   if (isAdminRole(role)) {
-    tabs.push({ id: "investors", label: "Investor Contacts" });
+    tabs.push({ id: "investors", label: "Investor" });
     tabs.push({ id: "users", label: "User Setup" });
   }
   return tabs;

@@ -29,7 +29,7 @@ export const MANAGEMENT_TABS: { id: SheetTab; label: string }[] = [
 export const SETTINGS_TABS: { id: SheetTab; label: string }[] = [
   { id: "businesses", label: "Business" },
   { id: "tenants", label: "Tenants" },
-  { id: "investors", label: "Investor Contacts" },
+  { id: "investors", label: "Investor" },
   { id: "users", label: "User Setup" },
 ];
 
