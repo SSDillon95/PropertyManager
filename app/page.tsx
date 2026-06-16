@@ -254,12 +254,13 @@ export default function PropertyManagerApp() {
   return (
     <div className="min-h-screen bg-zinc-950 text-white font-sans flex flex-col relative">
       <div
-        className="fixed inset-0 bg-cover bg-center bg-no-repeat opacity-20 pointer-events-none"
+        className="fixed inset-0 bg-cover bg-center bg-no-repeat opacity-25 pointer-events-none"
         style={{ backgroundImage: "url('/apartment-bg.jpg')" }}
         aria-hidden
       />
       <div className="relative z-10 flex flex-col flex-1 min-h-screen">
-      <header className="border-b border-white/10 bg-zinc-950/90 backdrop-blur sticky top-0 z-50">
+      <div className="sticky top-0 z-50 bg-zinc-950/90 backdrop-blur border-b border-white/10">
+      <header>
         <div className="max-w-[1600px] mx-auto px-4 sm:px-6 py-3 min-h-[9rem] sm:min-h-[11rem] flex items-center justify-between gap-4">
           <div className="flex items-center min-w-0">
             <Image
@@ -292,7 +293,7 @@ export default function PropertyManagerApp() {
         </div>
       </header>
 
-      <div className="border-b border-white/10 bg-zinc-900/90 overflow-x-auto">
+      <nav className="bg-zinc-900/90 overflow-x-auto">
         <div className="max-w-[1600px] mx-auto px-2 flex">
           {SHEET_TABS.map((sheet) => (
             <button
@@ -309,6 +310,7 @@ export default function PropertyManagerApp() {
             </button>
           ))}
         </div>
+      </nav>
       </div>
 
       {message && (
@@ -491,9 +493,6 @@ function DashboardView({ summary }: { summary: DashboardSummary | null }) {
     <div className="space-y-6">
       <div>
         <h1 className="text-3xl font-semibold tracking-tighter mb-2">Dashboard</h1>
-        <p className="text-zinc-400">
-          Summary view matching your property management spreadsheet overview.
-        </p>
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
