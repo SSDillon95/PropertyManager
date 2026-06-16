@@ -254,12 +254,31 @@ export default function PropertyManagerApp() {
   return (
     <div className="min-h-screen bg-zinc-950 text-white font-sans flex flex-col relative">
       <div
-        className="fixed inset-0 bg-cover bg-center bg-no-repeat opacity-25 pointer-events-none"
+        className="fixed inset-0 bg-cover bg-center bg-no-repeat opacity-30 pointer-events-none"
         style={{ backgroundImage: "url('/apartment-bg.jpg')" }}
         aria-hidden
       />
       <div className="relative z-10 flex flex-col flex-1 min-h-screen">
       <div className="sticky top-0 z-50 bg-zinc-950/90 backdrop-blur border-b border-white/10">
+      <nav className="bg-zinc-900/90 overflow-x-auto border-b border-white/10">
+        <div className="max-w-[1600px] mx-auto px-2 flex">
+          {SHEET_TABS.map((sheet) => (
+            <button
+              key={sheet.id}
+              type="button"
+              onClick={() => handleTabChange(sheet.id)}
+              className={`px-4 py-2.5 text-sm whitespace-nowrap border-b-2 transition ${
+                tab === sheet.id
+                  ? "border-blue-500 text-blue-400 bg-zinc-950/60"
+                  : "border-transparent text-zinc-400 hover:text-white hover:bg-zinc-950/30"
+              }`}
+            >
+              {sheet.label}
+            </button>
+          ))}
+        </div>
+      </nav>
+
       <header>
         <div className="max-w-[1600px] mx-auto px-4 sm:px-6 py-3 min-h-[9rem] sm:min-h-[11rem] flex items-center justify-between gap-4">
           <div className="flex items-center min-w-0">
@@ -292,25 +311,6 @@ export default function PropertyManagerApp() {
           </div>
         </div>
       </header>
-
-      <nav className="bg-zinc-900/90 overflow-x-auto">
-        <div className="max-w-[1600px] mx-auto px-2 flex">
-          {SHEET_TABS.map((sheet) => (
-            <button
-              key={sheet.id}
-              type="button"
-              onClick={() => handleTabChange(sheet.id)}
-              className={`px-4 py-2.5 text-sm whitespace-nowrap border-b-2 transition ${
-                tab === sheet.id
-                  ? "border-blue-500 text-blue-400 bg-zinc-950/60"
-                  : "border-transparent text-zinc-400 hover:text-white hover:bg-zinc-950/30"
-              }`}
-            >
-              {sheet.label}
-            </button>
-          ))}
-        </div>
-      </nav>
       </div>
 
       {message && (
