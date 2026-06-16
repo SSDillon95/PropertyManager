@@ -13,7 +13,7 @@ import type { InvestorPayout } from "./types";
 const LOGO_PATH = "/hop2it-logo.png";
 const PAGE_MARGIN = 14;
 const LOGO_WIDTH = 108;
-const LOGO_BOTTOM_GAP = 18;
+const HEADER_TEXT_GAP = 12;
 const TITLE_META_GAP = 10;
 const META_LINE_GAP = 7;
 const DIVIDER_CONTENT_GAP = 14;
@@ -96,25 +96,17 @@ function displayField(value: string | number | null | undefined): string {
   return String(value);
 }
 
-function pageCenterX(doc: jsPDF): number {
-  return doc.internal.pageSize.getWidth() / 2;
+function headerTextX(): number {
+  return PAGE_MARGIN + LOGO_WIDTH + HEADER_TEXT_GAP;
 }
 
-function placeLogoTopCenter(doc: jsPDF, logo: string): number {
-  const pageWidth = doc.internal.pageSize.getWidth();
+function placeLogoTopLeft(doc: jsPDF, logo: string): number {
   const logoHeight = logoDisplayHeight();
-  doc.addImage(
-    logo,
-    "PNG",
-    (pageWidth - LOGO_WIDTH) / 2,
-    PAGE_MARGIN,
-    LOGO_WIDTH,
-    logoHeight
-  );
-  return PAGE_MARGIN + logoHeight;
+  doc.addImage(logo, "PNG", PAGE_MARGIN, PAGE_MARGIN, LOGO_WIDTH, logoHeight);
+  return logoHeight;
 }
 
-function drawCenteredText(
+function drawHeaderText(
   doc: jsPDF,
   text: string,
   y: number,
@@ -123,7 +115,22 @@ function drawCenteredText(
   doc.setFont("helvetica", options?.bold ? "bold" : "normal");
   doc.setFontSize(options?.fontSize ?? 10);
   if (options?.color) doc.setTextColor(...options.color);
-  doc.text(text, pageCenterX(doc), y, { align: "center" });
+  doc.text(text, headerTextX(), y, { align: "left" });
+}
+
+function drawBodyText(
+  doc: jsPDF,
+  text: string,
+  y: number,
+  options?: { fontSize?: number; bold?: boolean; color?: [number, number, number]; maxWidth?: number }
+) {
+  doc.setFont("helvetica", options?.bold ? "bold" : "normal");
+  doc.setFontSize(options?.fontSize ?? 10);
+  if (options?.color) doc.setTextColor(...options.color);
+  doc.text(text, PAGE_MARGIN, y, {
+    align: "left",
+    maxWidth: options?.maxWidth ?? doc.internal.pageSize.getWidth() - PAGE_MARGIN * 2,
+  });
 }
 
 function drawHeaderDivider(doc: jsPDF, y: number) {
@@ -140,28 +147,28 @@ async function renderPdfHeader(
   options?: { contentGap?: number }
 ): Promise<number> {
   const logo = await loadLogoDataUrl();
-  const logoBottom = placeLogoTopCenter(doc, logo);
+  const logoHeight = placeLogoTopLeft(doc, logo);
 
-  let y = logoBottom + LOGO_BOTTOM_GAP;
-  drawCenteredText(doc, title, y, {
+  let y = PAGE_MARGIN + 11;
+  drawHeaderText(doc, title, y, {
     fontSize: 15,
     bold: true,
     color: [REPORT_GREEN.r, REPORT_GREEN.g, REPORT_GREEN.b],
   });
 
-  y += TITLE_META_GAP;
+  y += TITLE_META_GAP + 2;
   for (const line of metaLines) {
-    drawCenteredText(doc, line, y, { color: [80, 80, 80] });
+    drawHeaderText(doc, line, y, { color: [80, 80, 80] });
     y += META_LINE_GAP;
   }
 
-  y += 6;
-  drawHeaderDivider(doc, y);
-  return y + (options?.contentGap ?? DIVIDER_CONTENT_GAP);
+  const headerBottom = Math.max(PAGE_MARGIN + logoHeight, y) + 8;
+  drawHeaderDivider(doc, headerBottom);
+  return headerBottom + (options?.contentGap ?? DIVIDER_CONTENT_GAP);
 }
 
-function addCenteredSubtitle(doc: jsPDF, y: number, text: string): number {
-  drawCenteredText(doc, text, y, { fontSize: 9, color: [80, 80, 80] });
+function addSubtitle(doc: jsPDF, y: number, text: string): number {
+  drawBodyText(doc, text, y, { fontSize: 9, color: [80, 80, 80] });
   return y + 10;
 }
 
@@ -276,7 +283,7 @@ export async function downloadPLPdf(report: PLReport): Promise<void> {
     "Profit & Loss Report",
     standardReportMeta(startDate, endDate)
   );
-  contentStartY = addCenteredSubtitle(
+  contentStartY = addSubtitle(
     doc,
     contentStartY,
     `Carrying costs prorated over ${report.months} month(s)`
@@ -309,13 +316,11 @@ export async function downloadPLPdf(report: PLReport): Promise<void> {
   const notesY = (doc as jsPDF & { lastAutoTable?: { finalY: number } }).lastAutoTable
     ?.finalY ?? contentStartY;
 
-  doc.setFontSize(8);
-  doc.setTextColor(100, 100, 100);
-  doc.text(
+  drawBodyText(
+    doc,
     "Rental income from Rent Ledger. Operating expenses from Expenses tab. Fixed costs include mortgage, HOA, tax, and insurance from Properties.",
-    pageCenterX(doc),
     notesY + 12,
-    { align: "center", maxWidth: 170 }
+    { fontSize: 8, color: [100, 100, 100] }
   );
 
   savePdf(doc, "pl", startDate, endDate);
@@ -330,7 +335,7 @@ export async function downloadVendorPayoutPdf(report: VendorPayoutReport): Promi
     "Vendor Payout Report",
     standardReportMeta(startDate, endDate)
   );
-  contentStartY = addCenteredSubtitle(
+  contentStartY = addSubtitle(
     doc,
     contentStartY,
     "Payments to vendors from Expenses and Maintenance tabs."
@@ -385,7 +390,7 @@ export async function downloadInvestorPayoutReportPdf(
     propertyName ? `Property: ${propertyName}` : null,
     investorName ? `Investor: ${investorName}` : null,
   ].filter(Boolean);
-  contentStartY = addCenteredSubtitle(
+  contentStartY = addSubtitle(
     doc,
     contentStartY,
     filterParts.length
@@ -413,7 +418,7 @@ export async function downloadInvestorPayoutReportPdf(
     ?.finalY ?? contentStartY;
 
   if (report.lines.length > 0) {
-    drawCenteredText(doc, "Payout Detail", summaryY + 14, {
+    drawBodyText(doc, "Payout Detail", summaryY + 14, {
       fontSize: 10,
       bold: true,
       color: [REPORT_GREEN.r, REPORT_GREEN.g, REPORT_GREEN.b],
@@ -507,14 +512,11 @@ export async function downloadInvestorPayoutPdf(
   doc.setFontSize(14);
   doc.text(money(payout.payout_amount), 20, tableEnd + 30);
 
-  doc.setFont("helvetica", "normal");
-  doc.setFontSize(8);
-  doc.setTextColor(100, 100, 100);
-  doc.text(
+  drawBodyText(
+    doc,
     "This document confirms investor payout details recorded in HOP2IT Property Manager.",
-    pageCenterX(doc),
     tableEnd + 42,
-    { align: "center", maxWidth: 170 }
+    { fontSize: 8, color: [100, 100, 100] }
   );
 
   const safeId = payout.payout_id.replace(/[^a-zA-Z0-9_-]+/g, "-");
