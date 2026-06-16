@@ -367,7 +367,7 @@ export interface InvestorPayoutReportLine {
 export interface InvestorPayoutReportSummary {
   period: ReportFilters;
   lines: InvestorPayoutReportLine[];
-  byInvestor: { investor_name: string; total: number }[];
+  byInvestor: { investor_name: string; total: number; count: number }[];
   byProperty: { property_name: string; total: number }[];
   byPayoutType: { payout_type: string; total: number }[];
   totalPayouts: number;
@@ -398,14 +398,15 @@ export function buildInvestorPayoutReport(
     }))
     .sort((a, b) => b.date.localeCompare(a.date));
 
-  const investorTotals = new Map<string, number>();
+  const investorTotals = new Map<string, { total: number; count: number }>();
   const propertyTotals = new Map<string, number>();
   const typeTotals = new Map<string, number>();
   for (const line of lines) {
-    investorTotals.set(
-      line.investor_name,
-      (investorTotals.get(line.investor_name) ?? 0) + line.payout_amount
-    );
+    const current = investorTotals.get(line.investor_name) ?? { total: 0, count: 0 };
+    investorTotals.set(line.investor_name, {
+      total: current.total + line.payout_amount,
+      count: current.count + 1,
+    });
     propertyTotals.set(
       line.property_name,
       (propertyTotals.get(line.property_name) ?? 0) + line.payout_amount
@@ -420,7 +421,11 @@ export function buildInvestorPayoutReport(
     period: filters,
     lines,
     byInvestor: [...investorTotals.entries()]
-      .map(([investor_name, total]) => ({ investor_name, total }))
+      .map(([investor_name, stats]) => ({
+        investor_name,
+        total: stats.total,
+        count: stats.count,
+      }))
       .sort((a, b) => b.total - a.total),
     byProperty: [...propertyTotals.entries()]
       .map(([property_name, total]) => ({ property_name, total }))

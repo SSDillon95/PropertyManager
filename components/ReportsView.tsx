@@ -60,7 +60,7 @@ const REPORT_OPTIONS: { id: ReportKind; label: string; description: string }[] =
   {
     id: "investor_payout",
     label: "Investor Payout Report",
-    description: "Investor distributions from the Investor Payout tab, filterable by investor and property.",
+    description: "Totals investor payouts by investor with optional property and investor filters.",
   },
 ];
 
@@ -365,6 +365,58 @@ export default function ReportsView({
             </div>
           ))}
         </div>
+
+        {reportKind === "investor_payout" && (
+          <div className="mt-6">
+            <h3 className="text-sm font-semibold text-emerald-300 mb-3">
+              Totals by Investor
+            </h3>
+            {investorPayoutReport.byInvestor.length === 0 ? (
+              <p className="text-sm text-zinc-400">
+                No investor payouts match the selected filters.
+              </p>
+            ) : (
+              <div className="overflow-x-auto rounded-lg border border-zinc-600/60">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="bg-emerald-900/40 text-left">
+                      <th className="px-3 py-2 font-semibold text-emerald-200">Investor</th>
+                      <th className="px-3 py-2 font-semibold text-emerald-200">Payouts</th>
+                      <th className="px-3 py-2 font-semibold text-emerald-200 text-right">
+                        Total
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {investorPayoutReport.byInvestor.map((row, idx) => (
+                      <tr
+                        key={row.investor_name}
+                        className={`border-t border-zinc-700/60 ${
+                          idx % 2 === 0 ? "bg-zinc-800/50" : "bg-zinc-700/30"
+                        }`}
+                      >
+                        <td className="px-3 py-2 text-zinc-100">{row.investor_name}</td>
+                        <td className="px-3 py-2 text-zinc-300">{row.count}</td>
+                        <td className="px-3 py-2 text-emerald-400 text-right font-medium">
+                          {formatCurrency(row.total)}
+                        </td>
+                      </tr>
+                    ))}
+                    <tr className="border-t border-zinc-600 bg-zinc-700/50 font-semibold">
+                      <td className="px-3 py-2 text-zinc-100">Total</td>
+                      <td className="px-3 py-2 text-zinc-300">
+                        {investorPayoutReport.lines.length}
+                      </td>
+                      <td className="px-3 py-2 text-emerald-400 text-right">
+                        {formatCurrency(investorPayoutReport.totalPayouts)}
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        )}
       </section>
     </div>
   );

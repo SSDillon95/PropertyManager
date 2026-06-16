@@ -324,7 +324,7 @@ export async function downloadInvestorPayoutReportPdf(
   const doc = new jsPDF();
   const { startDate, endDate, propertyName, investorName } = report.period;
 
-  await addHeader(doc, "Investor Payout Report", startDate, endDate);
+  await addHeader(doc, "Investor Payout Report — By Investor", startDate, endDate);
 
   doc.setFontSize(9);
   doc.setTextColor(80, 80, 80);
@@ -335,62 +335,51 @@ export async function downloadInvestorPayoutReportPdf(
   doc.text(
     filterParts.length
       ? `Filters: ${filterParts.join(" · ")}`
-      : "Filters: All properties and investors",
+      : "All investor payouts in period, totaled by investor",
     14,
     44
   );
 
   autoTable(doc, {
     startY: 50,
-    head: [
-      [
-        "Date",
-        "Payout ID",
-        "Investor",
-        "Property",
-        "Type",
-        "Amount",
-        "Status",
-      ],
+    head: [["Investor", "Payouts", "Total Amount"]],
+    body: [
+      ...report.byInvestor.map((r) => [
+        r.investor_name,
+        String(r.count),
+        money(r.total),
+      ]),
+      ["TOTAL", String(report.lines.length), money(report.totalPayouts)],
     ],
-    body: report.lines.map((l) => [
-      l.date,
-      l.payout_id,
-      l.investor_name,
-      l.property_name,
-      l.payout_type,
-      money(l.payout_amount),
-      l.status,
-    ]),
-    styles: { fontSize: 8, cellPadding: 2 },
-    headStyles: { fillColor: [251, 191, 36], textColor: [24, 24, 27] },
-    alternateRowStyles: { fillColor: [245, 245, 245] },
+    styles: { fontSize: 10, cellPadding: 3 },
+    headStyles: { fillColor: REPORT_GREEN_RGB, textColor: [255, 255, 255] },
+    footStyles: { fillColor: [230, 230, 230], textColor: [30, 30, 30], fontStyle: "bold" },
   });
 
   const summaryY = (doc as jsPDF & { lastAutoTable?: { finalY: number } }).lastAutoTable
     ?.finalY ?? 50;
 
-  autoTable(doc, {
-    startY: summaryY + 10,
-    head: [["Investor", "Total Payout"]],
-    body: [
-      ...report.byInvestor.map((r) => [r.investor_name, money(r.total)]),
-      ["TOTAL", money(report.totalPayouts)],
-    ],
-    styles: { fontSize: 9 },
-    headStyles: { fillColor: REPORT_GREEN_RGB, textColor: [255, 255, 255] },
-  });
+  if (report.lines.length > 0) {
+    doc.setFontSize(10);
+    doc.setFont("helvetica", "bold");
+    doc.setTextColor(REPORT_GREEN.r, REPORT_GREEN.g, REPORT_GREEN.b);
+    doc.text("Payout Detail", 14, summaryY + 14);
 
-  const investorSummaryY = (doc as jsPDF & { lastAutoTable?: { finalY: number } }).lastAutoTable
-    ?.finalY ?? summaryY + 10;
-
-  if (report.byProperty.length > 0) {
     autoTable(doc, {
-      startY: investorSummaryY + 10,
-      head: [["Property", "Total Payout"]],
-      body: report.byProperty.map((r) => [r.property_name, money(r.total)]),
-      styles: { fontSize: 9 },
-      headStyles: { fillColor: REPORT_GREEN_RGB, textColor: [255, 255, 255] },
+      startY: summaryY + 18,
+      head: [["Date", "Payout ID", "Investor", "Property", "Type", "Amount", "Status"]],
+      body: report.lines.map((l) => [
+        l.date,
+        l.payout_id,
+        l.investor_name,
+        l.property_name,
+        l.payout_type,
+        money(l.payout_amount),
+        l.status,
+      ]),
+      styles: { fontSize: 8, cellPadding: 2 },
+      headStyles: { fillColor: [251, 191, 36], textColor: [24, 24, 27] },
+      alternateRowStyles: { fillColor: [245, 245, 245] },
     });
   }
 
