@@ -7,6 +7,7 @@ export type SheetTab =
   | "rent_ledger"
   | "expenses"
   | "maintenance"
+  | "messages"
   | "investors"
   | "investor_payout"
   | "reports";
@@ -180,6 +181,32 @@ export interface InvestorPayout {
   tax_year: number | null;
   status: string;
   notes: string | null;
+  created_at: string;
+}
+
+export type SmsDirection = "inbound" | "outbound";
+export type SmsMessageType =
+  | "general"
+  | "rent_reminder"
+  | "maintenance"
+  | "maintenance_reply";
+export type SmsStatus = "queued" | "sent" | "delivered" | "failed" | "received";
+export type SmsRelatedType = "rent_payment" | "maintenance" | null;
+
+export interface SmsMessage {
+  id: number;
+  direction: SmsDirection;
+  tenant_id: number | null;
+  tenant_name: string | null;
+  property_name: string | null;
+  phone_number: string;
+  body: string;
+  message_type: SmsMessageType;
+  status: SmsStatus;
+  external_id: string | null;
+  related_id: number | null;
+  related_type: SmsRelatedType;
+  error_message: string | null;
   created_at: string;
 }
 

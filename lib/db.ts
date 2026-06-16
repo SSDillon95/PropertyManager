@@ -8,6 +8,7 @@ import type {
   MaintenanceRecord,
   Property,
   RentPayment,
+  SmsMessage,
   Tenant,
 } from "./types";
 
@@ -214,6 +215,23 @@ const SQLITE_SCHEMA = `
     status TEXT DEFAULT 'Pending',
     notes TEXT,
     archived INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+
+  CREATE TABLE IF NOT EXISTS sms_messages (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    direction TEXT NOT NULL,
+    tenant_id INTEGER,
+    tenant_name TEXT,
+    property_name TEXT,
+    phone_number TEXT NOT NULL,
+    body TEXT NOT NULL,
+    message_type TEXT NOT NULL DEFAULT 'general',
+    status TEXT NOT NULL DEFAULT 'queued',
+    external_id TEXT,
+    related_id INTEGER,
+    related_type TEXT,
+    error_message TEXT,
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
   );
 `;
@@ -446,6 +464,24 @@ async function initSchema(): Promise<void> {
     await sql`ALTER TABLE maintenance_records ADD COLUMN IF NOT EXISTS archived BOOLEAN NOT NULL DEFAULT FALSE`;
     await sql`ALTER TABLE investors ADD COLUMN IF NOT EXISTS archived BOOLEAN NOT NULL DEFAULT FALSE`;
     await sql`ALTER TABLE investor_payouts ADD COLUMN IF NOT EXISTS archived BOOLEAN NOT NULL DEFAULT FALSE`;
+    await sql`
+      CREATE TABLE IF NOT EXISTS sms_messages (
+        id SERIAL PRIMARY KEY,
+        direction TEXT NOT NULL,
+        tenant_id INTEGER,
+        tenant_name TEXT,
+        property_name TEXT,
+        phone_number TEXT NOT NULL,
+        body TEXT NOT NULL,
+        message_type TEXT NOT NULL DEFAULT 'general',
+        status TEXT NOT NULL DEFAULT 'queued',
+        external_id TEXT,
+        related_id INTEGER,
+        related_type TEXT,
+        error_message TEXT,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `;
     return;
   }
 
@@ -501,6 +537,29 @@ async function initSchema(): Promise<void> {
   }
   if (!hasPayoutCol("days_in_year")) {
     db.exec("ALTER TABLE investor_payouts ADD COLUMN days_in_year INTEGER DEFAULT 365");
+  }
+  const smsTable = db
+    .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='sms_messages'")
+    .get();
+  if (!smsTable) {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS sms_messages (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        direction TEXT NOT NULL,
+        tenant_id INTEGER,
+        tenant_name TEXT,
+        property_name TEXT,
+        phone_number TEXT NOT NULL,
+        body TEXT NOT NULL,
+        message_type TEXT NOT NULL DEFAULT 'general',
+        status TEXT NOT NULL DEFAULT 'queued',
+        external_id TEXT,
+        related_id INTEGER,
+        related_type TEXT,
+        error_message TEXT,
+        created_at TEXT NOT NULL DEFAULT (datetime('now'))
+      )
+    `);
   }
   db.close();
 }
@@ -1831,6 +1890,82 @@ export async function updateInvestorPayout(
   db.close();
   if (!row) throw new Error("Investor payout not found.");
   return mapInvestorPayout(row as Record<string, unknown>);
+}
+
+function mapSmsMessage(row: Record<string, unknown>): SmsMessage {
+  return {
+    id: Number(row.id),
+    direction: String(row.direction) as SmsMessage["direction"],
+    tenant_id: num(row.tenant_id) != null ? Number(row.tenant_id) : null,
+    tenant_name: str(row.tenant_name),
+    property_name: str(row.property_name),
+    phone_number: String(row.phone_number),
+    body: String(row.body),
+    message_type: String(row.message_type ?? "general") as SmsMessage["message_type"],
+    status: String(row.status ?? "queued") as SmsMessage["status"],
+    external_id: str(row.external_id),
+    related_id: num(row.related_id) != null ? Number(row.related_id) : null,
+    related_type: str(row.related_type) as SmsMessage["related_type"],
+    error_message: str(row.error_message),
+    created_at: String(row.created_at),
+  };
+}
+
+export async function listSmsMessages(phone?: string): Promise<SmsMessage[]> {
+  await ensureSchema();
+  if (usePostgres) {
+    const sql = await getPostgresSql();
+    const rows = phone
+      ? await sql`
+          SELECT * FROM sms_messages
+          WHERE phone_number = ${phone}
+          ORDER BY created_at DESC
+        `
+      : await sql`SELECT * FROM sms_messages ORDER BY created_at DESC`;
+    return rows.map((r) => mapSmsMessage(r as Record<string, unknown>));
+  }
+  const db = await getSqliteDb();
+  const rows = phone
+    ? db
+        .prepare("SELECT * FROM sms_messages WHERE phone_number = ? ORDER BY created_at DESC")
+        .all(phone)
+    : db.prepare("SELECT * FROM sms_messages ORDER BY created_at DESC").all();
+  db.close();
+  return rows.map((r) => mapSmsMessage(r as Record<string, unknown>));
+}
+
+export async function createSmsMessage(
+  data: Omit<SmsMessage, "id" | "created_at">
+): Promise<SmsMessage> {
+  await ensureSchema();
+  if (usePostgres) {
+    const sql = await getPostgresSql();
+    const rows = await sql`
+      INSERT INTO sms_messages (
+        direction, tenant_id, tenant_name, property_name, phone_number, body,
+        message_type, status, external_id, related_id, related_type, error_message
+      ) VALUES (
+        ${data.direction}, ${data.tenant_id}, ${data.tenant_name}, ${data.property_name},
+        ${data.phone_number}, ${data.body}, ${data.message_type}, ${data.status},
+        ${data.external_id}, ${data.related_id}, ${data.related_type}, ${data.error_message}
+      ) RETURNING *
+    `;
+    return mapSmsMessage(rows[0] as Record<string, unknown>);
+  }
+  const db = await getSqliteDb();
+  const row = db
+    .prepare(
+      `INSERT INTO sms_messages (
+        direction, tenant_id, tenant_name, property_name, phone_number, body,
+        message_type, status, external_id, related_id, related_type, error_message
+      ) VALUES (
+        @direction, @tenant_id, @tenant_name, @property_name, @phone_number, @body,
+        @message_type, @status, @external_id, @related_id, @related_type, @error_message
+      ) RETURNING *`
+    )
+    .get(data);
+  db.close();
+  return mapSmsMessage(row as Record<string, unknown>);
 }
 
 export async function getDashboardSummary(): Promise<DashboardSummary> {

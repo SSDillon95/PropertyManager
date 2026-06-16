@@ -24,6 +24,7 @@ export const MANAGEMENT_TABS: { id: SheetTab; label: string }[] = [
   { id: "rent_ledger", label: "Rent Ledger" },
   { id: "expenses", label: "Expenses" },
   { id: "maintenance", label: "Maintenance" },
+  { id: "messages", label: "Messages" },
 ];
 
 export const SETTINGS_TABS: { id: SheetTab; label: string }[] = [
