@@ -534,11 +534,7 @@ export default function PropertyManagerApp() {
     setForm((prev) => ({ ...prev, [fieldKey]: propertyName }));
   };
 
-  const handleBusinessSelect = (businessName: string) => {
-    if (tab !== "investor_capital") {
-      setForm((prev) => ({ ...prev, business_name: businessName }));
-      return;
-    }
+  const applyCapitalBusinessSelection = (businessName: string) => {
     if (!businessName) {
       setForm((prev) => ({
         ...prev,
@@ -546,6 +542,7 @@ export default function PropertyManagerApp() {
         business_address: "",
         property_name: "",
         property_address: "",
+        investor_name: "",
       }));
       return;
     }
@@ -569,7 +566,7 @@ export default function PropertyManagerApp() {
         business_address: business ? formatBusinessAddress(business) : "",
         property_name: property.property_name,
         property_address: propertyAddress,
-        investor_name: linkedInvestor?.investor_name ?? prev.investor_name,
+        investor_name: linkedInvestor?.investor_name ?? "",
       }));
       return;
     }
@@ -579,7 +576,27 @@ export default function PropertyManagerApp() {
       business_address: business ? formatBusinessAddress(business) : "",
       property_name: "",
       property_address: "",
+      investor_name: "",
     }));
+  };
+
+  const handleBusinessSelect = (businessName: string) => {
+    if (tab !== "investor_capital") {
+      setForm((prev) => ({ ...prev, business_name: businessName }));
+      return;
+    }
+    const previousBusiness = form.business_name;
+    const hasSelectedProperty = Boolean(form.property_name?.trim());
+    const isBusinessChange = businessName !== previousBusiness;
+
+    if (hasSelectedProperty && isBusinessChange) {
+      const confirmed = window.confirm(
+        "Please confirm this selection. Changing the business will clear the selected property so you can choose one for the new business."
+      );
+      if (!confirmed) return;
+    }
+
+    applyCapitalBusinessSelection(businessName);
   };
 
   const handleCapitalSelect = (capitalId: string) => {
