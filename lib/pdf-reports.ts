@@ -76,31 +76,20 @@ async function loadLogoFromBrowser(): Promise<string> {
 }
 
 async function loadLogoFromServer(): Promise<string> {
+  const { readFileSync } = await import("fs");
   const { join } = await import("path");
-  const sharp = (await import("sharp")).default;
+  const { PNG } = await import("pngjs");
+
   const logoPath = join(process.cwd(), "public", "hop2it-logo.png");
-  const { data, info } = await sharp(logoPath)
-    .ensureAlpha()
-    .raw()
-    .toBuffer({ resolveWithObject: true });
+  const png = PNG.sync.read(readFileSync(logoPath));
 
-  logoNaturalWidth = info.width;
-  logoNaturalHeight = info.height;
+  logoNaturalWidth = png.width;
+  logoNaturalHeight = png.height;
+  recolorWhiteToGreenPixels(
+    new Uint8ClampedArray(png.data.buffer, png.data.byteOffset, png.data.byteLength)
+  );
 
-  const pixels = new Uint8ClampedArray(data.buffer, data.byteOffset, data.byteLength);
-  recolorWhiteToGreenPixels(pixels);
-
-  const processed = await sharp(Buffer.from(pixels), {
-    raw: {
-      width: info.width,
-      height: info.height,
-      channels: info.channels,
-    },
-  })
-    .png()
-    .toBuffer();
-
-  return `data:image/png;base64,${processed.toString("base64")}`;
+  return `data:image/png;base64,${PNG.sync.write(png).toString("base64")}`;
 }
 
 async function loadLogoDataUrl(): Promise<string> {
