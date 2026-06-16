@@ -74,12 +74,12 @@ export default function ReportsView({
     [properties, rentPayments, expenses, filters]
   );
 
-  const handleDownload = () => {
+  const handleDownload = async () => {
     setGenerating(true);
     try {
-      if (reportKind === "income") downloadIncomePdf(incomeReport);
-      else if (reportKind === "expense") downloadExpensePdf(expenseReport);
-      else downloadPLPdf(plReport);
+      if (reportKind === "income") await downloadIncomePdf(incomeReport);
+      else if (reportKind === "expense") await downloadExpensePdf(expenseReport);
+      else await downloadPLPdf(plReport);
     } finally {
       setGenerating(false);
     }

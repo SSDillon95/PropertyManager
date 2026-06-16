@@ -2,6 +2,25 @@ import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
 import type { ExpenseReport, IncomeReport, PLReport, ReportKind } from "./reports";
 
+const LOGO_PATH = "/hop2it-logo.png";
+const LOGO_WIDTH = 48;
+const LOGO_HEIGHT = 18;
+let logoDataUrl: string | null = null;
+
+async function loadLogoDataUrl(): Promise<string> {
+  if (logoDataUrl) return logoDataUrl;
+  const res = await fetch(LOGO_PATH);
+  if (!res.ok) throw new Error("Failed to load report logo.");
+  const blob = await res.blob();
+  logoDataUrl = await new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result as string);
+    reader.onerror = () => reject(new Error("Failed to read report logo."));
+    reader.readAsDataURL(blob);
+  });
+  return logoDataUrl;
+}
+
 function money(value: number): string {
   return new Intl.NumberFormat("en-US", {
     style: "currency",
@@ -15,7 +34,11 @@ function periodLabel(start: string, end: string): string {
   return `${start} to ${end}`;
 }
 
-function addHeader(doc: jsPDF, title: string, start: string, end: string) {
+async function addHeader(doc: jsPDF, title: string, start: string, end: string) {
+  const logo = await loadLogoDataUrl();
+  const pageWidth = doc.internal.pageSize.getWidth();
+  doc.addImage(logo, "PNG", pageWidth - 14 - LOGO_WIDTH, 10, LOGO_WIDTH, LOGO_HEIGHT);
+
   doc.setFont("helvetica", "bold");
   doc.setFontSize(16);
   doc.setTextColor(16, 120, 80);
@@ -36,11 +59,11 @@ function savePdf(doc: jsPDF, kind: ReportKind, start: string, end: string) {
   doc.save(`hop2it-${kind}-report-${start}-to-${end}.pdf`);
 }
 
-export function downloadIncomePdf(report: IncomeReport): void {
+export async function downloadIncomePdf(report: IncomeReport): Promise<void> {
   const doc = new jsPDF();
   const { startDate, endDate } = report.period;
 
-  addHeader(doc, "Income Report", startDate, endDate);
+  await addHeader(doc, "Income Report", startDate, endDate);
 
   autoTable(doc, {
     startY: 50,
@@ -76,11 +99,11 @@ export function downloadIncomePdf(report: IncomeReport): void {
   savePdf(doc, "income", startDate, endDate);
 }
 
-export function downloadExpensePdf(report: ExpenseReport): void {
+export async function downloadExpensePdf(report: ExpenseReport): Promise<void> {
   const doc = new jsPDF();
   const { startDate, endDate } = report.period;
 
-  addHeader(doc, "Expense Report", startDate, endDate);
+  await addHeader(doc, "Expense Report", startDate, endDate);
 
   autoTable(doc, {
     startY: 50,
@@ -115,11 +138,11 @@ export function downloadExpensePdf(report: ExpenseReport): void {
   savePdf(doc, "expense", startDate, endDate);
 }
 
-export function downloadPLPdf(report: PLReport): void {
+export async function downloadPLPdf(report: PLReport): Promise<void> {
   const doc = new jsPDF();
   const { startDate, endDate } = report.period;
 
-  addHeader(doc, "Profit & Loss Report", startDate, endDate);
+  await addHeader(doc, "Profit & Loss Report", startDate, endDate);
 
   doc.setFontSize(9);
   doc.setTextColor(80, 80, 80);
