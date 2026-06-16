@@ -259,8 +259,8 @@ export default function PropertyManagerApp() {
         aria-hidden
       />
       <div className="relative z-10 flex flex-col flex-1 min-h-screen">
-      <div className="sticky top-0 z-50 bg-zinc-950/90 backdrop-blur border-b border-white/10">
-      <nav className="bg-zinc-900/90 overflow-x-auto border-b border-white/10">
+      <div className="sticky top-0 z-50 border-b border-white/10">
+      <nav className="bg-zinc-950/75 backdrop-blur overflow-x-auto border-b border-white/10">
         <div className="max-w-[1600px] mx-auto px-2 flex">
           {SHEET_TABS.map((sheet) => (
             <button
@@ -279,7 +279,7 @@ export default function PropertyManagerApp() {
         </div>
       </nav>
 
-      <header>
+      <header className="bg-transparent">
         <div className="max-w-[1600px] mx-auto px-4 sm:px-6 py-3 min-h-[9rem] sm:min-h-[11rem] flex items-center justify-between gap-4">
           <div className="flex items-center min-w-0">
             <Image
