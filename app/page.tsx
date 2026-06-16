@@ -252,28 +252,17 @@ export default function PropertyManagerApp() {
   };
 
   return (
-    <div className="min-h-screen bg-zinc-950 text-white font-sans flex flex-col relative">
+    <div className="min-h-screen bg-slate-100 text-slate-900 font-sans flex flex-col relative">
       <div
-        className="fixed inset-0 bg-cover bg-center bg-no-repeat opacity-30 pointer-events-none"
+        className="fixed inset-0 bg-cover bg-center bg-no-repeat opacity-25 pointer-events-none"
         style={{ backgroundImage: "url('/apartment-bg.jpg')" }}
         aria-hidden
       />
       <div className="relative z-10 flex flex-col flex-1 min-h-screen">
-      <div className="fixed top-3 right-3 sm:top-4 sm:right-6 z-[60] pointer-events-none">
-        <Image
-          src="/hop2it-logo.png"
-          alt="HOP2IT Property Manager"
-          width={800}
-          height={300}
-          className="h-16 sm:h-24 md:h-[7.5rem] w-auto object-contain"
-          priority
-        />
-      </div>
-
       <div className="sticky top-0 z-50">
-      <nav className="bg-zinc-950/75 backdrop-blur overflow-x-auto border-b border-white/10 pr-36 sm:pr-48 md:pr-[22rem]">
-        <div className="max-w-[1600px] mx-auto px-2 flex items-center justify-between gap-3">
-          <div className="flex overflow-x-auto">
+      <nav className="bg-white/95 backdrop-blur border-b border-slate-200 shadow-sm">
+        <div className="max-w-[1600px] mx-auto px-2 sm:px-4 flex items-center justify-between gap-3">
+          <div className="flex overflow-x-auto min-w-0">
             {SHEET_TABS.map((sheet) => (
               <button
                 key={sheet.id}
@@ -281,20 +270,20 @@ export default function PropertyManagerApp() {
                 onClick={() => handleTabChange(sheet.id)}
                 className={`px-4 py-2.5 text-sm whitespace-nowrap border-b-2 transition ${
                   tab === sheet.id
-                    ? "border-blue-500 text-blue-400 bg-zinc-950/60"
-                    : "border-transparent text-zinc-400 hover:text-white hover:bg-zinc-950/30"
+                    ? "border-emerald-600 text-emerald-700 bg-emerald-50"
+                    : "border-transparent text-slate-600 hover:text-slate-900 hover:bg-slate-100"
                 }`}
               >
                 {sheet.label}
               </button>
             ))}
           </div>
-          <div className="flex items-center gap-2 shrink-0">
+          <div className="flex items-center gap-2 sm:gap-3 shrink-0">
             {tab !== "dashboard" && rows.length > 0 && (
               <button
                 type="button"
                 onClick={exportCsv}
-                className="text-xs px-3 py-1.5 rounded-lg border border-white/10 hover:bg-zinc-900"
+                className="text-xs px-3 py-1.5 rounded-lg border border-slate-300 bg-white text-slate-700 hover:bg-slate-50"
               >
                 Export CSV
               </button>
@@ -302,10 +291,18 @@ export default function PropertyManagerApp() {
             <button
               type="button"
               onClick={refresh}
-              className="text-xs px-3 py-1.5 rounded-lg border border-white/10 hover:bg-zinc-900"
+              className="text-xs px-3 py-1.5 rounded-lg border border-slate-300 bg-white text-slate-700 hover:bg-slate-50"
             >
               Refresh
             </button>
+            <Image
+              src="/hop2it-logo.png"
+              alt="HOP2IT Property Manager"
+              width={800}
+              height={300}
+              className="h-10 sm:h-12 md:h-14 w-auto object-contain drop-shadow-[0_2px_10px_rgba(16,185,129,0.45)] brightness-110 contrast-110 saturate-125"
+              priority
+            />
           </div>
         </div>
       </nav>
@@ -315,8 +312,8 @@ export default function PropertyManagerApp() {
         <div
           className={`mx-4 mt-4 max-w-[1600px] lg:mx-auto px-4 py-2 rounded-lg text-sm ${
             message.type === "success"
-              ? "bg-emerald-950/60 border border-emerald-800 text-emerald-300"
-              : "bg-red-950/60 border border-red-800 text-red-300"
+              ? "bg-emerald-50 border border-emerald-300 text-emerald-800"
+              : "bg-red-50 border border-red-300 text-red-800"
           }`}
         >
           {message.text}
@@ -325,16 +322,16 @@ export default function PropertyManagerApp() {
 
       <main className="flex-1 max-w-[1600px] w-full mx-auto px-4 sm:px-6 py-6">
         {loading ? (
-          <div className="text-zinc-500 py-12 text-center">Loading...</div>
+          <div className="text-slate-500 py-12 text-center">Loading...</div>
         ) : tab === "dashboard" ? (
           <DashboardView summary={summary} />
         ) : (
           <div className="space-y-6">
-            <section className="rounded-xl border border-white/10 bg-zinc-900 p-4 sm:p-6">
+            <section className="rounded-xl border border-slate-200 bg-white/95 shadow-sm p-4 sm:p-6">
               <div className="flex items-center justify-between mb-4">
                 <div>
                   <h2 className="font-semibold text-lg">Add New Row</h2>
-                  <p className="text-xs text-zinc-500 mt-1">
+                  <p className="text-xs text-slate-500 mt-1">
                     Yellow headers match spreadsheet input columns. Required fields are marked.
                     {tab === "rent_ledger" &&
                       " Selecting a property auto-fills rent due and tenant from the Properties tab."}
@@ -353,7 +350,7 @@ export default function PropertyManagerApp() {
                         <select
                           value={form[col.key] ?? ""}
                           onChange={(e) => handlePropertySelect(e.target.value, col.key)}
-                          className="w-full bg-zinc-950 border border-white/10 rounded-lg px-3 py-2 text-sm"
+                          className="w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-sm text-slate-900"
                         >
                           <option value="">
                             {properties.length
@@ -372,7 +369,7 @@ export default function PropertyManagerApp() {
                           onChange={(e) =>
                             setForm((prev) => ({ ...prev, [col.key]: e.target.value }))
                           }
-                          className="w-full bg-zinc-950 border border-white/10 rounded-lg px-3 py-2 text-sm"
+                          className="w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-sm text-slate-900"
                         >
                           <option value="">
                             {tenants.length
@@ -392,7 +389,7 @@ export default function PropertyManagerApp() {
                           onChange={(e) =>
                             setForm((prev) => ({ ...prev, [col.key]: e.target.value }))
                           }
-                          className="w-full bg-zinc-950 border border-white/10 rounded-lg px-3 py-2 text-sm"
+                          className="w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-sm text-slate-900"
                         >
                           {col.options?.map((opt) => (
                             <option key={opt} value={opt}>
@@ -419,11 +416,11 @@ export default function PropertyManagerApp() {
                           onChange={(e) =>
                             setForm((prev) => ({ ...prev, [col.key]: e.target.value }))
                           }
-                          className={`w-full bg-zinc-950 border border-white/10 rounded-lg px-3 py-2 text-sm ${
+                          className={`w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-sm text-slate-900 ${
                             tab === "rent_ledger" &&
                             col.key === "tenant_name" &&
                             form.property_name
-                              ? "text-zinc-400 cursor-not-allowed"
+                              ? "text-slate-500 cursor-not-allowed bg-slate-50"
                               : ""
                           }`}
                         />
@@ -434,7 +431,7 @@ export default function PropertyManagerApp() {
                 <button
                   type="submit"
                   disabled={saving}
-                  className="mt-4 px-5 py-2 rounded-lg bg-blue-600 hover:bg-blue-500 text-sm font-medium disabled:opacity-50"
+                  className="mt-4 px-5 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-medium disabled:opacity-50"
                 >
                   {saving ? "Saving..." : "Add Row"}
                 </button>
@@ -458,7 +455,7 @@ export default function PropertyManagerApp() {
         )}
       </main>
 
-      <footer className="border-t border-white/10 bg-zinc-950/90 py-4 text-center text-xs text-zinc-600">
+      <footer className="border-t border-slate-200 bg-white/95 py-4 text-center text-xs text-slate-500">
         HOP2IT Property Manager — Properties, Tenants, Leases, Rent Ledger, Expenses,
         Maintenance
       </footer>
@@ -497,26 +494,26 @@ function DashboardView({ summary }: { summary: DashboardSummary | null }) {
         {cards.map((card) => (
           <div
             key={card.label}
-            className="rounded-2xl border border-white/10 bg-zinc-900 p-5"
+            className="rounded-2xl border border-slate-200 bg-white/95 shadow-sm p-5"
           >
-            <div className="text-xs text-zinc-500 uppercase tracking-wide mb-1">
+            <div className="text-xs text-slate-500 uppercase tracking-wide mb-1">
               {card.label}
             </div>
-            <div className="text-2xl font-semibold text-blue-400">{card.value}</div>
+            <div className="text-2xl font-semibold text-emerald-600">{card.value}</div>
           </div>
         ))}
       </div>
 
-      <div className="rounded-2xl border border-white/10 bg-zinc-900 p-6">
-        <div className="text-sm text-zinc-400 mb-2">Rent Collection Rate (Month to Date)</div>
+      <div className="rounded-2xl border border-slate-200 bg-white/95 shadow-sm p-6">
+        <div className="text-sm text-slate-600 mb-2">Rent Collection Rate (Month to Date)</div>
         <div className="flex items-end gap-3">
-          <div className="text-4xl font-semibold text-emerald-400">{collectionRate}%</div>
-          <div className="text-sm text-zinc-500 pb-1">
+          <div className="text-4xl font-semibold text-emerald-600">{collectionRate}%</div>
+          <div className="text-sm text-slate-500 pb-1">
             {formatCurrency(summary.monthly_rent_collected)} of{" "}
             {formatCurrency(summary.monthly_rent_expected)}
           </div>
         </div>
-        <div className="mt-4 h-3 rounded-full bg-zinc-800 overflow-hidden">
+        <div className="mt-4 h-3 rounded-full bg-slate-200 overflow-hidden">
           <div
             className="h-full bg-emerald-500 transition-all"
             style={{ width: `${Math.min(collectionRate, 100)}%` }}

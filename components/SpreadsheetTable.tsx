@@ -18,22 +18,22 @@ export default function SpreadsheetTable({
 }: SpreadsheetTableProps) {
   if (rows.length === 0) {
     return (
-      <div className="rounded-xl border border-white/10 bg-zinc-900 p-8 text-center text-zinc-500">
+      <div className="rounded-xl border border-slate-200 bg-white/95 shadow-sm p-8 text-center text-slate-500">
         No rows yet. Add your first entry using the form above.
       </div>
     );
   }
 
   return (
-    <div className="rounded-xl border border-white/10 overflow-hidden bg-zinc-900">
+    <div className="rounded-xl border border-slate-200 overflow-hidden bg-white/95 shadow-sm">
       <div className="overflow-x-auto">
         <table className="w-full text-sm border-collapse min-w-max">
           <thead>
-            <tr className="bg-amber-400 text-zinc-900">
+            <tr className="bg-amber-300 text-slate-900">
               {columns.map((col) => (
                 <th
                   key={col.key}
-                  className="px-3 py-2 text-left font-semibold whitespace-nowrap border-r border-amber-500/40 text-xs uppercase tracking-wide"
+                  className="px-3 py-2 text-left font-semibold whitespace-nowrap border-r border-amber-400/50 text-xs uppercase tracking-wide"
                   style={{ minWidth: col.width }}
                 >
                   {col.label}
@@ -48,14 +48,14 @@ export default function SpreadsheetTable({
             {rows.map((row, idx) => (
               <tr
                 key={String(row.id)}
-                className={`border-t border-white/10 ${
-                  idx % 2 === 0 ? "bg-zinc-950/40" : "bg-zinc-900"
-                } hover:bg-blue-950/30`}
+                className={`border-t border-slate-200 ${
+                  idx % 2 === 0 ? "bg-slate-50" : "bg-white"
+                } hover:bg-emerald-50/60`}
               >
                 {columns.map((col) => (
                   <td
                     key={col.key}
-                    className="px-3 py-2 whitespace-nowrap border-r border-white/5 text-zinc-200"
+                    className="px-3 py-2 whitespace-nowrap border-r border-slate-100 text-slate-800"
                   >
                     {formatCellValue(row[col.key], col.type)}
                   </td>
@@ -65,7 +65,7 @@ export default function SpreadsheetTable({
                     type="button"
                     onClick={() => onDelete(Number(row.id))}
                     disabled={deletingId === Number(row.id)}
-                    className="text-xs text-red-400 hover:text-red-300 disabled:opacity-50"
+                    className="text-xs text-red-600 hover:text-red-700 disabled:opacity-50"
                   >
                     {deletingId === Number(row.id) ? "..." : "Delete"}
                   </button>
