@@ -350,7 +350,7 @@ export default function PropertyManagerApp() {
                         <select
                           value={form[col.key] ?? ""}
                           onChange={(e) => handlePropertySelect(e.target.value, col.key)}
-                          className="w-full bg-zinc-700/80 border border-zinc-600 rounded-lg px-3 py-2 text-sm text-zinc-100"
+                          className="form-select"
                         >
                           <option value="">
                             {properties.length
@@ -369,7 +369,7 @@ export default function PropertyManagerApp() {
                           onChange={(e) =>
                             setForm((prev) => ({ ...prev, [col.key]: e.target.value }))
                           }
-                          className="w-full bg-zinc-700/80 border border-zinc-600 rounded-lg px-3 py-2 text-sm text-zinc-100"
+                          className="form-select"
                         >
                           <option value="">
                             {tenants.length
@@ -389,7 +389,7 @@ export default function PropertyManagerApp() {
                           onChange={(e) =>
                             setForm((prev) => ({ ...prev, [col.key]: e.target.value }))
                           }
-                          className="w-full bg-zinc-700/80 border border-zinc-600 rounded-lg px-3 py-2 text-sm text-zinc-100"
+                          className="form-select"
                         >
                           {col.options?.map((opt) => (
                             <option key={opt} value={opt}>
@@ -416,7 +416,7 @@ export default function PropertyManagerApp() {
                           onChange={(e) =>
                             setForm((prev) => ({ ...prev, [col.key]: e.target.value }))
                           }
-                          className={`w-full bg-zinc-700/80 border border-zinc-600 rounded-lg px-3 py-2 text-sm text-zinc-100 ${
+                          className={`form-field ${
                             tab === "rent_ledger" &&
                             col.key === "tenant_name" &&
                             form.property_name
