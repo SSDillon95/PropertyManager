@@ -85,56 +85,81 @@ function displayField(value: string | number | null | undefined): string {
   return String(value);
 }
 
-function placeLogoTopRight(doc: jsPDF, logo: string) {
+function pageCenterX(doc: jsPDF): number {
+  return doc.internal.pageSize.getWidth() / 2;
+}
+
+function placeLogoTopCenter(doc: jsPDF, logo: string) {
   const pageWidth = doc.internal.pageSize.getWidth();
   doc.addImage(
     logo,
     "PNG",
-    pageWidth - PAGE_MARGIN - LOGO_WIDTH,
+    (pageWidth - LOGO_WIDTH) / 2,
     PAGE_MARGIN,
     LOGO_WIDTH,
     LOGO_HEIGHT
   );
 }
 
-async function addPayoutFormHeader(doc: jsPDF, payoutId: string) {
+function drawCenteredText(
+  doc: jsPDF,
+  text: string,
+  y: number,
+  options?: { fontSize?: number; bold?: boolean; color?: [number, number, number] }
+) {
+  doc.setFont("helvetica", options?.bold ? "bold" : "normal");
+  doc.setFontSize(options?.fontSize ?? 10);
+  if (options?.color) doc.setTextColor(...options.color);
+  doc.text(text, pageCenterX(doc), y, { align: "center" });
+}
+
+function drawHeaderDivider(doc: jsPDF, y: number) {
+  const pageWidth = doc.internal.pageSize.getWidth();
+  doc.setDrawColor(REPORT_GREEN.r, REPORT_GREEN.g, REPORT_GREEN.b);
+  doc.setLineWidth(0.5);
+  doc.line(PAGE_MARGIN, y, pageWidth - PAGE_MARGIN, y);
+}
+
+async function renderPdfHeader(
+  doc: jsPDF,
+  title: string,
+  metaLines: string[]
+): Promise<number> {
   const logo = await loadLogoDataUrl();
-  placeLogoTopRight(doc, logo);
+  placeLogoTopCenter(doc, logo);
 
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(16);
-  doc.setTextColor(REPORT_GREEN.r, REPORT_GREEN.g, REPORT_GREEN.b);
-  doc.text("Investor Payout Form", PAGE_MARGIN, 22);
+  let y = PAGE_MARGIN + LOGO_HEIGHT + 12;
+  drawCenteredText(doc, title, y, {
+    fontSize: 15,
+    bold: true,
+    color: [REPORT_GREEN.r, REPORT_GREEN.g, REPORT_GREEN.b],
+  });
 
-  doc.setFont("helvetica", "normal");
-  doc.setFontSize(10);
-  doc.setTextColor(80, 80, 80);
-  doc.text(`Payout ID: ${payoutId}`, PAGE_MARGIN, 30);
-  doc.text(`Generated: ${new Date().toLocaleString()}`, PAGE_MARGIN, 36);
+  y += 10;
+  for (const line of metaLines) {
+    drawCenteredText(doc, line, y, { color: [80, 80, 80] });
+    y += 6;
+  }
+
+  y += 4;
+  drawHeaderDivider(doc, y);
+  return y + 10;
+}
+
+function addCenteredSubtitle(doc: jsPDF, y: number, text: string): number {
+  drawCenteredText(doc, text, y, { fontSize: 9, color: [80, 80, 80] });
+  return y + 10;
 }
 
 function periodLabel(start: string, end: string): string {
   return `${start} to ${end}`;
 }
 
-async function addHeader(doc: jsPDF, title: string, start: string, end: string) {
-  const logo = await loadLogoDataUrl();
-  placeLogoTopRight(doc, logo);
-
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(14);
-  doc.setTextColor(REPORT_GREEN.r, REPORT_GREEN.g, REPORT_GREEN.b);
-  doc.text(title, PAGE_MARGIN, 22);
-
-  doc.setFont("helvetica", "normal");
-  doc.setFontSize(10);
-  doc.setTextColor(80, 80, 80);
-  doc.text(`Period: ${periodLabel(start, end)}`, PAGE_MARGIN, 30);
-  doc.text(`Generated: ${new Date().toLocaleString()}`, PAGE_MARGIN, 36);
-}
-
-function tableStartY(): number {
-  return 62;
+function standardReportMeta(start: string, end: string): string[] {
+  return [
+    `Period: ${periodLabel(start, end)}`,
+    `Generated: ${new Date().toLocaleString()}`,
+  ];
 }
 
 function savePdf(doc: jsPDF, kind: ReportKind, start: string, end: string) {
@@ -145,10 +170,14 @@ export async function downloadIncomePdf(report: IncomeReport): Promise<void> {
   const doc = new jsPDF();
   const { startDate, endDate } = report.period;
 
-  await addHeader(doc, "Income Report", startDate, endDate);
+  const contentStartY = await renderPdfHeader(
+    doc,
+    "Income Report",
+    standardReportMeta(startDate, endDate)
+  );
 
   autoTable(doc, {
-    startY: tableStartY(),
+    startY: contentStartY,
     head: [["Date", "Property", "Tenant", "Paid", "Late Fee", "Total", "Status"]],
     body: report.lines.map((l) => [
       l.date,
@@ -165,7 +194,7 @@ export async function downloadIncomePdf(report: IncomeReport): Promise<void> {
   });
 
   const summaryY = (doc as jsPDF & { lastAutoTable?: { finalY: number } }).lastAutoTable
-    ?.finalY ?? tableStartY();
+    ?.finalY ?? contentStartY;
 
   autoTable(doc, {
     startY: summaryY + 10,
@@ -185,10 +214,14 @@ export async function downloadExpensePdf(report: ExpenseReport): Promise<void> {
   const doc = new jsPDF();
   const { startDate, endDate } = report.period;
 
-  await addHeader(doc, "Expense Report", startDate, endDate);
+  const contentStartY = await renderPdfHeader(
+    doc,
+    "Expense Report",
+    standardReportMeta(startDate, endDate)
+  );
 
   autoTable(doc, {
-    startY: tableStartY(),
+    startY: contentStartY,
     head: [["Date", "Property", "Category", "Vendor", "Description", "Amount"]],
     body: report.lines.map((l) => [
       l.date,
@@ -204,7 +237,7 @@ export async function downloadExpensePdf(report: ExpenseReport): Promise<void> {
   });
 
   const summaryY = (doc as jsPDF & { lastAutoTable?: { finalY: number } }).lastAutoTable
-    ?.finalY ?? tableStartY();
+    ?.finalY ?? contentStartY;
 
   autoTable(doc, {
     startY: summaryY + 10,
@@ -224,14 +257,19 @@ export async function downloadPLPdf(report: PLReport): Promise<void> {
   const doc = new jsPDF();
   const { startDate, endDate } = report.period;
 
-  await addHeader(doc, "Profit & Loss Report", startDate, endDate);
-
-  doc.setFontSize(9);
-  doc.setTextColor(80, 80, 80);
-  doc.text(`Carrying costs prorated over ${report.months} month(s)`, 14, 44);
+  let contentStartY = await renderPdfHeader(
+    doc,
+    "Profit & Loss Report",
+    standardReportMeta(startDate, endDate)
+  );
+  contentStartY = addCenteredSubtitle(
+    doc,
+    contentStartY,
+    `Carrying costs prorated over ${report.months} month(s)`
+  );
 
   autoTable(doc, {
-    startY: 50,
+    startY: contentStartY,
     head: [["Property", "Rental Income", "Operating Exp.", "Fixed Costs", "Net P/L"]],
     body: [
       ...report.rows.map((r) => [
@@ -255,15 +293,15 @@ export async function downloadPLPdf(report: PLReport): Promise<void> {
   });
 
   const notesY = (doc as jsPDF & { lastAutoTable?: { finalY: number } }).lastAutoTable
-    ?.finalY ?? 50;
+    ?.finalY ?? contentStartY;
 
   doc.setFontSize(8);
   doc.setTextColor(100, 100, 100);
   doc.text(
     "Rental income from Rent Ledger. Operating expenses from Expenses tab. Fixed costs include mortgage, HOA, tax, and insurance from Properties.",
-    14,
+    pageCenterX(doc),
     notesY + 12,
-    { maxWidth: 180 }
+    { align: "center", maxWidth: 170 }
   );
 
   savePdf(doc, "pl", startDate, endDate);
@@ -273,14 +311,19 @@ export async function downloadVendorPayoutPdf(report: VendorPayoutReport): Promi
   const doc = new jsPDF();
   const { startDate, endDate } = report.period;
 
-  await addHeader(doc, "Vendor Payout Report", startDate, endDate);
-
-  doc.setFontSize(9);
-  doc.setTextColor(80, 80, 80);
-  doc.text("Payments to vendors from Expenses and Maintenance tabs.", 14, 44);
+  let contentStartY = await renderPdfHeader(
+    doc,
+    "Vendor Payout Report",
+    standardReportMeta(startDate, endDate)
+  );
+  contentStartY = addCenteredSubtitle(
+    doc,
+    contentStartY,
+    "Payments to vendors from Expenses and Maintenance tabs."
+  );
 
   autoTable(doc, {
-    startY: 50,
+    startY: contentStartY,
     head: [["Date", "Source", "Vendor", "Property", "Category", "Description", "Amount"]],
     body: report.lines.map((l) => [
       l.date,
@@ -297,7 +340,7 @@ export async function downloadVendorPayoutPdf(report: VendorPayoutReport): Promi
   });
 
   const summaryY = (doc as jsPDF & { lastAutoTable?: { finalY: number } }).lastAutoTable
-    ?.finalY ?? 50;
+    ?.finalY ?? contentStartY;
 
   autoTable(doc, {
     startY: summaryY + 10,
@@ -319,24 +362,25 @@ export async function downloadInvestorPayoutReportPdf(
   const doc = new jsPDF();
   const { startDate, endDate, propertyName, investorName } = report.period;
 
-  await addHeader(doc, "Investor Payout Report — By Investor", startDate, endDate);
-
-  doc.setFontSize(9);
-  doc.setTextColor(80, 80, 80);
+  let contentStartY = await renderPdfHeader(
+    doc,
+    "Investor Payout Report",
+    standardReportMeta(startDate, endDate)
+  );
   const filterParts = [
     propertyName ? `Property: ${propertyName}` : null,
     investorName ? `Investor: ${investorName}` : null,
   ].filter(Boolean);
-  doc.text(
+  contentStartY = addCenteredSubtitle(
+    doc,
+    contentStartY,
     filterParts.length
       ? `Filters: ${filterParts.join(" · ")}`
-      : "All investor payouts in period, totaled by investor",
-    14,
-    44
+      : "All investor payouts in period, totaled by investor"
   );
 
   autoTable(doc, {
-    startY: 50,
+    startY: contentStartY,
     head: [["Investor", "Payouts", "Total Amount"]],
     body: [
       ...report.byInvestor.map((r) => [
@@ -352,13 +396,14 @@ export async function downloadInvestorPayoutReportPdf(
   });
 
   const summaryY = (doc as jsPDF & { lastAutoTable?: { finalY: number } }).lastAutoTable
-    ?.finalY ?? 50;
+    ?.finalY ?? contentStartY;
 
   if (report.lines.length > 0) {
-    doc.setFontSize(10);
-    doc.setFont("helvetica", "bold");
-    doc.setTextColor(REPORT_GREEN.r, REPORT_GREEN.g, REPORT_GREEN.b);
-    doc.text("Payout Detail", 14, summaryY + 14);
+    drawCenteredText(doc, "Payout Detail", summaryY + 14, {
+      fontSize: 10,
+      bold: true,
+      color: [REPORT_GREEN.r, REPORT_GREEN.g, REPORT_GREEN.b],
+    });
 
     autoTable(doc, {
       startY: summaryY + 18,
@@ -398,10 +443,13 @@ export async function downloadInvestorPayoutPdf(
   >
 ): Promise<void> {
   const doc = new jsPDF();
-  await addPayoutFormHeader(doc, payout.payout_id);
+  const contentStartY = await renderPdfHeader(doc, "Investor Payout Form", [
+    `Payout ID: ${payout.payout_id}`,
+    `Generated: ${new Date().toLocaleString()}`,
+  ]);
 
   autoTable(doc, {
-    startY: 48,
+    startY: contentStartY,
     head: [["Field", "Value"]],
     body: [
       ["Payout ID", payout.payout_id],
@@ -426,7 +474,7 @@ export async function downloadInvestorPayoutPdf(
   });
 
   const tableEnd =
-    (doc as jsPDF & { lastAutoTable?: { finalY: number } }).lastAutoTable?.finalY ?? 48;
+    (doc as jsPDF & { lastAutoTable?: { finalY: number } }).lastAutoTable?.finalY ?? contentStartY;
 
   doc.setDrawColor(REPORT_GREEN.r, REPORT_GREEN.g, REPORT_GREEN.b);
   doc.setLineWidth(0.6);
@@ -445,9 +493,9 @@ export async function downloadInvestorPayoutPdf(
   doc.setTextColor(100, 100, 100);
   doc.text(
     "This document confirms investor payout details recorded in HOP2IT Property Manager.",
-    14,
+    pageCenterX(doc),
     tableEnd + 42,
-    { maxWidth: 180 }
+    { align: "center", maxWidth: 170 }
   );
 
   const safeId = payout.payout_id.replace(/[^a-zA-Z0-9_-]+/g, "-");
