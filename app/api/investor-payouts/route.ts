@@ -95,10 +95,15 @@ export async function POST(request: Request) {
   if (forbidden) return forbidden;
   try {
     const body = await request.json();
-    if (!body.payout_id || !body.date || !body.property_name || !body.investor_name || !body.payout_type) {
-      return jsonError("Payout ID, date, property, investor, and payout type are required.");
+    if (!body.payout_id || !body.date || !body.property_name || !body.investor_name) {
+      return jsonError("Record ID, date, property, and investor are required.");
     }
-    const payout = await createInvestorPayout(parsePayoutBody(body));
+    const payout = await createInvestorPayout(
+      parsePayoutBody({
+        payout_type: body.payout_type ?? "Return of Capital",
+        ...body,
+      })
+    );
     return jsonOk(payout, 201);
   } catch (error) {
     return jsonError((error as Error).message, 400);
@@ -112,10 +117,16 @@ export async function PUT(request: Request) {
     const id = parseIdParam(request);
     if (!id) return jsonError("Investor payout id is required.");
     const body = await request.json();
-    if (!body.payout_id || !body.date || !body.property_name || !body.investor_name || !body.payout_type) {
-      return jsonError("Payout ID, date, property, investor, and payout type are required.");
+    if (!body.payout_id || !body.date || !body.property_name || !body.investor_name) {
+      return jsonError("Record ID, date, property, and investor are required.");
     }
-    const payout = await updateInvestorPayout(id, parsePayoutBody(body));
+    const payout = await updateInvestorPayout(
+      id,
+      parsePayoutBody({
+        payout_type: body.payout_type ?? "Return of Capital",
+        ...body,
+      })
+    );
     return jsonOk(payout);
   } catch (error) {
     return jsonError((error as Error).message, 400);

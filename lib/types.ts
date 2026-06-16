@@ -9,6 +9,7 @@ export type SheetTab =
   | "maintenance"
   | "communication"
   | "investors"
+  | "investor_capital"
   | "investor_payout"
   | "reports"
   | "users";

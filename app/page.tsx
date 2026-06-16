@@ -10,6 +10,7 @@ import SpreadsheetTable from "@/components/SpreadsheetTable";
 import { loanSummaryFromPayout } from "@/lib/investor-payout-summary";
 import {
   getColumnsForTab,
+  isInvestorTab,
   isManagementTab,
   isSettingsTab,
   MANAGEMENT_TABS,
@@ -19,6 +20,7 @@ import {
 } from "@/lib/columns";
 import {
   canAccessTab,
+  investorTabsForRole,
   navTabsAfterManagementForRole,
   settingsTabsForRole,
 } from "@/lib/permissions";
@@ -56,9 +58,37 @@ const API_MAP: Record<DataTab, string> = {
   expenses: "/api/expenses",
   maintenance: "/api/maintenance",
   investors: "/api/investors",
+  investor_capital: "/api/investor-payouts",
   investor_payout: "/api/investor-payouts",
   users: "/api/users",
 };
+
+function isInvestorRecordTab(tab: SheetTab): boolean {
+  return tab === "investor_capital" || tab === "investor_payout";
+}
+
+function buildInvestorRecordPayload(
+  tab: SheetTab,
+  form: Record<string, string>,
+  columns: ColumnDef[],
+  editingId: number | null,
+  rows: Record<string, unknown>[]
+): Record<string, unknown> {
+  const partial = payloadFromForm(form, columns);
+  if (editingId != null) {
+    const existing = rows.find((row) => Number(row.id) === editingId);
+    if (existing) return { ...existing, ...partial };
+  }
+  if (tab === "investor_capital") {
+    return {
+      payout_type: "Return of Capital",
+      payout_amount: 0,
+      status: "Pending",
+      ...partial,
+    };
+  }
+  return partial;
+}
 
 function emptyForm(columns: ColumnDef[]): Record<string, string> {
   const form: Record<string, string> = {};
@@ -132,6 +162,13 @@ export default function PropertyManagerApp() {
   } | null>(null);
   const managementButtonRef = useRef<HTMLButtonElement>(null);
   const managementDropdownRef = useRef<HTMLDivElement>(null);
+  const [investorMenuOpen, setInvestorMenuOpen] = useState(false);
+  const [investorMenuPosition, setInvestorMenuPosition] = useState<{
+    top: number;
+    left: number;
+  } | null>(null);
+  const investorButtonRef = useRef<HTMLButtonElement>(null);
+  const investorDropdownRef = useRef<HTMLDivElement>(null);
   const [settingsMenuOpen, setSettingsMenuOpen] = useState(false);
   const [settingsMenuPosition, setSettingsMenuPosition] = useState<{
     top: number;
@@ -159,10 +196,14 @@ export default function PropertyManagerApp() {
     () => navTabsAfterManagementForRole(userRole),
     [userRole]
   );
+  const visibleInvestorTabs = useMemo(
+    () => investorTabsForRole(userRole),
+    [userRole]
+  );
 
   const columns = useMemo(() => getColumnsForTab(tab), [tab]);
   const investorPayoutFormSummary = useMemo(() => {
-    if (tab !== "investor_payout" || !formOpen) return null;
+    if (tab !== "investor_capital" || !formOpen) return null;
     return {
       property_address: form.property_address || null,
       loan_date: form.loan_date || null,
@@ -321,11 +362,11 @@ export default function PropertyManagerApp() {
       if (
         activeTab === "expenses" ||
         activeTab === "maintenance" ||
-        activeTab === "investor_payout"
+        isInvestorRecordTab(activeTab)
       ) {
         await loadProperties();
       }
-      if (activeTab === "investor_payout") {
+      if (isInvestorRecordTab(activeTab)) {
         await loadInvestors();
       }
       const endpoint = API_MAP[activeTab];
@@ -375,7 +416,7 @@ export default function PropertyManagerApp() {
       }));
       return;
     }
-    if (tab === "investor_payout" && fieldKey === "property_name") {
+    if (isInvestorRecordTab(tab) && fieldKey === "property_name") {
       if (!propertyName) {
         setForm((prev) => ({
           ...prev,
@@ -447,6 +488,37 @@ export default function PropertyManagerApp() {
     setManagementMenuPosition(null);
   }, []);
 
+  const updateInvestorMenuPosition = useCallback(() => {
+    if (!investorButtonRef.current) return;
+    const rect = investorButtonRef.current.getBoundingClientRect();
+    setInvestorMenuPosition({
+      top: rect.bottom + 4,
+      left: rect.left,
+    });
+  }, []);
+
+  const closeInvestorMenu = useCallback(() => {
+    setInvestorMenuOpen(false);
+    setInvestorMenuPosition(null);
+  }, []);
+
+  const toggleInvestorMenu = useCallback(() => {
+    if (investorMenuOpen) {
+      closeInvestorMenu();
+      return;
+    }
+    setSettingsMenuOpen(false);
+    setSettingsMenuPosition(null);
+    closeManagementMenu();
+    updateInvestorMenuPosition();
+    setInvestorMenuOpen(true);
+  }, [
+    closeInvestorMenu,
+    closeManagementMenu,
+    investorMenuOpen,
+    updateInvestorMenuPosition,
+  ]);
+
   const toggleManagementMenu = useCallback(() => {
     if (managementMenuOpen) {
       closeManagementMenu();
@@ -454,9 +526,15 @@ export default function PropertyManagerApp() {
     }
     setSettingsMenuOpen(false);
     setSettingsMenuPosition(null);
+    closeInvestorMenu();
     updateManagementMenuPosition();
     setManagementMenuOpen(true);
-  }, [closeManagementMenu, managementMenuOpen, updateManagementMenuPosition]);
+  }, [
+    closeInvestorMenu,
+    closeManagementMenu,
+    managementMenuOpen,
+    updateManagementMenuPosition,
+  ]);
 
   const updateSettingsMenuPosition = useCallback(() => {
     if (!settingsButtonRef.current) return;
@@ -478,9 +556,11 @@ export default function PropertyManagerApp() {
       return;
     }
     closeManagementMenu();
+    closeInvestorMenu();
     updateSettingsMenuPosition();
     setSettingsMenuOpen(true);
   }, [
+    closeInvestorMenu,
     closeManagementMenu,
     closeSettingsMenu,
     settingsMenuOpen,
@@ -514,6 +594,30 @@ export default function PropertyManagerApp() {
     managementMenuOpen,
     updateManagementMenuPosition,
   ]);
+
+  useEffect(() => {
+    if (!investorMenuOpen) return;
+    updateInvestorMenuPosition();
+    const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target as Node;
+      if (
+        investorButtonRef.current?.contains(target) ||
+        investorDropdownRef.current?.contains(target)
+      ) {
+        return;
+      }
+      closeInvestorMenu();
+    };
+    const handleReposition = () => updateInvestorMenuPosition();
+    document.addEventListener("mousedown", handleClickOutside);
+    window.addEventListener("resize", handleReposition);
+    window.addEventListener("scroll", handleReposition, true);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+      window.removeEventListener("resize", handleReposition);
+      window.removeEventListener("scroll", handleReposition, true);
+    };
+  }, [closeInvestorMenu, investorMenuOpen, updateInvestorMenuPosition]);
 
   useEffect(() => {
     if (!settingsMenuOpen) return;
@@ -556,7 +660,7 @@ export default function PropertyManagerApp() {
   const openEntryForm = () => {
     setEditingId(null);
     const nextForm = emptyForm(columns);
-    if (tab === "investor_payout") nextForm.days_in_year = "365";
+    if (tab === "investor_capital" || tab === "investor_payout") nextForm.days_in_year = "365";
     if (tab === "users") nextForm.password = "";
     setForm(nextForm);
     setFormOpen(true);
@@ -580,6 +684,7 @@ export default function PropertyManagerApp() {
     setFormOpen(false);
     setExpandedProperty(null);
     closeManagementMenu();
+    closeInvestorMenu();
     closeSettingsMenu();
     if (next !== "properties") setPropertyBusinessFilter("");
     setTab(next);
@@ -620,7 +725,9 @@ export default function PropertyManagerApp() {
       const endpoint = API_MAP[tab];
       const isEdit = editingId != null;
       const url = isEdit ? `${endpoint}?id=${editingId}` : endpoint;
-      let payload: Record<string, unknown> = payloadFromForm(form, columns);
+      let payload: Record<string, unknown> = isInvestorRecordTab(tab)
+        ? buildInvestorRecordPayload(tab, form, columns, editingId, rows)
+        : payloadFromForm(form, columns);
       if (tab === "users") {
         if (!isEdit && !form.password?.trim()) {
           showMessage("error", "Password is required for new users.");
@@ -849,6 +956,26 @@ export default function PropertyManagerApp() {
                 ▼
               </span>
             </button>
+            {visibleInvestorTabs.length > 0 && (
+              <button
+                ref={investorButtonRef}
+                type="button"
+                onClick={toggleInvestorMenu}
+                className={navTabClass(isInvestorTab(tab) || investorMenuOpen)}
+                aria-expanded={investorMenuOpen}
+                aria-haspopup="menu"
+              >
+                Investor
+                <span
+                  className={`text-[10px] leading-none transition-transform ${
+                    investorMenuOpen ? "rotate-180" : ""
+                  }`}
+                  aria-hidden
+                >
+                  ▼
+                </span>
+              </button>
+            )}
             {visibleNavAfterManagement.map((sheet) => (
               <button
                 key={sheet.id}
@@ -898,6 +1025,33 @@ export default function PropertyManagerApp() {
           </div>
         </div>
       </nav>
+      {investorMenuOpen && investorMenuPosition && (
+        <div
+          ref={investorDropdownRef}
+          role="menu"
+          className="fixed z-[100] min-w-[11rem] rounded-lg border border-zinc-600/80 bg-zinc-800 py-1 shadow-2xl"
+          style={{
+            top: investorMenuPosition.top,
+            left: investorMenuPosition.left,
+          }}
+        >
+          {visibleInvestorTabs.map((sheet) => (
+            <button
+              key={sheet.id}
+              type="button"
+              role="menuitem"
+              onClick={() => handleTabChange(sheet.id)}
+              className={`block w-full px-4 py-2.5 text-left text-sm transition ${
+                tab === sheet.id
+                  ? "bg-emerald-950/50 text-emerald-300"
+                  : "text-zinc-200 hover:bg-zinc-700/80 hover:text-zinc-100"
+              }`}
+            >
+              {sheet.label}
+            </button>
+          ))}
+        </div>
+      )}
       {managementMenuOpen && managementMenuPosition && (
         <div
           ref={managementDropdownRef}
@@ -1007,11 +1161,17 @@ export default function PropertyManagerApp() {
                       businesses on the Business tab first.
                     </p>
                   )}
+                  {tab === "investor_capital" && (
+                    <p className="text-xs text-zinc-400 mt-1">
+                      Record capital raised for a property. Enter loan amount, 12-month rate
+                      (e.g. 0.12 = 12%), loan date, and sell estimate — the payout calculator
+                      preview updates automatically.
+                    </p>
+                  )}
                   {tab === "investor_payout" && (
                     <p className="text-xs text-zinc-400 mt-1">
-                      Selecting a property auto-fills address and investor. Enter loan amount,
-                      12-month rate (e.g. 0.12 = 12%), loan date, and sell estimate — payout
-                      amount is calculated automatically.
+                      Record investor distributions and payment details. Capital loan fields are
+                      managed on the Capital tab.
                     </p>
                   )}
                   {tab === "users" && (
@@ -1188,11 +1348,11 @@ export default function PropertyManagerApp() {
                   {saving ? "Saving..." : editingId ? "Update" : "Save"}
                 </button>
               </form>
-              {tab === "investor_payout" && investorPayoutFormSummary && (
+              {tab === "investor_capital" && investorPayoutFormSummary && (
                 <div className="mt-5">
                   <InvestorPayoutSummaryPanel
                     input={investorPayoutFormSummary}
-                    title="Payout Calculator Preview"
+                    title="Capital Payout Calculator"
                   />
                 </div>
               )}
@@ -1273,14 +1433,14 @@ export default function PropertyManagerApp() {
                 onProfitability={(row) => setProfitabilityProperty(row as unknown as Property)}
                 showExpand={tab === "properties" && !showArchived}
                 onExpand={(row) => setExpandedProperty(row as unknown as Property)}
-                showPrintForm={tab === "investor_payout" && !showArchived}
+                showPrintForm={isInvestorRecordTab(tab) && !showArchived}
                 onPrintForm={handlePrintForm}
                 printFormId={printFormId}
                 showEdit={!showArchived}
                 onEdit={openEditForm}
                 editingId={editingId}
               />
-              {tab === "investor_payout" && !showArchived && investorPayoutTableSummaries.length > 0 && (
+              {tab === "investor_capital" && !showArchived && investorPayoutTableSummaries.length > 0 && (
                 <div className="mt-5 space-y-3">
                   <h3 className="text-sm font-semibold text-emerald-300">
                     Payout Calculator Summary

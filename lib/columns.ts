@@ -28,8 +28,13 @@ export const MANAGEMENT_TABS: { id: SheetTab; label: string }[] = [
 
 export const SETTINGS_TABS: { id: SheetTab; label: string }[] = [
   { id: "businesses", label: "Business" },
-  { id: "investors", label: "Investor" },
+  { id: "investors", label: "Investor Contacts" },
   { id: "users", label: "User Setup" },
+];
+
+export const INVESTOR_TABS: { id: SheetTab; label: string }[] = [
+  { id: "investor_capital", label: "Capital" },
+  { id: "investor_payout", label: "Payout" },
 ];
 
 export const NAV_TABS_BEFORE_MANAGEMENT: { id: SheetTab; label: string }[] = [
@@ -39,7 +44,6 @@ export const NAV_TABS_BEFORE_MANAGEMENT: { id: SheetTab; label: string }[] = [
 
 export const NAV_TABS_AFTER_MANAGEMENT: { id: SheetTab; label: string }[] = [
   { id: "communication", label: "Communication" },
-  { id: "investor_payout", label: "Investor Payout" },
   { id: "reports", label: "Reports" },
 ];
 
@@ -47,11 +51,16 @@ export const SHEET_TABS: { id: SheetTab; label: string }[] = [
   ...SETTINGS_TABS,
   ...NAV_TABS_BEFORE_MANAGEMENT,
   ...MANAGEMENT_TABS,
+  ...INVESTOR_TABS,
   ...NAV_TABS_AFTER_MANAGEMENT,
 ];
 
 export function isManagementTab(tab: SheetTab): boolean {
   return MANAGEMENT_TABS.some((item) => item.id === tab);
+}
+
+export function isInvestorTab(tab: SheetTab): boolean {
+  return INVESTOR_TABS.some((item) => item.id === tab);
 }
 
 export function isSettingsTab(tab: SheetTab): boolean {
@@ -300,8 +309,8 @@ export const INVESTOR_COLUMNS: ColumnDef[] = [
   { key: "notes", label: "Notes", type: "text", width: "200px" },
 ];
 
-export const INVESTOR_PAYOUT_COLUMNS: ColumnDef[] = [
-  { key: "payout_id", label: "Payout ID", type: "text", required: true, width: "100px" },
+export const INVESTOR_CAPITAL_COLUMNS: ColumnDef[] = [
+  { key: "payout_id", label: "Capital ID", type: "text", required: true, width: "100px" },
   { key: "date", label: "Date", type: "date", required: true, width: "110px" },
   { key: "property_name", label: "Property", type: "property", required: true, width: "150px" },
   { key: "property_address", label: "Property Address", type: "text", width: "180px" },
@@ -313,6 +322,14 @@ export const INVESTOR_PAYOUT_COLUMNS: ColumnDef[] = [
   { key: "annual_interest_rate", label: "12-Mo Rate", type: "number", width: "100px" },
   { key: "kicker", label: "Kicker", type: "currency", width: "100px" },
   { key: "days_in_year", label: "Days in Year", type: "number", width: "100px" },
+  { key: "notes", label: "Notes", type: "text", width: "200px" },
+];
+
+export const INVESTOR_PAYOUT_COLUMNS: ColumnDef[] = [
+  { key: "payout_id", label: "Payout ID", type: "text", required: true, width: "100px" },
+  { key: "date", label: "Date", type: "date", required: true, width: "110px" },
+  { key: "property_name", label: "Property", type: "property", required: true, width: "150px" },
+  { key: "investor_name", label: "Investor", type: "investor", required: true, width: "150px" },
   {
     key: "payout_type",
     label: "Payout Type",
@@ -386,6 +403,8 @@ export function getColumnsForTab(tab: SheetTab): ColumnDef[] {
       return MAINTENANCE_COLUMNS;
     case "investors":
       return INVESTOR_COLUMNS;
+    case "investor_capital":
+      return INVESTOR_CAPITAL_COLUMNS;
     case "investor_payout":
       return INVESTOR_PAYOUT_COLUMNS;
     case "users":
