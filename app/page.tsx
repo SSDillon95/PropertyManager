@@ -1,13 +1,21 @@
 "use client";
 
 import Image from "next/image";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import InvestorPayoutSummaryPanel from "@/components/InvestorPayoutSummaryPanel";
 import PropertyDetailPanel from "@/components/PropertyDetailPanel";
 import ReportsView from "@/components/ReportsView";
 import SpreadsheetTable from "@/components/SpreadsheetTable";
 import { loanSummaryFromPayout } from "@/lib/investor-payout-summary";
-import { getColumnsForTab, SHEET_TABS, type ColumnDef } from "@/lib/columns";
+import {
+  getColumnsForTab,
+  isManagementTab,
+  MANAGEMENT_TABS,
+  NAV_TABS_AFTER_MANAGEMENT,
+  NAV_TABS_BEFORE_MANAGEMENT,
+  SHEET_TABS,
+  type ColumnDef,
+} from "@/lib/columns";
 import { formatCurrency, todayIso } from "@/lib/format";
 import { requestReportPdf } from "@/lib/pdf-client";
 import { propertyProfitability } from "@/lib/profitability";
@@ -109,6 +117,8 @@ export default function PropertyManagerApp() {
   const [businesses, setBusinesses] = useState<Business[]>([]);
   const [properties, setProperties] = useState<Property[]>([]);
   const [propertyBusinessFilter, setPropertyBusinessFilter] = useState("");
+  const [managementMenuOpen, setManagementMenuOpen] = useState(false);
+  const managementMenuRef = useRef<HTMLDivElement>(null);
   const [tenants, setTenants] = useState<Tenant[]>([]);
   const [leases, setLeases] = useState<Lease[]>([]);
   const [rentPayments, setRentPayments] = useState<RentPayment[]>([]);
@@ -370,6 +380,20 @@ export default function PropertyManagerApp() {
   }, [refresh]);
 
   useEffect(() => {
+    if (!managementMenuOpen) return;
+    const handleClickOutside = (event: MouseEvent) => {
+      if (
+        managementMenuRef.current &&
+        !managementMenuRef.current.contains(event.target as Node)
+      ) {
+        setManagementMenuOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [managementMenuOpen]);
+
+  useEffect(() => {
     if (tab !== "dashboard" && tab !== "reports") {
       setForm(emptyForm(columns));
       setFormOpen(false);
@@ -402,6 +426,7 @@ export default function PropertyManagerApp() {
     setShowArchived(false);
     setFormOpen(false);
     setExpandedProperty(null);
+    setManagementMenuOpen(false);
     if (next !== "properties") setPropertyBusinessFilter("");
     setTab(next);
     setLoading(true);
@@ -586,7 +611,66 @@ export default function PropertyManagerApp() {
       <nav className="bg-zinc-800/90 backdrop-blur border-b border-zinc-600/60">
         <div className="max-w-[1600px] mx-auto px-2 sm:px-4 flex items-center justify-between gap-3">
           <div className="flex overflow-x-auto min-w-0">
-            {SHEET_TABS.map((sheet) => (
+            {NAV_TABS_BEFORE_MANAGEMENT.map((sheet) => (
+              <button
+                key={sheet.id}
+                type="button"
+                onClick={() => handleTabChange(sheet.id)}
+                className={`px-4 py-2.5 text-sm whitespace-nowrap border-b-2 transition ${
+                  tab === sheet.id
+                    ? "border-emerald-400 text-emerald-300 bg-zinc-700/50"
+                    : "border-transparent text-zinc-400 hover:text-zinc-100 hover:bg-zinc-700/40"
+                }`}
+              >
+                {sheet.label}
+              </button>
+            ))}
+            <div ref={managementMenuRef} className="relative shrink-0">
+              <button
+                type="button"
+                onClick={() => setManagementMenuOpen((open) => !open)}
+                className={`px-4 py-2.5 text-sm whitespace-nowrap border-b-2 transition inline-flex items-center gap-1.5 ${
+                  isManagementTab(tab)
+                    ? "border-emerald-400 text-emerald-300 bg-zinc-700/50"
+                    : "border-transparent text-zinc-400 hover:text-zinc-100 hover:bg-zinc-700/40"
+                }`}
+                aria-expanded={managementMenuOpen}
+                aria-haspopup="menu"
+              >
+                Management
+                <span
+                  className={`text-[10px] transition-transform ${
+                    managementMenuOpen ? "rotate-180" : ""
+                  }`}
+                  aria-hidden
+                >
+                  ▼
+                </span>
+              </button>
+              {managementMenuOpen && (
+                <div
+                  role="menu"
+                  className="absolute left-0 top-full z-50 min-w-[11rem] rounded-lg border border-zinc-600/80 bg-zinc-800 py-1 shadow-xl"
+                >
+                  {MANAGEMENT_TABS.map((sheet) => (
+                    <button
+                      key={sheet.id}
+                      type="button"
+                      role="menuitem"
+                      onClick={() => handleTabChange(sheet.id)}
+                      className={`block w-full px-4 py-2 text-left text-sm transition ${
+                        tab === sheet.id
+                          ? "bg-emerald-950/50 text-emerald-300"
+                          : "text-zinc-200 hover:bg-zinc-700/80 hover:text-zinc-100"
+                      }`}
+                    >
+                      {sheet.label}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+            {NAV_TABS_AFTER_MANAGEMENT.map((sheet) => (
               <button
                 key={sheet.id}
                 type="button"

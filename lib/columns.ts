@@ -18,19 +18,35 @@ export interface ColumnDef {
   width?: string;
 }
 
-export const SHEET_TABS: { id: SheetTab; label: string }[] = [
-  { id: "dashboard", label: "Dashboard" },
-  { id: "businesses", label: "Business" },
-  { id: "properties", label: "Properties" },
+export const MANAGEMENT_TABS: { id: SheetTab; label: string }[] = [
   { id: "tenants", label: "Tenants" },
   { id: "leases", label: "Leases" },
   { id: "rent_ledger", label: "Rent Ledger" },
-  { id: "expenses", label: "Expenses" },
   { id: "maintenance", label: "Maintenance" },
+];
+
+export const NAV_TABS_BEFORE_MANAGEMENT: { id: SheetTab; label: string }[] = [
+  { id: "dashboard", label: "Dashboard" },
+  { id: "businesses", label: "Business" },
+  { id: "properties", label: "Properties" },
+];
+
+export const NAV_TABS_AFTER_MANAGEMENT: { id: SheetTab; label: string }[] = [
+  { id: "expenses", label: "Expenses" },
   { id: "investors", label: "Investor" },
   { id: "investor_payout", label: "Investor Payout" },
   { id: "reports", label: "Reports" },
 ];
+
+export const SHEET_TABS: { id: SheetTab; label: string }[] = [
+  ...NAV_TABS_BEFORE_MANAGEMENT,
+  ...MANAGEMENT_TABS,
+  ...NAV_TABS_AFTER_MANAGEMENT,
+];
+
+export function isManagementTab(tab: SheetTab): boolean {
+  return MANAGEMENT_TABS.some((item) => item.id === tab);
+}
 
 export const BUSINESS_COLUMNS: ColumnDef[] = [
   { key: "business_id", label: "Business ID", type: "text", required: true, width: "110px" },
