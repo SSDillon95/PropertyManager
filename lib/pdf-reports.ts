@@ -96,13 +96,17 @@ function displayField(value: string | number | null | undefined): string {
   return String(value);
 }
 
-function headerTextX(): number {
-  return PAGE_MARGIN + LOGO_WIDTH + HEADER_TEXT_GAP;
+function logoX(doc: jsPDF): number {
+  return doc.internal.pageSize.getWidth() - PAGE_MARGIN - LOGO_WIDTH;
 }
 
-function placeLogoTopLeft(doc: jsPDF, logo: string): number {
+function headerTextMaxWidth(doc: jsPDF): number {
+  return logoX(doc) - PAGE_MARGIN - HEADER_TEXT_GAP;
+}
+
+function placeLogoTopRight(doc: jsPDF, logo: string): number {
   const logoHeight = logoDisplayHeight();
-  doc.addImage(logo, "PNG", PAGE_MARGIN, PAGE_MARGIN, LOGO_WIDTH, logoHeight);
+  doc.addImage(logo, "PNG", logoX(doc), PAGE_MARGIN, LOGO_WIDTH, logoHeight);
   return logoHeight;
 }
 
@@ -115,7 +119,10 @@ function drawHeaderText(
   doc.setFont("helvetica", options?.bold ? "bold" : "normal");
   doc.setFontSize(options?.fontSize ?? 10);
   if (options?.color) doc.setTextColor(...options.color);
-  doc.text(text, headerTextX(), y, { align: "left" });
+  doc.text(text, PAGE_MARGIN, y, {
+    align: "left",
+    maxWidth: headerTextMaxWidth(doc),
+  });
 }
 
 function drawBodyText(
@@ -147,7 +154,7 @@ async function renderPdfHeader(
   options?: { contentGap?: number }
 ): Promise<number> {
   const logo = await loadLogoDataUrl();
-  const logoHeight = placeLogoTopLeft(doc, logo);
+  const logoHeight = placeLogoTopRight(doc, logo);
 
   let y = PAGE_MARGIN + 11;
   drawHeaderText(doc, title, y, {
