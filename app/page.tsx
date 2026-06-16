@@ -1739,11 +1739,13 @@ export default function PropertyManagerApp() {
                         ? "Add User"
                         : tab === "tenants"
                           ? "Add Tenants"
-                          : tab === "investor_capital"
-                            ? "Add Capital Investment"
-                            : tab === "investor_payout"
-                              ? "Add Payout"
-                              : "Add Row"}
+                          : tab === "properties"
+                            ? "Add Property"
+                            : tab === "investor_capital"
+                              ? "Add Capital Investment"
+                              : tab === "investor_payout"
+                                ? "Add Payout"
+                                : "Add Row"}
                     </button>
                   )}
                   {tab !== "users" && (
