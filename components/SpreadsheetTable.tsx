@@ -8,6 +8,8 @@ interface SpreadsheetTableProps {
   rows: Record<string, unknown>[];
   onDelete: (id: number) => void;
   deletingId: number | null;
+  showProfitability?: boolean;
+  onProfitability?: (row: Record<string, unknown>) => void;
 }
 
 export default function SpreadsheetTable({
@@ -15,6 +17,8 @@ export default function SpreadsheetTable({
   rows,
   onDelete,
   deletingId,
+  showProfitability = false,
+  onProfitability,
 }: SpreadsheetTableProps) {
   if (rows.length === 0) {
     return (
@@ -25,11 +29,16 @@ export default function SpreadsheetTable({
   }
 
   return (
-    <div className="rounded-xl border border-zinc-600/60 overflow-hidden bg-zinc-800/90">
-      <div className="overflow-x-auto">
+    <div className="rounded-xl border border-zinc-600/60 bg-zinc-800/90">
+      <div className="table-scroll">
         <table className="w-full text-sm border-collapse min-w-max">
           <thead>
             <tr className="bg-amber-400 text-zinc-900">
+              {showProfitability && (
+                <th className="sticky left-0 z-20 px-3 py-2 text-left font-semibold whitespace-nowrap border-r border-amber-500/40 text-xs uppercase tracking-wide bg-amber-400 min-w-[7.5rem]">
+                  &nbsp;
+                </th>
+              )}
               {columns.map((col) => (
                 <th
                   key={col.key}
@@ -52,6 +61,21 @@ export default function SpreadsheetTable({
                   idx % 2 === 0 ? "bg-zinc-800/50" : "bg-zinc-700/30"
                 } hover:bg-emerald-950/20`}
               >
+                {showProfitability && (
+                  <td
+                    className={`sticky left-0 z-10 px-3 py-2 whitespace-nowrap border-r border-zinc-700/40 ${
+                      idx % 2 === 0 ? "bg-zinc-800/95" : "bg-zinc-700/80"
+                    }`}
+                  >
+                    <button
+                      type="button"
+                      onClick={() => onProfitability?.(row)}
+                      className="text-xs px-2 py-1 rounded-md border border-emerald-600/60 bg-emerald-950/40 text-emerald-300 hover:bg-emerald-900/50 whitespace-nowrap"
+                    >
+                      Profitability
+                    </button>
+                  </td>
+                )}
                 {columns.map((col) => (
                   <td
                     key={col.key}

@@ -5,6 +5,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import SpreadsheetTable from "@/components/SpreadsheetTable";
 import { getColumnsForTab, SHEET_TABS, type ColumnDef } from "@/lib/columns";
 import { formatCurrency, todayIso } from "@/lib/format";
+import { propertyProfitability } from "@/lib/profitability";
 import { rentDetailsForProperty, tenantDisplayName } from "@/lib/rent-ledger";
 import type { DashboardSummary, Lease, Property, SheetTab, Tenant } from "@/lib/types";
 
@@ -66,8 +67,13 @@ export default function PropertyManagerApp() {
   const [properties, setProperties] = useState<Property[]>([]);
   const [tenants, setTenants] = useState<Tenant[]>([]);
   const [leases, setLeases] = useState<Lease[]>([]);
+  const [profitabilityProperty, setProfitabilityProperty] = useState<Property | null>(null);
 
   const columns = useMemo(() => getColumnsForTab(tab), [tab]);
+  const profitability = useMemo(
+    () => (profitabilityProperty ? propertyProfitability(profitabilityProperty) : null),
+    [profitabilityProperty]
+  );
 
   const showMessage = (type: "success" | "error", text: string) => {
     setMessage({ type, text });
@@ -327,7 +333,7 @@ export default function PropertyManagerApp() {
         </div>
       )}
 
-      <main className="flex-1 max-w-[1600px] w-full mx-auto px-4 sm:px-6 py-6">
+      <main className="flex-1 min-h-0 max-w-[1600px] w-full mx-auto px-4 sm:px-6 py-6 pb-12">
         {loading ? (
           <div className="text-zinc-400 py-12 text-center">Loading...</div>
         ) : tab === "dashboard" ? (
@@ -456,13 +462,117 @@ export default function PropertyManagerApp() {
                 rows={rows}
                 onDelete={handleDelete}
                 deletingId={deletingId}
+                showProfitability={tab === "properties"}
+                onProfitability={(row) => setProfitabilityProperty(row as unknown as Property)}
               />
             </section>
           </div>
         )}
       </main>
 
-      <footer className="border-t border-zinc-600/60 bg-zinc-800/90 py-4 text-center text-xs text-zinc-500">
+      {profitabilityProperty && profitability && (
+        <div
+          className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/60"
+          onClick={() => setProfitabilityProperty(null)}
+        >
+          <div
+            className="w-full max-w-md rounded-xl border border-zinc-600/60 bg-zinc-800 p-5 shadow-xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-start justify-between gap-3 mb-4">
+              <div>
+                <h3 className="font-semibold text-lg text-zinc-100">Profitability</h3>
+                <p className="text-sm text-zinc-400 mt-0.5">{profitabilityProperty.property_name}</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setProfitabilityProperty(null)}
+                className="text-zinc-400 hover:text-zinc-200 text-sm px-2 py-1"
+              >
+                Close
+              </button>
+            </div>
+            <div className="space-y-3 text-sm">
+              <div className="grid grid-cols-2 gap-2">
+                <div className="rounded-lg bg-zinc-700/50 p-3">
+                  <div className="text-xs text-zinc-400 uppercase tracking-wide">Monthly Rent</div>
+                  <div className="text-emerald-400 font-semibold mt-1">
+                    {formatCurrency(profitability.monthlyRent)}
+                  </div>
+                </div>
+                <div className="rounded-lg bg-zinc-700/50 p-3">
+                  <div className="text-xs text-zinc-400 uppercase tracking-wide">Monthly Expenses</div>
+                  <div className="text-red-300 font-semibold mt-1">
+                    {formatCurrency(profitability.monthlyExpenses)}
+                  </div>
+                </div>
+              </div>
+              <div className="rounded-lg border border-zinc-600/60 p-3 space-y-1.5 text-zinc-300">
+                <div className="flex justify-between">
+                  <span>Mortgage</span>
+                  <span>{formatCurrency(profitability.monthlyMortgage)}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>HOA</span>
+                  <span>{formatCurrency(profitability.monthlyHoa)}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Property Tax</span>
+                  <span>{formatCurrency(profitability.monthlyTax)}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Insurance</span>
+                  <span>{formatCurrency(profitability.monthlyInsurance)}</span>
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <div className="rounded-lg bg-emerald-950/40 border border-emerald-700/50 p-3">
+                  <div className="text-xs text-zinc-400 uppercase tracking-wide">Monthly Net</div>
+                  <div
+                    className={`font-semibold mt-1 ${
+                      profitability.monthlyNet >= 0 ? "text-emerald-400" : "text-red-400"
+                    }`}
+                  >
+                    {formatCurrency(profitability.monthlyNet)}
+                  </div>
+                </div>
+                <div className="rounded-lg bg-emerald-950/40 border border-emerald-700/50 p-3">
+                  <div className="text-xs text-zinc-400 uppercase tracking-wide">Annual Net</div>
+                  <div
+                    className={`font-semibold mt-1 ${
+                      profitability.annualNet >= 0 ? "text-emerald-400" : "text-red-400"
+                    }`}
+                  >
+                    {formatCurrency(profitability.annualNet)}
+                  </div>
+                </div>
+              </div>
+              {(profitability.capRate != null || profitability.cashOnCash != null) && (
+                <div className="grid grid-cols-2 gap-2 pt-1">
+                  {profitability.capRate != null && (
+                    <div className="rounded-lg bg-zinc-700/50 p-3">
+                      <div className="text-xs text-zinc-400 uppercase tracking-wide">Cap Rate</div>
+                      <div className="text-zinc-100 font-semibold mt-1">
+                        {profitability.capRate.toFixed(1)}%
+                      </div>
+                    </div>
+                  )}
+                  {profitability.cashOnCash != null && (
+                    <div className="rounded-lg bg-zinc-700/50 p-3">
+                      <div className="text-xs text-zinc-400 uppercase tracking-wide">Cash on Cash</div>
+                      <div className="text-zinc-100 font-semibold mt-1">
+                        {profitability.cashOnCash.toFixed(1)}%
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      <footer className="relative z-10 border-t border-zinc-600/60 bg-zinc-800/90 py-4 text-center text-xs text-zinc-500 shrink-0">
         HOP2IT Property Manager — Properties, Tenants, Leases, Rent Ledger, Expenses,
         Maintenance
       </footer>

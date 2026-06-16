@@ -31,4 +31,12 @@ body {
     background-size: 1.25rem;
     background-repeat: no-repeat;
   }
+
+  .table-scroll {
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    padding-bottom: 1.75rem;
+    margin-bottom: 0.5rem;
+    scrollbar-gutter: stable;
+  }
 }
