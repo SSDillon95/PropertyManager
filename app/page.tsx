@@ -706,6 +706,20 @@ export default function PropertyManagerApp() {
     URL.revokeObjectURL(url);
   };
 
+  const navTabClass = (active: boolean) =>
+    `h-11 px-4 text-sm whitespace-nowrap border-b-2 transition inline-flex items-center gap-1.5 shrink-0 ${
+      active
+        ? "border-emerald-400 text-emerald-300 bg-zinc-700/50"
+        : "border-transparent text-zinc-400 hover:text-zinc-100 hover:bg-zinc-700/40"
+    }`;
+
+  const navGearClass = (active: boolean) =>
+    `h-11 px-2 sm:px-3 border-b-2 transition inline-flex items-center justify-center shrink-0 ${
+      active
+        ? "border-emerald-400 text-emerald-300 bg-zinc-700/50"
+        : "border-transparent text-zinc-400 hover:text-zinc-100 hover:bg-zinc-700/40"
+    }`;
+
   return (
     <div className="min-h-screen bg-zinc-800 text-zinc-100 font-sans flex flex-col relative">
       <div
@@ -716,98 +730,80 @@ export default function PropertyManagerApp() {
       <div className="relative z-10 flex flex-col flex-1 min-h-screen">
       <div className="sticky top-0 z-50">
       <nav className="bg-zinc-800/90 backdrop-blur border-b border-zinc-600/60">
-        <div className="max-w-[1600px] mx-auto px-2 sm:px-4 flex items-center justify-between gap-3">
-          <div className="flex min-w-0 overflow-x-auto overflow-y-visible">
-            <div className="relative shrink-0">
-              <button
-                ref={settingsButtonRef}
-                type="button"
-                onClick={toggleSettingsMenu}
-                aria-label="Settings"
-                aria-expanded={settingsMenuOpen}
-                aria-haspopup="menu"
-                title="Settings"
-                className={`px-4 py-2.5 text-sm whitespace-nowrap border-b-2 transition inline-flex items-center justify-center ${
-                  isSettingsTab(tab) || settingsMenuOpen
-                    ? "border-emerald-400 text-emerald-300 bg-zinc-700/50"
-                    : "border-transparent text-zinc-400 hover:text-zinc-100 hover:bg-zinc-700/40"
-                }`}
+        <div className="flex items-stretch w-full">
+          <div className="shrink-0 flex items-stretch pl-2 sm:pl-4">
+            <button
+              ref={settingsButtonRef}
+              type="button"
+              onClick={toggleSettingsMenu}
+              aria-label="Settings"
+              aria-expanded={settingsMenuOpen}
+              aria-haspopup="menu"
+              title="Settings"
+              className={navGearClass(isSettingsTab(tab) || settingsMenuOpen)}
+            >
+              <svg
+                className="w-8 h-8"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                aria-hidden
               >
-                <svg
-                  className="w-8 h-8"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  aria-hidden
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"
-                  />
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
-                  />
-                </svg>
-              </button>
-            </div>
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"
+                />
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
+                />
+              </svg>
+            </button>
+          </div>
+          <div className="flex items-stretch min-w-0 flex-1 overflow-x-auto overflow-y-visible">
             {NAV_TABS_BEFORE_MANAGEMENT.map((sheet) => (
               <button
                 key={sheet.id}
                 type="button"
                 onClick={() => handleTabChange(sheet.id)}
-                className={`px-4 py-2.5 text-sm whitespace-nowrap border-b-2 transition ${
-                  tab === sheet.id
-                    ? "border-emerald-400 text-emerald-300 bg-zinc-700/50"
-                    : "border-transparent text-zinc-400 hover:text-zinc-100 hover:bg-zinc-700/40"
-                }`}
+                className={navTabClass(tab === sheet.id)}
               >
                 {sheet.label}
               </button>
             ))}
-            <div className="relative shrink-0">
-              <button
-                ref={managementButtonRef}
-                type="button"
-                onClick={toggleManagementMenu}
-                className={`px-4 py-2.5 text-sm whitespace-nowrap border-b-2 transition inline-flex items-center gap-1.5 ${
-                  isManagementTab(tab) || managementMenuOpen
-                    ? "border-emerald-400 text-emerald-300 bg-zinc-700/50"
-                    : "border-transparent text-zinc-400 hover:text-zinc-100 hover:bg-zinc-700/40"
+            <button
+              ref={managementButtonRef}
+              type="button"
+              onClick={toggleManagementMenu}
+              className={navTabClass(isManagementTab(tab) || managementMenuOpen)}
+              aria-expanded={managementMenuOpen}
+              aria-haspopup="menu"
+            >
+              Management
+              <span
+                className={`text-[10px] leading-none transition-transform ${
+                  managementMenuOpen ? "rotate-180" : ""
                 }`}
-                aria-expanded={managementMenuOpen}
-                aria-haspopup="menu"
+                aria-hidden
               >
-                Management
-                <span
-                  className={`text-[10px] transition-transform ${
-                    managementMenuOpen ? "rotate-180" : ""
-                  }`}
-                  aria-hidden
-                >
-                  ▼
-                </span>
-              </button>
-            </div>
+                ▼
+              </span>
+            </button>
             {NAV_TABS_AFTER_MANAGEMENT.map((sheet) => (
               <button
                 key={sheet.id}
                 type="button"
                 onClick={() => handleTabChange(sheet.id)}
-                className={`px-4 py-2.5 text-sm whitespace-nowrap border-b-2 transition ${
-                  tab === sheet.id
-                    ? "border-emerald-400 text-emerald-300 bg-zinc-700/50"
-                    : "border-transparent text-zinc-400 hover:text-zinc-100 hover:bg-zinc-700/40"
-                }`}
+                className={navTabClass(tab === sheet.id)}
               >
                 {sheet.label}
               </button>
             ))}
           </div>
-          <div className="flex items-center gap-2 sm:gap-3 shrink-0">
+          <div className="flex items-center gap-2 sm:gap-3 shrink-0 pr-2 sm:pr-4 pl-3">
             {tab !== "dashboard" && tab !== "reports" && tableRows.length > 0 && (
               <button
                 type="button"
