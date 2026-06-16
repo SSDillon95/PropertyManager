@@ -11,8 +11,9 @@ import type {
 import type { InvestorPayout } from "./types";
 
 const LOGO_PATH = "/hop2it-logo.png";
-const LOGO_WIDTH = 144;
-const LOGO_HEIGHT = 54;
+const PAGE_MARGIN = 14;
+const LOGO_WIDTH = 118;
+const LOGO_HEIGHT = 44;
 const REPORT_GREEN = { r: 16, g: 120, b: 80 };
 const REPORT_GREEN_RGB: [number, number, number] = [
   REPORT_GREEN.r,
@@ -84,29 +85,32 @@ function displayField(value: string | number | null | undefined): string {
   return String(value);
 }
 
-async function addPayoutFormHeader(doc: jsPDF, payoutId: string) {
-  const logo = await loadLogoDataUrl();
+function placeLogoTopRight(doc: jsPDF, logo: string) {
   const pageWidth = doc.internal.pageSize.getWidth();
-  const margin = 14;
   doc.addImage(
     logo,
     "PNG",
-    pageWidth - margin - LOGO_WIDTH,
-    10,
+    pageWidth - PAGE_MARGIN - LOGO_WIDTH,
+    PAGE_MARGIN,
     LOGO_WIDTH,
     LOGO_HEIGHT
   );
+}
+
+async function addPayoutFormHeader(doc: jsPDF, payoutId: string) {
+  const logo = await loadLogoDataUrl();
+  placeLogoTopRight(doc, logo);
 
   doc.setFont("helvetica", "bold");
   doc.setFontSize(16);
   doc.setTextColor(REPORT_GREEN.r, REPORT_GREEN.g, REPORT_GREEN.b);
-  doc.text("Investor Payout Form", margin, 22);
+  doc.text("Investor Payout Form", PAGE_MARGIN, 22);
 
   doc.setFont("helvetica", "normal");
   doc.setFontSize(10);
   doc.setTextColor(80, 80, 80);
-  doc.text(`Payout ID: ${payoutId}`, margin, 30);
-  doc.text(`Generated: ${new Date().toLocaleString()}`, margin, 36);
+  doc.text(`Payout ID: ${payoutId}`, PAGE_MARGIN, 30);
+  doc.text(`Generated: ${new Date().toLocaleString()}`, PAGE_MARGIN, 36);
 }
 
 function periodLabel(start: string, end: string): string {
@@ -115,27 +119,18 @@ function periodLabel(start: string, end: string): string {
 
 async function addHeader(doc: jsPDF, title: string, start: string, end: string) {
   const logo = await loadLogoDataUrl();
-  const pageWidth = doc.internal.pageSize.getWidth();
-  const margin = 14;
-  doc.addImage(
-    logo,
-    "PNG",
-    pageWidth - margin - LOGO_WIDTH,
-    10,
-    LOGO_WIDTH,
-    LOGO_HEIGHT
-  );
+  placeLogoTopRight(doc, logo);
 
   doc.setFont("helvetica", "bold");
   doc.setFontSize(14);
   doc.setTextColor(REPORT_GREEN.r, REPORT_GREEN.g, REPORT_GREEN.b);
-  doc.text(title, margin, 22);
+  doc.text(title, PAGE_MARGIN, 22);
 
   doc.setFont("helvetica", "normal");
   doc.setFontSize(10);
   doc.setTextColor(80, 80, 80);
-  doc.text(`Period: ${periodLabel(start, end)}`, margin, 30);
-  doc.text(`Generated: ${new Date().toLocaleString()}`, margin, 36);
+  doc.text(`Period: ${periodLabel(start, end)}`, PAGE_MARGIN, 30);
+  doc.text(`Generated: ${new Date().toLocaleString()}`, PAGE_MARGIN, 36);
 }
 
 function tableStartY(): number {
