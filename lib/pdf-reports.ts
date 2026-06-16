@@ -17,11 +17,11 @@ import type { InvestorPayout } from "./types";
 
 const LOGO_PATH = "/hop2it-logo.png";
 const PAGE_MARGIN = 14;
-const LOGO_WIDTH = 108;
-const HEADER_TEXT_GAP = 12;
-const TITLE_META_GAP = 10;
-const META_LINE_GAP = 7;
-const DIVIDER_CONTENT_GAP = 14;
+const LOGO_WIDTH = 52;
+const HEADER_TEXT_GAP = 10;
+const TITLE_META_GAP = 5;
+const META_LINE_GAP = 4;
+const DIVIDER_CONTENT_GAP = 8;
 const REPORT_GREEN = { r: 16, g: 120, b: 80 };
 const REPORT_GREEN_RGB: [number, number, number] = [
   REPORT_GREEN.r,
@@ -231,8 +231,8 @@ function headerTextMaxWidth(doc: jsPDF): number {
 
 function placeLogoTopRight(doc: jsPDF, logo: string): number {
   const logoHeight = logoDisplayHeight();
-  doc.addImage(logo, "PNG", logoX(doc), PAGE_MARGIN, LOGO_WIDTH, logoHeight);
-  return logoHeight;
+  doc.addImage(logo, "PNG", logoX(doc), PAGE_MARGIN + 1, LOGO_WIDTH, logoHeight);
+  return logoHeight + 1;
 }
 
 function drawHeaderText(
@@ -267,8 +267,8 @@ function drawBodyText(
 
 function drawHeaderDivider(doc: jsPDF, y: number) {
   const pageWidth = doc.internal.pageSize.getWidth();
-  doc.setDrawColor(REPORT_GREEN.r, REPORT_GREEN.g, REPORT_GREEN.b);
-  doc.setLineWidth(0.5);
+  doc.setDrawColor(190, 190, 190);
+  doc.setLineWidth(0.35);
   doc.line(PAGE_MARGIN, y, pageWidth - PAGE_MARGIN, y);
 }
 
@@ -281,20 +281,20 @@ async function renderPdfHeader(
   const logo = await loadLogoDataUrl();
   const logoHeight = placeLogoTopRight(doc, logo);
 
-  let y = PAGE_MARGIN + 11;
+  let y = PAGE_MARGIN + 7;
   drawHeaderText(doc, title, y, {
-    fontSize: 15,
+    fontSize: 11,
     bold: true,
-    color: [REPORT_GREEN.r, REPORT_GREEN.g, REPORT_GREEN.b],
+    color: [30, 30, 30],
   });
 
-  y += TITLE_META_GAP + 2;
+  y += TITLE_META_GAP + 3;
   for (const line of metaLines) {
-    drawHeaderText(doc, line, y, { color: [80, 80, 80] });
+    drawHeaderText(doc, line, y, { fontSize: 8, color: [100, 100, 100] });
     y += META_LINE_GAP;
   }
 
-  const headerBottom = Math.max(PAGE_MARGIN + logoHeight, y) + 8;
+  const headerBottom = Math.max(PAGE_MARGIN + logoHeight + 2, y + 1) + 3;
   drawHeaderDivider(doc, headerBottom);
   return headerBottom + (options?.contentGap ?? DIVIDER_CONTENT_GAP);
 }
@@ -310,8 +310,7 @@ function periodLabel(start: string, end: string): string {
 
 function standardReportMeta(start: string, end: string): string[] {
   return [
-    `Period: ${periodLabel(start, end)}`,
-    `Generated: ${new Date().toLocaleString()}`,
+    `Period: ${periodLabel(start, end)}  |  Generated: ${new Date().toLocaleString()}`,
   ];
 }
 
@@ -682,10 +681,9 @@ export async function buildInvestorPayoutPdf(
     doc,
     "Investor Payout Form",
     [
-      `Payout ID: ${payout.payout_id}`,
-      `Generated: ${new Date().toLocaleString()}`,
+      `Payout ID: ${payout.payout_id}  |  Generated: ${new Date().toLocaleString()}`,
     ],
-    { contentGap: 18 }
+    { contentGap: 10 }
   );
 
   autoTable(doc, {
