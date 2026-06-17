@@ -105,6 +105,13 @@ export const PROPERTY_TYPE_OPTIONS = [
   "Commercial",
 ] as const;
 
+export const PROPERTY_STATUS_OPTIONS = [
+  "Occupied",
+  "Vacant",
+  "Under Renovation",
+  "For Sale",
+] as const;
+
 const PROPERTY_COLUMN_DEFS: ColumnDef[] = [
   { key: "legal_id", label: "Legal ID", type: "text", required: true, width: "100px" },
   { key: "business_name", label: "Business", type: "business", width: "160px" },
@@ -131,7 +138,7 @@ const PROPERTY_COLUMN_DEFS: ColumnDef[] = [
     key: "status",
     label: "Status",
     type: "select",
-    options: ["Occupied", "Vacant", "Under Renovation", "For Sale"],
+    options: [...PROPERTY_STATUS_OPTIONS],
     width: "130px",
   },
   { key: "insurance_carrier_name", label: "Insurance Carrier Name", type: "text", width: "160px" },

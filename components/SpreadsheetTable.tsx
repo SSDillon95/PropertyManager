@@ -142,20 +142,6 @@ export default function SpreadsheetTable({
                     </button>
                   ) : (
                     <div className="flex flex-col gap-1">
-                      {showEdit && (
-                        <button
-                          type="button"
-                          onClick={() => onEdit?.(row)}
-                          disabled={editingId === Number(row.id)}
-                          className={`text-xs px-2 py-1 rounded-md border whitespace-nowrap disabled:opacity-50 ${
-                            editingId === Number(row.id)
-                              ? "border-sky-600/60 bg-sky-950/40 text-sky-300"
-                              : "border-sky-600/60 bg-sky-950/40 text-sky-300 hover:bg-sky-900/50"
-                          }`}
-                        >
-                          {editingId === Number(row.id) ? "..." : "Edit"}
-                        </button>
-                      )}
                       {showEntryCode && (
                         <button
                           type="button"
@@ -168,6 +154,20 @@ export default function SpreadsheetTable({
                             : entryCodeButtonLabel(
                                 typeof row.entry_code === "string" ? row.entry_code : null
                               )}
+                        </button>
+                      )}
+                      {showEdit && (
+                        <button
+                          type="button"
+                          onClick={() => onEdit?.(row)}
+                          disabled={editingId === Number(row.id)}
+                          className={`text-xs px-2 py-1 rounded-md border whitespace-nowrap disabled:opacity-50 ${
+                            editingId === Number(row.id)
+                              ? "border-sky-600/60 bg-sky-950/40 text-sky-300"
+                              : "border-sky-600/60 bg-sky-950/40 text-sky-300 hover:bg-sky-900/50"
+                          }`}
+                        >
+                          {editingId === Number(row.id) ? "..." : "Edit"}
                         </button>
                       )}
                       {showPrintForm && (

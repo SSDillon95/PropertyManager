@@ -58,17 +58,17 @@ export default function PropertyDetailPanel({
         <div className="flex items-center gap-2 shrink-0">
           <button
             type="button"
-            onClick={onEdit}
-            className="text-xs px-3 py-1.5 rounded-lg border border-sky-600/60 bg-sky-950/40 text-sky-300 hover:bg-sky-900/50"
-          >
-            Edit
-          </button>
-          <button
-            type="button"
             onClick={onEntryCode}
             className="text-xs px-3 py-1.5 rounded-lg border border-red-600/60 bg-red-950/40 text-red-300 hover:bg-red-900/50"
           >
             {entryCodeButtonLabel(property.entry_code)}
+          </button>
+          <button
+            type="button"
+            onClick={onEdit}
+            className="text-xs px-3 py-1.5 rounded-lg border border-sky-600/60 bg-sky-950/40 text-sky-300 hover:bg-sky-900/50"
+          >
+            Edit
           </button>
           <button
             type="button"
