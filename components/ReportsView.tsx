@@ -585,6 +585,9 @@ export default function ReportsView({
                       <th className="px-3 py-2 font-semibold text-emerald-200">Lien Holder</th>
                       <th className="px-3 py-2 font-semibold text-emerald-200">Year Built</th>
                       <th className="px-3 py-2 font-semibold text-emerald-200 text-right">
+                        Sq Ft
+                      </th>
+                      <th className="px-3 py-2 font-semibold text-emerald-200 text-right">
                         Property Value
                       </th>
                       <th className="px-3 py-2 font-semibold text-emerald-200 text-right">
@@ -608,6 +611,9 @@ export default function ReportsView({
                         <td className="px-3 py-2 text-zinc-300">{line.lien_holder}</td>
                         <td className="px-3 py-2 text-zinc-300">
                           {line.year_built ?? "—"}
+                        </td>
+                        <td className="px-3 py-2 text-zinc-200 text-right">
+                          {line.sq_ft ?? "—"}
                         </td>
                         <td className="px-3 py-2 text-zinc-200 text-right">
                           {formatCurrency(line.property_value) || "—"}

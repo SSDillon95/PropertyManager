@@ -744,6 +744,7 @@ export async function buildPropertyInsurancePdf(
         "Business",
         "Lien Holder",
         "Year Built",
+        "Sq Ft",
         "Property Value",
         "Annual Insurance",
         "Insurance Carrier",
@@ -756,6 +757,7 @@ export async function buildPropertyInsurancePdf(
       line.business_name,
       line.lien_holder,
       line.year_built != null ? String(line.year_built) : "—",
+      line.sq_ft != null ? String(line.sq_ft) : "—",
       line.property_value != null ? money(line.property_value) : "—",
       line.annual_insurance != null ? money(line.annual_insurance) : "—",
       line.missingInsurance
@@ -769,21 +771,22 @@ export async function buildPropertyInsurancePdf(
     headStyles: { fillColor: REPORT_GREEN_RGB, textColor: [255, 255, 255] },
     alternateRowStyles: { fillColor: [245, 245, 245] },
     columnStyles: {
-      0: { cellWidth: 24 },
-      1: { cellWidth: 42 },
-      2: { cellWidth: 24 },
-      3: { cellWidth: 24 },
-      4: { cellWidth: 16 },
-      5: { cellWidth: 22 },
-      6: { cellWidth: 22 },
-      7: { cellWidth: 30 },
+      0: { cellWidth: 22 },
+      1: { cellWidth: 38 },
+      2: { cellWidth: 22 },
+      3: { cellWidth: 22 },
+      4: { cellWidth: 14 },
+      5: { cellWidth: 12 },
+      6: { cellWidth: 20 },
+      7: { cellWidth: 20 },
       8: { cellWidth: 28 },
+      9: { cellWidth: 26 },
     },
     didParseCell: (hookData) => {
       if (hookData.section !== "body") return;
       const line = report.lines[hookData.row.index];
       if (!line?.missingInsurance) return;
-      if (hookData.column.index === 7 || hookData.column.index === 8) {
+      if (hookData.column.index === 8 || hookData.column.index === 9) {
         hookData.cell.styles.textColor = PDF_RED;
         hookData.cell.styles.fontStyle = "bold";
       }

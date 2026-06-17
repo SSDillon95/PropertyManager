@@ -472,6 +472,7 @@ export interface PropertyInsuranceLine {
   business_name: string;
   lien_holder: string;
   year_built: number | null;
+  sq_ft: number | null;
   property_value: number | null;
   annual_insurance: number | null;
   insurance_carrier_name: string | null;
@@ -519,6 +520,7 @@ export function buildPropertyInsuranceReport(
       business_name: property.business_name?.trim() || "—",
       lien_holder: property.lien_holder?.trim() || "—",
       year_built: property.year_built,
+      sq_ft: property.sq_ft,
       property_value: property.current_value,
       annual_insurance: property.annual_insurance,
       insurance_carrier_name: property.insurance_carrier_name,
