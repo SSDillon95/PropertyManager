@@ -27,8 +27,15 @@ interface SpreadsheetTableProps {
   stickyActions?: boolean;
 }
 
-const STICKY_ACTIONS_SHADOW =
-  "shadow-[-8px_0_12px_-6px_rgba(0,0,0,0.55)]";
+const STICKY_LEFT_SHADOW = "shadow-[8px_0_12px_-6px_rgba(0,0,0,0.55)]";
+const STICKY_RIGHT_SHADOW = "shadow-[-8px_0_12px_-6px_rgba(0,0,0,0.55)]";
+
+function stickyRowBackground(idx: number, opaque: boolean): string {
+  if (opaque) {
+    return idx % 2 === 0 ? "bg-zinc-800" : "bg-zinc-700";
+  }
+  return idx % 2 === 0 ? "bg-zinc-800/95" : "bg-zinc-700/80";
+}
 
 export default function SpreadsheetTable({
   columns,
@@ -56,16 +63,31 @@ export default function SpreadsheetTable({
     showPrintForm || showEdit || showEntryCode ? "min-w-[9.5rem]" : "min-w-[5.5rem]"
   } ${
     stickyActions
-      ? `sticky right-0 z-30 border-l border-amber-500/40 bg-amber-400 ${STICKY_ACTIONS_SHADOW}`
+      ? `sticky right-0 z-30 border-l border-amber-500/40 bg-amber-400 ${STICKY_RIGHT_SHADOW}`
       : ""
   }`;
+
+  const leadingHeaderClass = `px-3 py-2 text-left font-semibold whitespace-nowrap border-r border-amber-500/40 text-xs uppercase tracking-wide bg-amber-400 min-w-[11rem] ${
+    stickyActions
+      ? `sticky left-0 z-30 ${STICKY_LEFT_SHADOW}`
+      : "sticky left-0 z-20"
+  }`;
+
+  const leadingCellClass = (idx: number) =>
+    `sticky left-0 z-20 px-3 py-2 whitespace-nowrap border-r border-zinc-700/40 ${stickyRowBackground(
+      idx,
+      stickyActions
+    )} ${
+      stickyActions ? `${STICKY_LEFT_SHADOW} group-hover:bg-emerald-950` : ""
+    }`;
 
   const actionsCellClass = (idx: number) =>
     `px-3 py-2 whitespace-nowrap ${
       stickyActions
-        ? `sticky right-0 z-20 border-l border-zinc-700/40 ${STICKY_ACTIONS_SHADOW} ${
-            idx % 2 === 0 ? "bg-zinc-800/95" : "bg-zinc-700/80"
-          } group-hover:bg-emerald-950/40`
+        ? `sticky right-0 z-20 border-l border-zinc-700/40 ${STICKY_RIGHT_SHADOW} ${stickyRowBackground(
+            idx,
+            true
+          )} group-hover:bg-emerald-950`
         : ""
     }`;
   if (rows.length === 0) {
@@ -85,9 +107,7 @@ export default function SpreadsheetTable({
           <thead>
             <tr className="bg-amber-400 text-zinc-900">
               {(showProfitability || showExpand) && !archiveMode && (
-                <th className="sticky left-0 z-20 px-3 py-2 text-left font-semibold whitespace-nowrap border-r border-amber-500/40 text-xs uppercase tracking-wide bg-amber-400 min-w-[11rem]">
-                  &nbsp;
-                </th>
+                <th className={leadingHeaderClass}>&nbsp;</th>
               )}
               {columns.map((col) => (
                 <th
@@ -110,11 +130,7 @@ export default function SpreadsheetTable({
                 } hover:bg-emerald-950/20`}
               >
                 {(showProfitability || showExpand) && !archiveMode && (
-                  <td
-                    className={`sticky left-0 z-10 px-3 py-2 whitespace-nowrap border-r border-zinc-700/40 ${
-                      idx % 2 === 0 ? "bg-zinc-800/95" : "bg-zinc-700/80"
-                    }`}
-                  >
+                  <td className={leadingCellClass(idx)}>
                     <div className="flex flex-col gap-1">
                       {showProfitability && (
                         <button
