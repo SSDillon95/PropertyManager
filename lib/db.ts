@@ -75,11 +75,17 @@ const SQLITE_SCHEMA = `
     year_built INTEGER,
     purchase_date TEXT,
     purchase_price REAL,
+    rehab_amount REAL,
+    rehab_price REAL,
     current_value REAL,
+    loan_amount REAL,
     mortgage_balance REAL,
     monthly_mortgage REAL,
     annual_property_tax REAL,
     annual_insurance REAL,
+    insurance_carrier_name TEXT,
+    insurance_policy_number TEXT,
+    attorney TEXT,
     monthly_hoa REAL,
     monthly_rent REAL,
     status TEXT DEFAULT 'Vacant',
@@ -306,11 +312,17 @@ async function initSchema(): Promise<void> {
         year_built INTEGER,
         purchase_date TEXT,
         purchase_price REAL,
+        rehab_amount REAL,
+        rehab_price REAL,
         current_value REAL,
+        loan_amount REAL,
         mortgage_balance REAL,
         monthly_mortgage REAL,
         annual_property_tax REAL,
         annual_insurance REAL,
+        insurance_carrier_name TEXT,
+        insurance_policy_number TEXT,
+        attorney TEXT,
         monthly_hoa REAL,
         monthly_rent REAL,
         status TEXT DEFAULT 'Vacant',
@@ -493,6 +505,12 @@ async function initSchema(): Promise<void> {
     `;
     await sql`ALTER TABLE businesses ADD COLUMN IF NOT EXISTS archived BOOLEAN NOT NULL DEFAULT FALSE`;
     await sql`ALTER TABLE properties ADD COLUMN IF NOT EXISTS archived BOOLEAN NOT NULL DEFAULT FALSE`;
+    await sql`ALTER TABLE properties ADD COLUMN IF NOT EXISTS rehab_amount REAL`;
+    await sql`ALTER TABLE properties ADD COLUMN IF NOT EXISTS rehab_price REAL`;
+    await sql`ALTER TABLE properties ADD COLUMN IF NOT EXISTS loan_amount REAL`;
+    await sql`ALTER TABLE properties ADD COLUMN IF NOT EXISTS insurance_carrier_name TEXT`;
+    await sql`ALTER TABLE properties ADD COLUMN IF NOT EXISTS insurance_policy_number TEXT`;
+    await sql`ALTER TABLE properties ADD COLUMN IF NOT EXISTS attorney TEXT`;
     await sql`ALTER TABLE tenants ADD COLUMN IF NOT EXISTS archived BOOLEAN NOT NULL DEFAULT FALSE`;
     await sql`ALTER TABLE leases ADD COLUMN IF NOT EXISTS archived BOOLEAN NOT NULL DEFAULT FALSE`;
     await sql`ALTER TABLE rent_payments ADD COLUMN IF NOT EXISTS archived BOOLEAN NOT NULL DEFAULT FALSE`;
@@ -547,6 +565,16 @@ async function initSchema(): Promise<void> {
   if (!hasCol("legal_id")) db.exec("ALTER TABLE properties ADD COLUMN legal_id TEXT");
   if (!hasCol("lien_holder")) db.exec("ALTER TABLE properties ADD COLUMN lien_holder TEXT");
   if (!hasCol("account_number")) db.exec("ALTER TABLE properties ADD COLUMN account_number TEXT");
+  if (!hasCol("rehab_amount")) db.exec("ALTER TABLE properties ADD COLUMN rehab_amount REAL");
+  if (!hasCol("rehab_price")) db.exec("ALTER TABLE properties ADD COLUMN rehab_price REAL");
+  if (!hasCol("loan_amount")) db.exec("ALTER TABLE properties ADD COLUMN loan_amount REAL");
+  if (!hasCol("insurance_carrier_name")) {
+    db.exec("ALTER TABLE properties ADD COLUMN insurance_carrier_name TEXT");
+  }
+  if (!hasCol("insurance_policy_number")) {
+    db.exec("ALTER TABLE properties ADD COLUMN insurance_policy_number TEXT");
+  }
+  if (!hasCol("attorney")) db.exec("ALTER TABLE properties ADD COLUMN attorney TEXT");
   if (hasCol("property_id") && hasCol("legal_id")) {
     db.exec(
       "UPDATE properties SET legal_id = property_id WHERE legal_id IS NULL AND property_id IS NOT NULL"
@@ -757,11 +785,17 @@ function mapProperty(row: Record<string, unknown>): Property {
     year_built: num(row.year_built),
     purchase_date: str(row.purchase_date),
     purchase_price: num(row.purchase_price),
+    rehab_amount: num(row.rehab_amount),
+    rehab_price: num(row.rehab_price),
     current_value: num(row.current_value),
+    loan_amount: num(row.loan_amount),
     mortgage_balance: num(row.mortgage_balance),
     monthly_mortgage: num(row.monthly_mortgage),
     annual_property_tax: num(row.annual_property_tax),
     annual_insurance: num(row.annual_insurance),
+    insurance_carrier_name: str(row.insurance_carrier_name),
+    insurance_policy_number: str(row.insurance_policy_number),
+    attorney: str(row.attorney),
     monthly_hoa: num(row.monthly_hoa),
     monthly_rent: num(row.monthly_rent),
     status: String(row.status ?? "Vacant"),
@@ -1060,16 +1094,20 @@ export async function createProperty(
             legal_id, property_id, business_name, property_name, lien_holder, account_number,
             address, city, state, zip, property_type,
             units, bedrooms, bathrooms, sq_ft, year_built, purchase_date,
-            purchase_price, current_value, mortgage_balance, monthly_mortgage,
-            annual_property_tax, annual_insurance, monthly_hoa, monthly_rent, status, notes
+            purchase_price, rehab_amount, rehab_price, current_value, loan_amount,
+            mortgage_balance, monthly_mortgage, annual_property_tax, annual_insurance,
+            insurance_carrier_name, insurance_policy_number, attorney,
+            monthly_hoa, monthly_rent, status, notes
           ) VALUES (
             ${data.legal_id}, ${data.legal_id}, ${data.business_name}, ${data.property_name},
             ${data.lien_holder}, ${data.account_number}, ${data.address}, ${data.city},
             ${data.state}, ${data.zip}, ${data.property_type}, ${data.units},
             ${data.bedrooms}, ${data.bathrooms}, ${data.sq_ft}, ${data.year_built},
-            ${data.purchase_date}, ${data.purchase_price}, ${data.current_value},
-            ${data.mortgage_balance}, ${data.monthly_mortgage}, ${data.annual_property_tax},
-            ${data.annual_insurance}, ${data.monthly_hoa}, ${data.monthly_rent}, ${data.status}, ${data.notes}
+            ${data.purchase_date}, ${data.purchase_price}, ${data.rehab_amount}, ${data.rehab_price},
+            ${data.current_value}, ${data.loan_amount}, ${data.mortgage_balance}, ${data.monthly_mortgage},
+            ${data.annual_property_tax}, ${data.annual_insurance}, ${data.insurance_carrier_name},
+            ${data.insurance_policy_number}, ${data.attorney}, ${data.monthly_hoa},
+            ${data.monthly_rent}, ${data.status}, ${data.notes}
           ) RETURNING *
         `
       : await sql`
@@ -1077,16 +1115,20 @@ export async function createProperty(
             legal_id, business_name, property_name, lien_holder, account_number,
             address, city, state, zip, property_type,
             units, bedrooms, bathrooms, sq_ft, year_built, purchase_date,
-            purchase_price, current_value, mortgage_balance, monthly_mortgage,
-            annual_property_tax, annual_insurance, monthly_hoa, monthly_rent, status, notes
+            purchase_price, rehab_amount, rehab_price, current_value, loan_amount,
+            mortgage_balance, monthly_mortgage, annual_property_tax, annual_insurance,
+            insurance_carrier_name, insurance_policy_number, attorney,
+            monthly_hoa, monthly_rent, status, notes
           ) VALUES (
             ${data.legal_id}, ${data.business_name}, ${data.property_name}, ${data.lien_holder},
             ${data.account_number}, ${data.address}, ${data.city},
             ${data.state}, ${data.zip}, ${data.property_type}, ${data.units},
             ${data.bedrooms}, ${data.bathrooms}, ${data.sq_ft}, ${data.year_built},
-            ${data.purchase_date}, ${data.purchase_price}, ${data.current_value},
-            ${data.mortgage_balance}, ${data.monthly_mortgage}, ${data.annual_property_tax},
-            ${data.annual_insurance}, ${data.monthly_hoa}, ${data.monthly_rent}, ${data.status}, ${data.notes}
+            ${data.purchase_date}, ${data.purchase_price}, ${data.rehab_amount}, ${data.rehab_price},
+            ${data.current_value}, ${data.loan_amount}, ${data.mortgage_balance}, ${data.monthly_mortgage},
+            ${data.annual_property_tax}, ${data.annual_insurance}, ${data.insurance_carrier_name},
+            ${data.insurance_policy_number}, ${data.attorney}, ${data.monthly_hoa},
+            ${data.monthly_rent}, ${data.status}, ${data.notes}
           ) RETURNING *
         `;
     return mapProperty(rows[0] as Record<string, unknown>);
@@ -1102,14 +1144,18 @@ export async function createProperty(
             legal_id, property_id, business_name, property_name, lien_holder, account_number,
             address, city, state, zip, property_type,
             units, bedrooms, bathrooms, sq_ft, year_built, purchase_date,
-            purchase_price, current_value, mortgage_balance, monthly_mortgage,
-            annual_property_tax, annual_insurance, monthly_hoa, monthly_rent, status, notes
+            purchase_price, rehab_amount, rehab_price, current_value, loan_amount,
+            mortgage_balance, monthly_mortgage, annual_property_tax, annual_insurance,
+            insurance_carrier_name, insurance_policy_number, attorney,
+            monthly_hoa, monthly_rent, status, notes
           ) VALUES (
             @legal_id, @property_id, @business_name, @property_name, @lien_holder, @account_number,
             @address, @city, @state, @zip, @property_type,
             @units, @bedrooms, @bathrooms, @sq_ft, @year_built, @purchase_date,
-            @purchase_price, @current_value, @mortgage_balance, @monthly_mortgage,
-            @annual_property_tax, @annual_insurance, @monthly_hoa, @monthly_rent, @status, @notes
+            @purchase_price, @rehab_amount, @rehab_price, @current_value, @loan_amount,
+            @mortgage_balance, @monthly_mortgage, @annual_property_tax, @annual_insurance,
+            @insurance_carrier_name, @insurance_policy_number, @attorney,
+            @monthly_hoa, @monthly_rent, @status, @notes
           ) RETURNING *`
         )
         .get(payload)
@@ -1119,14 +1165,18 @@ export async function createProperty(
             legal_id, business_name, property_name, lien_holder, account_number,
             address, city, state, zip, property_type,
             units, bedrooms, bathrooms, sq_ft, year_built, purchase_date,
-            purchase_price, current_value, mortgage_balance, monthly_mortgage,
-            annual_property_tax, annual_insurance, monthly_hoa, monthly_rent, status, notes
+            purchase_price, rehab_amount, rehab_price, current_value, loan_amount,
+            mortgage_balance, monthly_mortgage, annual_property_tax, annual_insurance,
+            insurance_carrier_name, insurance_policy_number, attorney,
+            monthly_hoa, monthly_rent, status, notes
           ) VALUES (
             @legal_id, @business_name, @property_name, @lien_holder, @account_number,
             @address, @city, @state, @zip, @property_type,
             @units, @bedrooms, @bathrooms, @sq_ft, @year_built, @purchase_date,
-            @purchase_price, @current_value, @mortgage_balance, @monthly_mortgage,
-            @annual_property_tax, @annual_insurance, @monthly_hoa, @monthly_rent, @status, @notes
+            @purchase_price, @rehab_amount, @rehab_price, @current_value, @loan_amount,
+            @mortgage_balance, @monthly_mortgage, @annual_property_tax, @annual_insurance,
+            @insurance_carrier_name, @insurance_policy_number, @attorney,
+            @monthly_hoa, @monthly_rent, @status, @notes
           ) RETURNING *`
         )
         .get(data);
@@ -1823,11 +1873,15 @@ export async function updateProperty(
             property_type = ${data.property_type}, units = ${data.units},
             bedrooms = ${data.bedrooms}, bathrooms = ${data.bathrooms}, sq_ft = ${data.sq_ft},
             year_built = ${data.year_built}, purchase_date = ${data.purchase_date},
-            purchase_price = ${data.purchase_price}, current_value = ${data.current_value},
-            mortgage_balance = ${data.mortgage_balance}, monthly_mortgage = ${data.monthly_mortgage},
-            annual_property_tax = ${data.annual_property_tax},
-            annual_insurance = ${data.annual_insurance}, monthly_hoa = ${data.monthly_hoa},
-            monthly_rent = ${data.monthly_rent}, status = ${data.status}, notes = ${data.notes}
+            purchase_price = ${data.purchase_price}, rehab_amount = ${data.rehab_amount},
+            rehab_price = ${data.rehab_price}, current_value = ${data.current_value},
+            loan_amount = ${data.loan_amount}, mortgage_balance = ${data.mortgage_balance},
+            monthly_mortgage = ${data.monthly_mortgage}, annual_property_tax = ${data.annual_property_tax},
+            annual_insurance = ${data.annual_insurance},
+            insurance_carrier_name = ${data.insurance_carrier_name},
+            insurance_policy_number = ${data.insurance_policy_number}, attorney = ${data.attorney},
+            monthly_hoa = ${data.monthly_hoa}, monthly_rent = ${data.monthly_rent},
+            status = ${data.status}, notes = ${data.notes}
           WHERE id = ${id} RETURNING *
         `
       : await sql`
@@ -1839,11 +1893,15 @@ export async function updateProperty(
             property_type = ${data.property_type}, units = ${data.units},
             bedrooms = ${data.bedrooms}, bathrooms = ${data.bathrooms}, sq_ft = ${data.sq_ft},
             year_built = ${data.year_built}, purchase_date = ${data.purchase_date},
-            purchase_price = ${data.purchase_price}, current_value = ${data.current_value},
-            mortgage_balance = ${data.mortgage_balance}, monthly_mortgage = ${data.monthly_mortgage},
-            annual_property_tax = ${data.annual_property_tax},
-            annual_insurance = ${data.annual_insurance}, monthly_hoa = ${data.monthly_hoa},
-            monthly_rent = ${data.monthly_rent}, status = ${data.status}, notes = ${data.notes}
+            purchase_price = ${data.purchase_price}, rehab_amount = ${data.rehab_amount},
+            rehab_price = ${data.rehab_price}, current_value = ${data.current_value},
+            loan_amount = ${data.loan_amount}, mortgage_balance = ${data.mortgage_balance},
+            monthly_mortgage = ${data.monthly_mortgage}, annual_property_tax = ${data.annual_property_tax},
+            annual_insurance = ${data.annual_insurance},
+            insurance_carrier_name = ${data.insurance_carrier_name},
+            insurance_policy_number = ${data.insurance_policy_number}, attorney = ${data.attorney},
+            monthly_hoa = ${data.monthly_hoa}, monthly_rent = ${data.monthly_rent},
+            status = ${data.status}, notes = ${data.notes}
           WHERE id = ${id} RETURNING *
         `;
     if (!rows[0]) throw new Error("Property not found.");
@@ -1862,9 +1920,12 @@ export async function updateProperty(
             address = @address, city = @city, state = @state, zip = @zip, property_type = @property_type,
             units = @units, bedrooms = @bedrooms, bathrooms = @bathrooms, sq_ft = @sq_ft,
             year_built = @year_built, purchase_date = @purchase_date,
-            purchase_price = @purchase_price, current_value = @current_value,
+            purchase_price = @purchase_price, rehab_amount = @rehab_amount, rehab_price = @rehab_price,
+            current_value = @current_value, loan_amount = @loan_amount,
             mortgage_balance = @mortgage_balance, monthly_mortgage = @monthly_mortgage,
             annual_property_tax = @annual_property_tax, annual_insurance = @annual_insurance,
+            insurance_carrier_name = @insurance_carrier_name,
+            insurance_policy_number = @insurance_policy_number, attorney = @attorney,
             monthly_hoa = @monthly_hoa, monthly_rent = @monthly_rent, status = @status, notes = @notes
           WHERE id = @id RETURNING *`
         )
@@ -1877,10 +1938,12 @@ export async function updateProperty(
             city = @city, state = @state, zip = @zip, property_type = @property_type,
             units = @units, bedrooms = @bedrooms, bathrooms = @bathrooms, sq_ft = @sq_ft,
             year_built = @year_built, purchase_date = @purchase_date, purchase_price = @purchase_price,
-            current_value = @current_value, mortgage_balance = @mortgage_balance,
+            rehab_amount = @rehab_amount, rehab_price = @rehab_price, current_value = @current_value,
+            loan_amount = @loan_amount, mortgage_balance = @mortgage_balance,
             monthly_mortgage = @monthly_mortgage, annual_property_tax = @annual_property_tax,
-            annual_insurance = @annual_insurance, monthly_hoa = @monthly_hoa,
-            monthly_rent = @monthly_rent, status = @status, notes = @notes
+            annual_insurance = @annual_insurance, insurance_carrier_name = @insurance_carrier_name,
+            insurance_policy_number = @insurance_policy_number, attorney = @attorney,
+            monthly_hoa = @monthly_hoa, monthly_rent = @monthly_rent, status = @status, notes = @notes
           WHERE id = @id RETURNING *`
         )
         .get({ ...data, id });

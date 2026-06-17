@@ -62,11 +62,17 @@ export interface Property {
   year_built: number | null;
   purchase_date: string | null;
   purchase_price: number | null;
+  rehab_amount: number | null;
+  rehab_price: number | null;
   current_value: number | null;
+  loan_amount: number | null;
   mortgage_balance: number | null;
   monthly_mortgage: number | null;
   annual_property_tax: number | null;
   annual_insurance: number | null;
+  insurance_carrier_name: string | null;
+  insurance_policy_number: string | null;
+  attorney: string | null;
   monthly_hoa: number | null;
   monthly_rent: number | null;
   status: string;
