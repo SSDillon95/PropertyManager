@@ -2073,6 +2073,7 @@ export default function PropertyManagerApp() {
                 showEntryCode={tab === "properties" && !showArchived}
                 onEntryCode={openEntryCodeModal}
                 entryCodeActionId={entryCodeSaving ? entryCodeModal?.property.id ?? null : null}
+                stickyActions={tab === "properties"}
               />
               {tab === "investor_capital" && !showArchived && investorPayoutTableSummaries.length > 0 && (
                 <div className="mt-5 space-y-3">

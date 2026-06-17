@@ -24,7 +24,11 @@ interface SpreadsheetTableProps {
   showEntryCode?: boolean;
   onEntryCode?: (row: Record<string, unknown>) => void;
   entryCodeActionId?: number | null;
+  stickyActions?: boolean;
 }
+
+const STICKY_ACTIONS_SHADOW =
+  "shadow-[-8px_0_12px_-6px_rgba(0,0,0,0.55)]";
 
 export default function SpreadsheetTable({
   columns,
@@ -46,7 +50,24 @@ export default function SpreadsheetTable({
   showEntryCode = false,
   onEntryCode,
   entryCodeActionId = null,
+  stickyActions = false,
 }: SpreadsheetTableProps) {
+  const actionsHeaderClass = `px-3 py-2 text-left font-semibold text-xs uppercase tracking-wide ${
+    showPrintForm || showEdit || showEntryCode ? "min-w-[9.5rem]" : "min-w-[5.5rem]"
+  } ${
+    stickyActions
+      ? `sticky right-0 z-30 border-l border-amber-500/40 bg-amber-400 ${STICKY_ACTIONS_SHADOW}`
+      : ""
+  }`;
+
+  const actionsCellClass = (idx: number) =>
+    `px-3 py-2 whitespace-nowrap ${
+      stickyActions
+        ? `sticky right-0 z-20 border-l border-zinc-700/40 ${STICKY_ACTIONS_SHADOW} ${
+            idx % 2 === 0 ? "bg-zinc-800/95" : "bg-zinc-700/80"
+          } group-hover:bg-emerald-950/40`
+        : ""
+    }`;
   if (rows.length === 0) {
     return (
       <div className="rounded-xl border border-zinc-600/60 bg-zinc-800/90 p-8 text-center text-zinc-400">
@@ -77,20 +98,14 @@ export default function SpreadsheetTable({
                   {col.label}
                 </th>
               ))}
-              <th
-                className={`px-3 py-2 text-left font-semibold text-xs uppercase tracking-wide ${
-                  showPrintForm || showEdit || showEntryCode ? "min-w-[9.5rem]" : "min-w-[5.5rem]"
-                }`}
-              >
-                Actions
-              </th>
+              <th className={actionsHeaderClass}>Actions</th>
             </tr>
           </thead>
           <tbody>
             {rows.map((row, idx) => (
               <tr
                 key={String(row.id)}
-                className={`border-t border-zinc-700/60 ${
+                className={`group border-t border-zinc-700/60 ${
                   idx % 2 === 0 ? "bg-zinc-800/50" : "bg-zinc-700/30"
                 } hover:bg-emerald-950/20`}
               >
@@ -130,7 +145,7 @@ export default function SpreadsheetTable({
                     {formatCellValue(row[col.key], col.type)}
                   </td>
                 ))}
-                <td className="px-3 py-2">
+                <td className={actionsCellClass(idx)}>
                   {archiveMode ? (
                     <button
                       type="button"
