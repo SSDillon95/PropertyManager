@@ -734,9 +734,19 @@ export async function buildPropertyInsurancePdf(
     `Generated: ${new Date().toLocaleString()}`,
     filterParts.length > 0 ? filterParts.join("  |  ") : "All properties",
   ]);
+  const tableWidth = doc.internal.pageSize.getWidth() - PAGE_MARGIN * 2;
+  const insuranceColumnWidths = [0.09, 0.16, 0.09, 0.09, 0.06, 0.05, 0.09, 0.09, 0.14, 0.14];
+  const insuranceColumnStyles = Object.fromEntries(
+    insuranceColumnWidths.map((width, index) => [
+      index,
+      { cellWidth: tableWidth * width },
+    ])
+  );
 
   autoTable(doc, {
     startY: contentStartY,
+    tableWidth,
+    margin: { left: PAGE_MARGIN, right: PAGE_MARGIN },
     head: [
       [
         "Property",
@@ -770,18 +780,7 @@ export async function buildPropertyInsurancePdf(
     styles: { fontSize: 7, cellPadding: 2, overflow: "linebreak" },
     headStyles: { fillColor: REPORT_GREEN_RGB, textColor: [255, 255, 255] },
     alternateRowStyles: { fillColor: [245, 245, 245] },
-    columnStyles: {
-      0: { cellWidth: 22 },
-      1: { cellWidth: 38 },
-      2: { cellWidth: 22 },
-      3: { cellWidth: 22 },
-      4: { cellWidth: 14 },
-      5: { cellWidth: 12 },
-      6: { cellWidth: 20 },
-      7: { cellWidth: 20 },
-      8: { cellWidth: 28 },
-      9: { cellWidth: 26 },
-    },
+    columnStyles: insuranceColumnStyles,
     didParseCell: (hookData) => {
       if (hookData.section !== "body") return;
       const line = report.lines[hookData.row.index];
@@ -799,6 +798,8 @@ export async function buildPropertyInsurancePdf(
 
   autoTable(doc, {
     startY: summaryY + 10,
+    tableWidth,
+    margin: { left: PAGE_MARGIN, right: PAGE_MARGIN },
     head: [["Properties Listed", "Missing Insurance On File"]],
     body: [
       [String(report.lines.length), String(report.missingInsuranceCount)],
