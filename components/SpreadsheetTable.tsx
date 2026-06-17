@@ -25,6 +25,7 @@ interface SpreadsheetTableProps {
   onEntryCode?: (row: Record<string, unknown>) => void;
   entryCodeActionId?: number | null;
   stickyActions?: boolean;
+  showActionsColumn?: boolean;
 }
 
 const STICKY_LEFT_SHADOW = "shadow-[8px_0_12px_-6px_rgba(0,0,0,0.55)]";
@@ -58,6 +59,7 @@ export default function SpreadsheetTable({
   onEntryCode,
   entryCodeActionId = null,
   stickyActions = false,
+  showActionsColumn = true,
 }: SpreadsheetTableProps) {
   const actionsHeaderClass = `px-3 py-2 text-left font-semibold text-xs uppercase tracking-wide ${
     showPrintForm || showEdit || showEntryCode ? "min-w-[9.5rem]" : "min-w-[5.5rem]"
@@ -118,7 +120,7 @@ export default function SpreadsheetTable({
                   {col.label}
                 </th>
               ))}
-              <th className={actionsHeaderClass}>Actions</th>
+              {showActionsColumn && <th className={actionsHeaderClass}>Actions</th>}
             </tr>
           </thead>
           <tbody>
@@ -161,6 +163,7 @@ export default function SpreadsheetTable({
                     {formatCellValue(row[col.key], col.type)}
                   </td>
                 ))}
+                {showActionsColumn && (
                 <td className={actionsCellClass(idx)}>
                   {archiveMode ? (
                     <button
@@ -222,6 +225,7 @@ export default function SpreadsheetTable({
                     </div>
                   )}
                 </td>
+                )}
               </tr>
             ))}
           </tbody>

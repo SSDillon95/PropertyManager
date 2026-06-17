@@ -11,6 +11,8 @@ interface PropertyDetailPanelProps {
   onCollapse: () => void;
   onEdit: () => void;
   onEntryCode: () => void;
+  onArchive: () => void;
+  archiving?: boolean;
 }
 
 function PropertyFieldGrid({
@@ -41,6 +43,8 @@ export default function PropertyDetailPanel({
   onCollapse,
   onEdit,
   onEntryCode,
+  onArchive,
+  archiving = false,
 }: PropertyDetailPanelProps) {
   const sections = getPropertyFormSections();
 
@@ -69,6 +73,14 @@ export default function PropertyDetailPanel({
             className="text-xs px-3 py-1.5 rounded-lg border border-sky-600/60 bg-sky-950/40 text-sky-300 hover:bg-sky-900/50"
           >
             Edit
+          </button>
+          <button
+            type="button"
+            onClick={onArchive}
+            disabled={archiving}
+            className="text-xs px-3 py-1.5 rounded-lg border border-amber-600/60 bg-amber-950/40 text-amber-300 hover:bg-amber-900/50 disabled:opacity-50"
+          >
+            {archiving ? "..." : "Archive"}
           </button>
           <button
             type="button"

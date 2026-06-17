@@ -1140,6 +1140,9 @@ export default function PropertyManagerApp() {
       const json = await res.json();
       if (!json.success) throw new Error(json.error || "Archive failed");
       showMessage("success", "Row archived.");
+      if (tab === "properties" && expandedProperty?.id === id) {
+        setExpandedProperty(null);
+      }
       await Promise.all([loadTabData(tab, showArchived), loadDashboard()]);
     } catch (error) {
       showMessage("error", (error as Error).message);
@@ -2051,6 +2054,8 @@ export default function PropertyManagerApp() {
                   onCollapse={() => setExpandedProperty(null)}
                   onEdit={() => openEditForm(expandedProperty as unknown as Record<string, unknown>)}
                   onEntryCode={() => openEntryCodeModal(expandedProperty as unknown as Record<string, unknown>)}
+                  onArchive={() => handleArchive(expandedProperty.id)}
+                  archiving={actionId === expandedProperty.id}
                 />
               )}
               <SpreadsheetTable
@@ -2074,6 +2079,7 @@ export default function PropertyManagerApp() {
                 onEntryCode={openEntryCodeModal}
                 entryCodeActionId={entryCodeSaving ? entryCodeModal?.property.id ?? null : null}
                 stickyActions={tab === "properties"}
+                showActionsColumn={tab !== "properties" || showArchived}
               />
               {tab === "investor_capital" && !showArchived && investorPayoutTableSummaries.length > 0 && (
                 <div className="mt-5 space-y-3">
