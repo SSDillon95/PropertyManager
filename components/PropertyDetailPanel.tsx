@@ -88,12 +88,6 @@ export default function PropertyDetailPanel({
         </div>
         <div className="rounded-xl border border-zinc-600/70 bg-zinc-800/50 p-4 sm:p-5">
           <h4 className="text-xs font-semibold uppercase tracking-wide text-zinc-400 mb-4">
-            Property Cost
-          </h4>
-          <PropertyFieldGrid columns={sections.costColumns} property={property} />
-        </div>
-        <div className="rounded-xl border border-zinc-600/70 bg-zinc-800/50 p-4 sm:p-5">
-          <h4 className="text-xs font-semibold uppercase tracking-wide text-zinc-400 mb-4">
             Financial
           </h4>
           <PropertyFieldGrid columns={sections.financialColumns} property={property} />

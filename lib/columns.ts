@@ -97,6 +97,14 @@ export const BUSINESS_COLUMNS: ColumnDef[] = [
   { key: "notes", label: "Notes", type: "text", width: "200px" },
 ];
 
+export const PROPERTY_TYPE_OPTIONS = [
+  "Single Family",
+  "Multi-Family",
+  "Condo",
+  "Townhouse",
+  "Commercial",
+] as const;
+
 const PROPERTY_COLUMN_DEFS: ColumnDef[] = [
   { key: "legal_id", label: "Legal ID", type: "text", required: true, width: "100px" },
   { key: "business_name", label: "Business", type: "business", width: "160px" },
@@ -111,7 +119,7 @@ const PROPERTY_COLUMN_DEFS: ColumnDef[] = [
     key: "property_type",
     label: "Property Type",
     type: "select",
-    options: ["Single Family", "Multi-Family", "Condo", "Townhouse", "Commercial"],
+    options: [...PROPERTY_TYPE_OPTIONS],
     width: "130px",
   },
   { key: "units", label: "Units", type: "number", width: "70px" },
@@ -166,14 +174,11 @@ const PROPERTY_INFORMATION_KEYS = [
   "notes",
 ] as const;
 
-const PROPERTY_COST_KEYS = [
+const PROPERTY_FINANCIAL_KEYS = [
   "purchase_date",
   "purchase_price",
   "rehab_amount",
   "rehab_price",
-] as const;
-
-const PROPERTY_FINANCIAL_KEYS = [
   "current_value",
   "loan_amount",
   "mortgage_balance",
@@ -184,18 +189,16 @@ const PROPERTY_FINANCIAL_KEYS = [
 ] as const;
 
 export const PROPERTY_COLUMNS = orderColumnsByKeys(
-  [...PROPERTY_INFORMATION_KEYS, ...PROPERTY_COST_KEYS, ...PROPERTY_FINANCIAL_KEYS],
+  [...PROPERTY_INFORMATION_KEYS, ...PROPERTY_FINANCIAL_KEYS],
   PROPERTY_COLUMN_DEFS
 );
 
 export function getPropertyFormSections(): {
   informationColumns: ColumnDef[];
-  costColumns: ColumnDef[];
   financialColumns: ColumnDef[];
 } {
   return {
     informationColumns: orderColumnsByKeys(PROPERTY_INFORMATION_KEYS, PROPERTY_COLUMN_DEFS),
-    costColumns: orderColumnsByKeys(PROPERTY_COST_KEYS, PROPERTY_COLUMN_DEFS),
     financialColumns: orderColumnsByKeys(PROPERTY_FINANCIAL_KEYS, PROPERTY_COLUMN_DEFS),
   };
 }

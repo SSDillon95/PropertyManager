@@ -20,6 +20,7 @@ import {
   getColumnsForTab,
   getInvestorFormSections,
   getPropertyFormSections,
+  PROPERTY_TYPE_OPTIONS,
   isInvestorTab,
   isManagementTab,
   isSettingsTab,
@@ -173,6 +174,9 @@ export default function PropertyManagerApp() {
   const [businesses, setBusinesses] = useState<Business[]>([]);
   const [properties, setProperties] = useState<Property[]>([]);
   const [propertyBusinessFilter, setPropertyBusinessFilter] = useState("");
+  const [propertyTypeFilter, setPropertyTypeFilter] = useState<string[]>([]);
+  const [propertyTypeFilterOpen, setPropertyTypeFilterOpen] = useState(false);
+  const propertyTypeFilterRef = useRef<HTMLDivElement>(null);
   const [capitalBusinessFilter, setCapitalBusinessFilter] = useState("");
   const [capitalBusinessConfirm, setCapitalBusinessConfirm] = useState<{
     businessName: string;
@@ -259,14 +263,30 @@ export default function PropertyManagerApp() {
     };
   }, [tab, formOpen, form]);
   const displayRows = useMemo(() => {
-    if (tab === "properties" && propertyBusinessFilter) {
-      return rows.filter((row) => row.business_name === propertyBusinessFilter);
+    if (tab === "properties") {
+      return rows.filter((row) => {
+        if (propertyBusinessFilter && row.business_name !== propertyBusinessFilter) {
+          return false;
+        }
+        if (
+          propertyTypeFilter.length > 0 &&
+          !propertyTypeFilter.includes(String(row.property_type ?? ""))
+        ) {
+          return false;
+        }
+        return true;
+      });
     }
     if (tab === "investor_capital" && capitalBusinessFilter) {
       return rows.filter((row) => row.business_name === capitalBusinessFilter);
     }
     return rows;
-  }, [tab, rows, propertyBusinessFilter, capitalBusinessFilter]);
+  }, [tab, rows, propertyBusinessFilter, propertyTypeFilter, capitalBusinessFilter]);
+  const propertyTypeFilterLabel = useMemo(() => {
+    if (propertyTypeFilter.length === 0) return "All property types";
+    if (propertyTypeFilter.length === 1) return propertyTypeFilter[0];
+    return `${propertyTypeFilter.length} types selected`;
+  }, [propertyTypeFilter]);
   const capitalFormProperties = useMemo(() => {
     if (tab !== "investor_capital" || !form.business_name?.trim()) return properties;
     return properties.filter(
@@ -830,6 +850,22 @@ export default function PropertyManagerApp() {
   }, [closeSettingsMenu, settingsMenuOpen, updateSettingsMenuPosition]);
 
   useEffect(() => {
+    if (!propertyTypeFilterOpen) return;
+    const handleClickOutside = (event: MouseEvent) => {
+      if (propertyTypeFilterRef.current?.contains(event.target as Node)) return;
+      setPropertyTypeFilterOpen(false);
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [propertyTypeFilterOpen]);
+
+  const togglePropertyTypeFilter = (type: string) => {
+    setPropertyTypeFilter((prev) =>
+      prev.includes(type) ? prev.filter((item) => item !== type) : [...prev, type]
+    );
+  };
+
+  useEffect(() => {
     if (tab !== "dashboard" && tab !== "reports" && tab !== "communication") {
       setForm(emptyForm(columns));
       setFormOpen(false);
@@ -944,7 +980,11 @@ export default function PropertyManagerApp() {
     closeManagementMenu();
     closeInvestorMenu();
     closeSettingsMenu();
-    if (next !== "properties") setPropertyBusinessFilter("");
+    if (next !== "properties") {
+      setPropertyBusinessFilter("");
+      setPropertyTypeFilter([]);
+      setPropertyTypeFilterOpen(false);
+    }
     if (next !== "investor_capital") setCapitalBusinessFilter("");
     setTab(next);
     setLoading(true);
@@ -1778,14 +1818,6 @@ export default function PropertyManagerApp() {
                     </div>
                     <div className="rounded-xl border border-zinc-600/70 bg-zinc-800/50 p-4 sm:p-5">
                       <h3 className="text-xs font-semibold uppercase tracking-wide text-zinc-400 mb-4">
-                        Property Cost
-                      </h3>
-                      <div className={formGridClass}>
-                        {propertyFormSections.costColumns.map((col) => renderFormField(col))}
-                      </div>
-                    </div>
-                    <div className="rounded-xl border border-zinc-600/70 bg-zinc-800/50 p-4 sm:p-5">
-                      <h3 className="text-xs font-semibold uppercase tracking-wide text-zinc-400 mb-4">
                         Financial
                       </h3>
                       <div className={formGridClass}>
@@ -1840,7 +1872,8 @@ export default function PropertyManagerApp() {
                 <h2 className="font-semibold text-lg">
                   {showArchived ? "Archive — " : ""}
                   {SHEET_TABS.find((s) => s.id === tab)?.label} ({tableRows.length}
-                  {((tab === "properties" && propertyBusinessFilter) ||
+                  {((tab === "properties" &&
+                    (propertyBusinessFilter || propertyTypeFilter.length > 0)) ||
                     (tab === "investor_capital" && capitalBusinessFilter)) &&
                   rows.length !== tableRows.length
                     ? ` of ${rows.length}`
@@ -1849,21 +1882,73 @@ export default function PropertyManagerApp() {
                 </h2>
                 <div className="flex items-center gap-2 flex-wrap">
                   {tab === "properties" && !showArchived && (
-                    <label className="flex items-center gap-2 text-xs text-zinc-300">
-                      <span className="whitespace-nowrap">Filter by business</span>
-                      <select
-                        value={propertyBusinessFilter}
-                        onChange={(e) => setPropertyBusinessFilter(e.target.value)}
-                        className="form-select py-1.5 min-w-[10rem]"
-                      >
-                        <option value="">All businesses</option>
-                        {propertyBusinessOptions.map((name) => (
-                          <option key={name} value={name}>
-                            {name}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
+                    <>
+                      <label className="flex items-center gap-2 text-xs text-zinc-300">
+                        <span className="whitespace-nowrap">Filter by business</span>
+                        <select
+                          value={propertyBusinessFilter}
+                          onChange={(e) => setPropertyBusinessFilter(e.target.value)}
+                          className="form-select py-1.5 min-w-[10rem]"
+                        >
+                          <option value="">All businesses</option>
+                          {propertyBusinessOptions.map((name) => (
+                            <option key={name} value={name}>
+                              {name}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                      <div className="relative" ref={propertyTypeFilterRef}>
+                        <label className="flex items-center gap-2 text-xs text-zinc-300">
+                          <span className="whitespace-nowrap">Filter by property type</span>
+                          <button
+                            type="button"
+                            onClick={() => setPropertyTypeFilterOpen((open) => !open)}
+                            aria-expanded={propertyTypeFilterOpen}
+                            aria-haspopup="listbox"
+                            className="form-select py-1.5 min-w-[11rem] text-left flex items-center justify-between gap-2"
+                          >
+                            <span className="truncate">{propertyTypeFilterLabel}</span>
+                            <span className="text-zinc-500 shrink-0" aria-hidden>
+                              ▾
+                            </span>
+                          </button>
+                        </label>
+                        {propertyTypeFilterOpen && (
+                          <div
+                            role="listbox"
+                            aria-multiselectable="true"
+                            className="absolute right-0 z-50 mt-1 min-w-[12rem] rounded-lg border border-zinc-600 bg-zinc-800 shadow-xl py-1"
+                          >
+                            {PROPERTY_TYPE_OPTIONS.map((type) => (
+                              <label
+                                key={type}
+                                className="flex items-center gap-2 px-3 py-2 text-xs text-zinc-200 hover:bg-zinc-700/70 cursor-pointer"
+                              >
+                                <input
+                                  type="checkbox"
+                                  checked={propertyTypeFilter.includes(type)}
+                                  onChange={() => togglePropertyTypeFilter(type)}
+                                  className="rounded border-zinc-500"
+                                />
+                                <span>{type}</span>
+                              </label>
+                            ))}
+                            {propertyTypeFilter.length > 0 && (
+                              <div className="border-t border-zinc-700/70 px-3 py-2">
+                                <button
+                                  type="button"
+                                  onClick={() => setPropertyTypeFilter([])}
+                                  className="text-xs text-amber-400 hover:text-amber-300"
+                                >
+                                  Clear selection
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    </>
                   )}
                   {tab === "investor_capital" && !showArchived && (
                     <label className="flex items-center gap-2 text-xs text-zinc-300">
