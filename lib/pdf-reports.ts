@@ -8,6 +8,7 @@ import {
   type PLReport,
   type ReportKind,
   type InvestorCapitalReport,
+  type PropertyAvailabilityReport,
   type PropertyInsuranceReport,
 } from "./reports";
 import {
@@ -816,6 +817,73 @@ export async function downloadPropertyInsurancePdf(
   report: PropertyInsuranceReport
 ): Promise<void> {
   triggerBrowserDownload(await buildPropertyInsurancePdf(report));
+}
+
+export async function buildPropertyAvailabilityPdf(
+  report: PropertyAvailabilityReport
+): Promise<PdfResult> {
+  const doc = new jsPDF({ orientation: "landscape" });
+  const { propertyName, status } = report.filters;
+  const filterParts = [
+    propertyName ? `Property: ${propertyName}` : null,
+    status ? `Status: ${status}` : null,
+  ].filter((part): part is string => Boolean(part));
+  const generatedOn = new Date().toISOString().slice(0, 10);
+
+  const contentStartY = await renderPdfHeader(doc, "Property Availability Report", [
+    `Generated: ${new Date().toLocaleString()}`,
+    filterParts.length > 0 ? filterParts.join("  |  ") : "All available properties",
+  ]);
+  const tableWidth = doc.internal.pageSize.getWidth() - PAGE_MARGIN * 2;
+  const columnWidths = [0.18, 0.24, 0.12, 0.14, 0.14, 0.18];
+  const columnStyles = Object.fromEntries(
+    columnWidths.map((width, index) => [index, { cellWidth: tableWidth * width }])
+  );
+
+  autoTable(doc, {
+    startY: contentStartY,
+    tableWidth,
+    margin: { left: PAGE_MARGIN, right: PAGE_MARGIN },
+    head: [["Property", "Address", "Status", "Rental Amount", "Deposit", "Bed / Bath"]],
+    body: report.lines.map((line) => [
+      line.property_name,
+      line.property_address,
+      line.status,
+      line.monthly_rent != null ? money(line.monthly_rent) : "—",
+      line.deposit != null ? money(line.deposit) : "—",
+      line.bed_bath,
+    ]),
+    styles: { fontSize: 8, cellPadding: 3, overflow: "linebreak" },
+    headStyles: { fillColor: REPORT_GREEN_RGB, textColor: [255, 255, 255] },
+    alternateRowStyles: { fillColor: [245, 245, 245] },
+    columnStyles,
+  });
+
+  const summaryY =
+    (doc as jsPDF & { lastAutoTable?: { finalY: number } }).lastAutoTable?.finalY ??
+    contentStartY;
+
+  autoTable(doc, {
+    startY: summaryY + 10,
+    tableWidth,
+    margin: { left: PAGE_MARGIN, right: PAGE_MARGIN },
+    head: [["Status", "Count"]],
+    body: [
+      ...report.byStatus.map((row) => [row.status, String(row.count)]),
+      ["Total Available", String(report.totalAvailable)],
+    ],
+    styles: { fontSize: 9, cellPadding: 3 },
+    headStyles: { fillColor: [251, 191, 36], textColor: [24, 24, 27] },
+    theme: "plain",
+  });
+
+  return finishPdf(doc, `hop2it-property-availability-report-${generatedOn}.pdf`);
+}
+
+export async function downloadPropertyAvailabilityPdf(
+  report: PropertyAvailabilityReport
+): Promise<void> {
+  triggerBrowserDownload(await buildPropertyAvailabilityPdf(report));
 }
 
 export async function buildInvestorPayoutPdf(

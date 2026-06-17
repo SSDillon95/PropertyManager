@@ -12,9 +12,14 @@ import type { Lease, Property } from "@/lib/types";
 interface AvailableViewProps {
   properties: Property[];
   leases: Lease[];
+  onPropertySelect: (property: Property) => void;
 }
 
-export default function AvailableView({ properties, leases }: AvailableViewProps) {
+export default function AvailableView({
+  properties,
+  leases,
+  onPropertySelect,
+}: AvailableViewProps) {
   const availableProperties = useMemo(
     () => listAvailableProperties(properties),
     [properties]
@@ -94,7 +99,13 @@ export default function AvailableView({ properties, leases }: AvailableViewProps
                       }`}
                     >
                       <td className="px-3 py-2 border-r border-zinc-700/40 text-zinc-100">
-                        <div className="font-medium">{property.property_name}</div>
+                        <button
+                          type="button"
+                          onClick={() => onPropertySelect(property)}
+                          className="font-medium text-sky-300 hover:text-sky-200 hover:underline text-left"
+                        >
+                          {property.property_name}
+                        </button>
                         <div className="text-xs text-zinc-400 mt-0.5">
                           {property.address}, {property.city}
                         </div>

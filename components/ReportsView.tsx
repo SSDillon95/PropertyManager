@@ -5,12 +5,14 @@ import InvestorPayoutSummaryPanel from "@/components/InvestorPayoutSummaryPanel"
 import { formatCurrency } from "@/lib/format";
 import { formatMoneyPrecise } from "@/lib/investor-payout-summary";
 import { requestReportPdf } from "@/lib/pdf-client";
+import { PROPERTY_STATUS_OPTIONS } from "@/lib/columns";
 import {
   buildExpenseReport,
   buildIncomeReport,
   buildInvestorCapitalReport,
   buildInvestorPayoutReport,
   buildPLReport,
+  buildPropertyAvailabilityReport,
   buildPropertyInsuranceReport,
   defaultReportRange,
   NO_INSURANCE_ON_FILE,
@@ -20,12 +22,14 @@ import type {
   Expense,
   Investor,
   InvestorPayout,
+  Lease,
   Property,
   RentPayment,
 } from "@/lib/types";
 
 interface ReportsViewProps {
   properties: Property[];
+  leases: Lease[];
   rentPayments: RentPayment[];
   expenses: Expense[];
   investorPayouts: InvestorPayout[];
@@ -64,14 +68,23 @@ const REPORT_OPTIONS: { id: ReportKind; label: string; description: string }[] =
     description:
       "Insurance, lien holder, property value, and address details with missing coverage flagged in red.",
   },
+  {
+    id: "property_availability",
+    label: "Property Availability Report",
+    description:
+      "Available properties (non-occupied) with rental amount, deposit, and bed/bath details.",
+  },
 ];
 
 const INVESTOR_FILTER_REPORTS: ReportKind[] = ["investor_capital", "investor_payout"];
 const PROPERTY_INSURANCE_REPORTS: ReportKind[] = ["property_insurance"];
+const PROPERTY_AVAILABILITY_REPORTS: ReportKind[] = ["property_availability"];
 const DATE_FILTER_REPORTS: ReportKind[] = ["pl", "income", "expense", "investor_capital", "investor_payout"];
+const AVAILABLE_STATUS_OPTIONS = PROPERTY_STATUS_OPTIONS.filter((status) => status !== "Occupied");
 
 export default function ReportsView({
   properties,
+  leases,
   rentPayments,
   expenses,
   investorPayouts,
@@ -85,6 +98,8 @@ export default function ReportsView({
   const [investorName, setInvestorName] = useState("");
   const [reportBusinessFilter, setReportBusinessFilter] = useState("");
   const [reportLienHolderFilter, setReportLienHolderFilter] = useState("");
+  const [reportAvailabilityPropertyFilter, setReportAvailabilityPropertyFilter] = useState("");
+  const [reportAvailabilityStatusFilter, setReportAvailabilityStatusFilter] = useState("");
   const [generating, setGenerating] = useState(false);
 
   const reportBusinessOptions = useMemo(() => {
@@ -155,6 +170,14 @@ export default function ReportsView({
       }),
     [properties, reportBusinessFilter, reportLienHolderFilter]
   );
+  const propertyAvailabilityReport = useMemo(
+    () =>
+      buildPropertyAvailabilityReport(properties, leases, {
+        propertyName: reportAvailabilityPropertyFilter || undefined,
+        status: reportAvailabilityStatusFilter || undefined,
+      }),
+    [properties, leases, reportAvailabilityPropertyFilter, reportAvailabilityStatusFilter]
+  );
 
   const selectedReport = REPORT_OPTIONS.find((opt) => opt.id === reportKind);
   const usesDateFilters = DATE_FILTER_REPORTS.includes(reportKind);
@@ -166,7 +189,16 @@ export default function ReportsView({
       setReportBusinessFilter("");
       setReportLienHolderFilter("");
     }
-    if (PROPERTY_INSURANCE_REPORTS.includes(next)) setPropertyName("");
+    if (!PROPERTY_AVAILABILITY_REPORTS.includes(next)) {
+      setReportAvailabilityPropertyFilter("");
+      setReportAvailabilityStatusFilter("");
+    }
+    if (
+      PROPERTY_INSURANCE_REPORTS.includes(next) ||
+      PROPERTY_AVAILABILITY_REPORTS.includes(next)
+    ) {
+      setPropertyName("");
+    }
   };
 
   const handleDownload = async () => {
@@ -182,6 +214,8 @@ export default function ReportsView({
         await requestReportPdf("investor_payout", { report: investorPayoutReport });
       } else if (reportKind === "property_insurance") {
         await requestReportPdf("property_insurance", { report: propertyInsuranceReport });
+      } else if (reportKind === "property_availability") {
+        await requestReportPdf("property_availability", { report: propertyAvailabilityReport });
       } else {
         await requestReportPdf("pl", { report: plReport });
       }
@@ -291,7 +325,38 @@ export default function ReportsView({
                     tone: "zinc",
                   },
                 ]
-              : [
+              : reportKind === "property_availability"
+                ? [
+                    {
+                      label: "Total Available",
+                      value: String(propertyAvailabilityReport.totalAvailable),
+                      tone: "emerald",
+                    },
+                    {
+                      label: "Statuses",
+                      value: String(propertyAvailabilityReport.byStatus.length),
+                      tone: "zinc",
+                    },
+                    {
+                      label: "Vacant",
+                      value: String(
+                        propertyAvailabilityReport.byStatus.find((row) => row.status === "Vacant")
+                          ?.count ?? 0
+                      ),
+                      tone: "zinc",
+                    },
+                    {
+                      label: "Filters Applied",
+                      value:
+                        [reportAvailabilityPropertyFilter, reportAvailabilityStatusFilter].filter(
+                          Boolean
+                        ).length > 0
+                          ? "Yes"
+                          : "No",
+                      tone: "zinc",
+                    },
+                  ]
+                : [
                   {
                     label: "Total Payouts",
                     value: formatCurrency(investorPayoutReport.totalPayouts),
@@ -319,7 +384,8 @@ export default function ReportsView({
       <div>
         <h1 className="text-3xl font-semibold tracking-tighter mb-2">Reports</h1>
         <p className="text-sm text-zinc-400">
-          Generate P/L, income, expense, investor, and property insurance reports as PDF downloads.
+          Generate P/L, income, expense, investor, insurance, and property availability reports as
+          PDF downloads.
         </p>
       </div>
 
@@ -371,7 +437,47 @@ export default function ReportsView({
               </label>
             </>
           )}
-          {PROPERTY_INSURANCE_REPORTS.includes(reportKind) ? (
+          {PROPERTY_AVAILABILITY_REPORTS.includes(reportKind) ? (
+            <>
+              <label className="block">
+                <span className="text-xs font-semibold uppercase tracking-wide text-amber-400 mb-1 block">
+                  Property (optional)
+                </span>
+                <select
+                  value={reportAvailabilityPropertyFilter}
+                  onChange={(e) => setReportAvailabilityPropertyFilter(e.target.value)}
+                  className="form-select"
+                >
+                  <option value="">All available properties</option>
+                  {properties
+                    .filter((property) => property.status !== "Occupied")
+                    .sort((left, right) => left.property_name.localeCompare(right.property_name))
+                    .map((property) => (
+                      <option key={property.id} value={property.property_name}>
+                        {property.property_name}
+                      </option>
+                    ))}
+                </select>
+              </label>
+              <label className="block">
+                <span className="text-xs font-semibold uppercase tracking-wide text-amber-400 mb-1 block">
+                  Status (optional)
+                </span>
+                <select
+                  value={reportAvailabilityStatusFilter}
+                  onChange={(e) => setReportAvailabilityStatusFilter(e.target.value)}
+                  className="form-select"
+                >
+                  <option value="">All statuses</option>
+                  {AVAILABLE_STATUS_OPTIONS.map((status) => (
+                    <option key={status} value={status}>
+                      {status}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </>
+          ) : PROPERTY_INSURANCE_REPORTS.includes(reportKind) ? (
             <>
               <label className="block">
                 <span className="text-xs font-semibold uppercase tracking-wide text-amber-400 mb-1 block">
@@ -564,6 +670,59 @@ export default function ReportsView({
                 {formatMoneyPrecise(investorCapitalReport.calculatedTotalPayouts)}
               </span>
             </div>
+          </div>
+        )}
+
+        {reportKind === "property_availability" && (
+          <div className="mt-6">
+            <h3 className="text-sm font-semibold text-emerald-300 mb-3">
+              Available Property Details
+            </h3>
+            {propertyAvailabilityReport.lines.length === 0 ? (
+              <p className="text-sm text-zinc-400">
+                No available properties match the selected filters.
+              </p>
+            ) : (
+              <div className="overflow-x-auto rounded-lg border border-zinc-600/60">
+                <table className="w-full text-sm min-w-max">
+                  <thead>
+                    <tr className="bg-emerald-900/40 text-left">
+                      <th className="px-3 py-2 font-semibold text-emerald-200">Property</th>
+                      <th className="px-3 py-2 font-semibold text-emerald-200">Address</th>
+                      <th className="px-3 py-2 font-semibold text-emerald-200">Status</th>
+                      <th className="px-3 py-2 font-semibold text-emerald-200 text-right">
+                        Rental Amount
+                      </th>
+                      <th className="px-3 py-2 font-semibold text-emerald-200 text-right">
+                        Deposit
+                      </th>
+                      <th className="px-3 py-2 font-semibold text-emerald-200">Bed / Bath</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {propertyAvailabilityReport.lines.map((line, idx) => (
+                      <tr
+                        key={`${line.property_name}-${idx}`}
+                        className={`border-t border-zinc-700/60 ${
+                          idx % 2 === 0 ? "bg-zinc-800/50" : "bg-zinc-700/30"
+                        }`}
+                      >
+                        <td className="px-3 py-2 text-zinc-100">{line.property_name}</td>
+                        <td className="px-3 py-2 text-zinc-300">{line.property_address}</td>
+                        <td className="px-3 py-2 text-zinc-200">{line.status}</td>
+                        <td className="px-3 py-2 text-zinc-200 text-right">
+                          {formatCurrency(line.monthly_rent) || "—"}
+                        </td>
+                        <td className="px-3 py-2 text-zinc-200 text-right">
+                          {formatCurrency(line.deposit) || "—"}
+                        </td>
+                        <td className="px-3 py-2 text-zinc-200">{line.bed_bath}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
         )}
 

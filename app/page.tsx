@@ -466,6 +466,7 @@ export default function PropertyManagerApp() {
       if (activeTab === "reports") {
         await Promise.all([
           loadProperties(),
+          loadLeases(),
           loadRentPayments(),
           loadExpenseRows(),
           loadInvestors(),
@@ -1011,6 +1012,29 @@ export default function PropertyManagerApp() {
       showMessage("error", (error as Error).message);
     } finally {
       setEntryCodeSaving(false);
+    }
+  };
+
+  const openPropertyDetail = async (property: Property) => {
+    if (!canAccessTab(userRole, "properties")) {
+      showMessage("error", "You do not have access to that section.");
+      return;
+    }
+    setShowArchived(false);
+    setFormOpen(false);
+    setEntryCodeModal(null);
+    setCapitalBusinessConfirm(null);
+    closeManagementMenu();
+    closeInvestorMenu();
+    closeSettingsMenu();
+    if (tab !== "investor_capital") setCapitalBusinessFilter("");
+    setExpandedProperty(property);
+    setTab("properties");
+    setLoading(true);
+    try {
+      await loadTabData("properties", false);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -1776,6 +1800,7 @@ export default function PropertyManagerApp() {
         ) : tab === "reports" ? (
           <ReportsView
             properties={properties}
+            leases={leases}
             rentPayments={rentPayments}
             expenses={expenseRows}
             investorPayouts={investorPayoutRows}
@@ -1789,7 +1814,11 @@ export default function PropertyManagerApp() {
             onNotify={showMessage}
           />
         ) : tab === "available" ? (
-          <AvailableView properties={properties} leases={leases} />
+          <AvailableView
+            properties={properties}
+            leases={leases}
+            onPropertySelect={openPropertyDetail}
+          />
         ) : (
           <div className="space-y-6">
             {!showArchived && formOpen && (

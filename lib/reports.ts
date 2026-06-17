@@ -1,4 +1,9 @@
 import {
+  depositForAvailableProperty,
+  formatBedBath,
+  listAvailableProperties,
+} from "./available-properties";
+import {
   loanSummaryFromPayout,
   type InvestorPayoutLoanSummary,
 } from "./investor-payout-summary";
@@ -6,6 +11,7 @@ import { isCapitalRecord, isPayoutRecord } from "./investor-records";
 import type {
   Expense,
   InvestorPayout,
+  Lease,
   Property,
   RentPayment,
 } from "./types";
@@ -16,7 +22,8 @@ export type ReportKind =
   | "expense"
   | "investor_capital"
   | "investor_payout"
-  | "property_insurance";
+  | "property_insurance"
+  | "property_availability";
 
 export interface ReportFilters {
   startDate: string;
@@ -533,5 +540,64 @@ export function buildPropertyInsuranceReport(
     filters,
     lines,
     missingInsuranceCount: lines.filter((line) => line.missingInsurance).length,
+  };
+}
+
+export interface PropertyAvailabilityReportFilters {
+  propertyName?: string;
+  status?: string;
+}
+
+export interface PropertyAvailabilityLine {
+  property_name: string;
+  property_address: string;
+  status: string;
+  monthly_rent: number | null;
+  deposit: number | null;
+  bed_bath: string;
+}
+
+export interface PropertyAvailabilityReport {
+  filters: PropertyAvailabilityReportFilters;
+  lines: PropertyAvailabilityLine[];
+  byStatus: { status: string; count: number }[];
+  totalAvailable: number;
+}
+
+export function buildPropertyAvailabilityReport(
+  properties: Property[],
+  leases: Lease[],
+  filters: PropertyAvailabilityReportFilters
+): PropertyAvailabilityReport {
+  let available = listAvailableProperties(properties);
+
+  if (filters.propertyName) {
+    available = available.filter((property) => property.property_name === filters.propertyName);
+  }
+  if (filters.status) {
+    available = available.filter((property) => property.status === filters.status);
+  }
+
+  const lines = available.map((property) => ({
+    property_name: property.property_name,
+    property_address: [property.address, property.city].filter((part) => part?.trim()).join(", "),
+    status: property.status,
+    monthly_rent: property.monthly_rent,
+    deposit: depositForAvailableProperty(property.property_name, leases),
+    bed_bath: formatBedBath(property.bedrooms, property.bathrooms),
+  }));
+
+  const statusCounts = new Map<string, number>();
+  for (const line of lines) {
+    statusCounts.set(line.status, (statusCounts.get(line.status) ?? 0) + 1);
+  }
+
+  return {
+    filters,
+    lines,
+    byStatus: [...statusCounts.entries()]
+      .map(([status, count]) => ({ status, count }))
+      .sort((left, right) => left.status.localeCompare(right.status)),
+    totalAvailable: lines.length,
   };
 }

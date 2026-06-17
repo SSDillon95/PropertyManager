@@ -5,6 +5,7 @@ import {
   buildInvestorPayoutReportPdf,
   buildPLPdf,
   buildInvestorCapitalReportPdf,
+  buildPropertyAvailabilityPdf,
   buildPropertyInsurancePdf,
 } from "@/lib/pdf-reports";
 import type {
@@ -13,6 +14,7 @@ import type {
   InvestorCapitalReport,
   InvestorPayoutReportSummary,
   PLReport,
+  PropertyAvailabilityReport,
   PropertyInsuranceReport,
   ReportKind,
 } from "@/lib/reports";
@@ -28,6 +30,7 @@ type PdfRequest =
   | { kind: "investor_capital"; report: InvestorCapitalReport }
   | { kind: "investor_payout"; report: InvestorPayoutReportSummary }
   | { kind: "property_insurance"; report: PropertyInsuranceReport }
+  | { kind: "property_availability"; report: PropertyAvailabilityReport }
   | {
       kind: "investor_payout_form";
       payout: Pick<
@@ -72,6 +75,10 @@ const BUILDERS: Record<
   property_insurance: (body) =>
     buildPropertyInsurancePdf(
       (body as Extract<PdfRequest, { kind: "property_insurance" }>).report
+    ),
+  property_availability: (body) =>
+    buildPropertyAvailabilityPdf(
+      (body as Extract<PdfRequest, { kind: "property_availability" }>).report
     ),
   investor_payout_form: (body) =>
     buildInvestorPayoutPdf(
