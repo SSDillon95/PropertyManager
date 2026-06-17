@@ -8,6 +8,7 @@ import AvailableView from "@/components/AvailableView";
 import MultiSelectFilter from "@/components/MultiSelectFilter";
 import PropertyDetailPanel from "@/components/PropertyDetailPanel";
 import ReportsView from "@/components/ReportsView";
+import GmailSetupView from "@/components/GmailSetupView";
 import SmsSetupView from "@/components/SmsSetupView";
 import SpreadsheetTable from "@/components/SpreadsheetTable";
 import { loanSummaryFromPayout } from "@/lib/investor-payout-summary";
@@ -71,6 +72,7 @@ const VIEW_ONLY_TABS: SheetTab[] = [
   "communication_investor",
   "available",
   "sms_setup",
+  "gmail_setup",
 ];
 
 function isViewOnlyTab(tab: SheetTab): boolean {
@@ -85,6 +87,7 @@ type DataTab = Exclude<
   | "communication_investor"
   | "available"
   | "sms_setup"
+  | "gmail_setup"
 >;
 
 function asDataTab(tab: SheetTab): DataTab {
@@ -1980,6 +1983,8 @@ export default function PropertyManagerApp() {
           />
         ) : tab === "sms_setup" ? (
           <SmsSetupView onNotify={showMessage} />
+        ) : tab === "gmail_setup" ? (
+          <GmailSetupView onNotify={showMessage} />
         ) : (
           <div className="space-y-6">
             {!showArchived && formOpen && (

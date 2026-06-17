@@ -33,6 +33,7 @@ export const SETTINGS_TABS: { id: SheetTab; label: string }[] = [
   { id: "investors", label: "Investor" },
   { id: "users", label: "User Setup" },
   { id: "sms_setup", label: "SMS Setup" },
+  { id: "gmail_setup", label: "Gmail Setup" },
 ];
 
 export const INVESTOR_TABS: { id: SheetTab; label: string }[] = [
@@ -81,7 +82,8 @@ export function isSettingsTab(tab: SheetTab): boolean {
     tab === "tenants" ||
     tab === "investors" ||
     tab === "users" ||
-    tab === "sms_setup"
+    tab === "sms_setup" ||
+    tab === "gmail_setup"
   );
 }
 

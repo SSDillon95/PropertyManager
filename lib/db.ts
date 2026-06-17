@@ -1,11 +1,14 @@
 import { hashPassword, verifyPassword } from "./password";
+import { normalizeEmailAddress } from "./email-utils";
 import { isRecoveryUsername } from "./recovery-auth";
 import { normalizePhoneNumber } from "./sms-utils";
 import type {
   AppUser,
   Business,
   DashboardSummary,
+  EmailMessage,
   Expense,
+  GmailSettings,
   Investor,
   InvestorPayout,
   Lease,
@@ -278,6 +281,44 @@ const SQLITE_SCHEMA = `
     contact_type TEXT NOT NULL DEFAULT 'tenant',
     archived_at TEXT NOT NULL DEFAULT (datetime('now')),
     PRIMARY KEY (phone_number, contact_type)
+  );
+
+  CREATE TABLE IF NOT EXISTS gmail_settings (
+    id INTEGER PRIMARY KEY CHECK (id = 1),
+    username TEXT,
+    password TEXT,
+    smtp_host TEXT NOT NULL DEFAULT 'smtp.gmail.com',
+    smtp_port INTEGER NOT NULL DEFAULT 587,
+    imap_host TEXT NOT NULL DEFAULT 'imap.gmail.com',
+    imap_port INTEGER NOT NULL DEFAULT 993,
+    from_address TEXT,
+    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+
+  CREATE TABLE IF NOT EXISTS email_messages (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    contact_type TEXT NOT NULL DEFAULT 'tenant',
+    direction TEXT NOT NULL,
+    tenant_id INTEGER,
+    tenant_name TEXT,
+    investor_id INTEGER,
+    investor_name TEXT,
+    property_name TEXT,
+    email_address TEXT NOT NULL,
+    subject TEXT,
+    body TEXT NOT NULL,
+    message_type TEXT NOT NULL DEFAULT 'general',
+    status TEXT NOT NULL DEFAULT 'queued',
+    external_id TEXT,
+    error_message TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+
+  CREATE TABLE IF NOT EXISTS email_archived_threads (
+    email_address TEXT NOT NULL,
+    contact_type TEXT NOT NULL DEFAULT 'tenant',
+    archived_at TEXT NOT NULL DEFAULT (datetime('now')),
+    PRIMARY KEY (email_address, contact_type)
   );
 `;
 
@@ -590,6 +631,47 @@ async function initSchema(): Promise<void> {
     await sql`ALTER TABLE sms_messages ADD COLUMN IF NOT EXISTS investor_id INTEGER`;
     await sql`ALTER TABLE sms_messages ADD COLUMN IF NOT EXISTS investor_name TEXT`;
     await sql`ALTER TABLE sms_archived_threads ADD COLUMN IF NOT EXISTS contact_type TEXT NOT NULL DEFAULT 'tenant'`;
+    await sql`
+      CREATE TABLE IF NOT EXISTS gmail_settings (
+        id INTEGER PRIMARY KEY CHECK (id = 1),
+        username TEXT,
+        password TEXT,
+        smtp_host TEXT NOT NULL DEFAULT 'smtp.gmail.com',
+        smtp_port INTEGER NOT NULL DEFAULT 587,
+        imap_host TEXT NOT NULL DEFAULT 'imap.gmail.com',
+        imap_port INTEGER NOT NULL DEFAULT 993,
+        from_address TEXT,
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `;
+    await sql`
+      CREATE TABLE IF NOT EXISTS email_messages (
+        id SERIAL PRIMARY KEY,
+        contact_type TEXT NOT NULL DEFAULT 'tenant',
+        direction TEXT NOT NULL,
+        tenant_id INTEGER,
+        tenant_name TEXT,
+        investor_id INTEGER,
+        investor_name TEXT,
+        property_name TEXT,
+        email_address TEXT NOT NULL,
+        subject TEXT,
+        body TEXT NOT NULL,
+        message_type TEXT NOT NULL DEFAULT 'general',
+        status TEXT NOT NULL DEFAULT 'queued',
+        external_id TEXT,
+        error_message TEXT,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `;
+    await sql`
+      CREATE TABLE IF NOT EXISTS email_archived_threads (
+        email_address TEXT NOT NULL,
+        contact_type TEXT NOT NULL DEFAULT 'tenant',
+        archived_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        PRIMARY KEY (email_address, contact_type)
+      )
+    `;
     return;
   }
 
@@ -814,6 +896,62 @@ async function initSchema(): Promise<void> {
   if (!hasSmsCol("investor_id")) db.exec("ALTER TABLE sms_messages ADD COLUMN investor_id INTEGER");
   if (!hasSmsCol("investor_name")) {
     db.exec("ALTER TABLE sms_messages ADD COLUMN investor_name TEXT");
+  }
+  const gmailSettingsTable = db
+    .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='gmail_settings'")
+    .get();
+  if (!gmailSettingsTable) {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS gmail_settings (
+        id INTEGER PRIMARY KEY CHECK (id = 1),
+        username TEXT,
+        password TEXT,
+        smtp_host TEXT NOT NULL DEFAULT 'smtp.gmail.com',
+        smtp_port INTEGER NOT NULL DEFAULT 587,
+        imap_host TEXT NOT NULL DEFAULT 'imap.gmail.com',
+        imap_port INTEGER NOT NULL DEFAULT 993,
+        from_address TEXT,
+        updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+      )
+    `);
+  }
+  const emailMessagesTable = db
+    .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='email_messages'")
+    .get();
+  if (!emailMessagesTable) {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS email_messages (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        contact_type TEXT NOT NULL DEFAULT 'tenant',
+        direction TEXT NOT NULL,
+        tenant_id INTEGER,
+        tenant_name TEXT,
+        investor_id INTEGER,
+        investor_name TEXT,
+        property_name TEXT,
+        email_address TEXT NOT NULL,
+        subject TEXT,
+        body TEXT NOT NULL,
+        message_type TEXT NOT NULL DEFAULT 'general',
+        status TEXT NOT NULL DEFAULT 'queued',
+        external_id TEXT,
+        error_message TEXT,
+        created_at TEXT NOT NULL DEFAULT (datetime('now'))
+      )
+    `);
+  }
+  const emailArchivedThreadsTable = db
+    .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='email_archived_threads'")
+    .get();
+  if (!emailArchivedThreadsTable) {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS email_archived_threads (
+        email_address TEXT NOT NULL,
+        contact_type TEXT NOT NULL DEFAULT 'tenant',
+        archived_at TEXT NOT NULL DEFAULT (datetime('now')),
+        PRIMARY KEY (email_address, contact_type)
+      )
+    `);
   }
   db.close();
 }
@@ -2625,6 +2763,352 @@ export async function createSmsMessage(
     .get(data);
   db.close();
   return mapSmsMessage(row as Record<string, unknown>);
+}
+
+function mapEmailMessage(row: Record<string, unknown>): EmailMessage {
+  const contactType = String(row.contact_type ?? "tenant");
+  return {
+    id: Number(row.id),
+    contact_type:
+      contactType === "investor" ? "investor" : ("tenant" as EmailMessage["contact_type"]),
+    direction: String(row.direction) as EmailMessage["direction"],
+    tenant_id: num(row.tenant_id) != null ? Number(row.tenant_id) : null,
+    tenant_name: str(row.tenant_name),
+    investor_id: num(row.investor_id) != null ? Number(row.investor_id) : null,
+    investor_name: str(row.investor_name),
+    property_name: str(row.property_name),
+    email_address: String(row.email_address),
+    subject: str(row.subject),
+    body: String(row.body),
+    message_type: String(row.message_type ?? "general"),
+    status: String(row.status ?? "queued"),
+    external_id: str(row.external_id),
+    error_message: str(row.error_message),
+    created_at: String(row.created_at),
+  };
+}
+
+function mapGmailSettings(row: Record<string, unknown>): GmailSettings {
+  return {
+    username: row.username != null ? String(row.username) : null,
+    password: row.password != null ? String(row.password) : null,
+    smtp_host: String(row.smtp_host ?? "smtp.gmail.com"),
+    smtp_port: Number(row.smtp_port ?? 587),
+    imap_host: String(row.imap_host ?? "imap.gmail.com"),
+    imap_port: Number(row.imap_port ?? 993),
+    from_address: row.from_address != null ? String(row.from_address) : null,
+    updated_at: String(row.updated_at),
+  };
+}
+
+function normalizeArchivedThreadEmail(email: string): string {
+  const normalized = normalizeEmailAddress(email);
+  if (!normalized) throw new Error("Email address is required.");
+  return normalized;
+}
+
+function isEmailArchived(
+  email: string,
+  contactType: EmailMessage["contact_type"],
+  archivedEmails: Set<string>
+): boolean {
+  const normalized = normalizeArchivedThreadEmail(email);
+  return archivedEmails.has(`${contactType}:${normalized}`);
+}
+
+export async function listArchivedEmailThreads(
+  contactType: EmailMessage["contact_type"]
+): Promise<string[]> {
+  await ensureSchema();
+  if (usePostgres) {
+    const sql = await getPostgresSql();
+    const rows = await sql`
+      SELECT email_address FROM email_archived_threads
+      WHERE contact_type = ${contactType}
+      ORDER BY archived_at DESC
+    `;
+    return rows.map((row) => String((row as Record<string, unknown>).email_address));
+  }
+  const db = await getSqliteDb();
+  const rows = db
+    .prepare(
+      "SELECT email_address FROM email_archived_threads WHERE contact_type = ? ORDER BY archived_at DESC"
+    )
+    .all(contactType);
+  db.close();
+  return rows.map((row) => String((row as Record<string, unknown>).email_address));
+}
+
+export async function archiveEmailThread(
+  email: string,
+  contactType: EmailMessage["contact_type"]
+): Promise<void> {
+  await ensureSchema();
+  const emailAddress = normalizeArchivedThreadEmail(email);
+  if (usePostgres) {
+    const sql = await getPostgresSql();
+    await sql`
+      INSERT INTO email_archived_threads (email_address, contact_type, archived_at)
+      VALUES (${emailAddress}, ${contactType}, NOW())
+      ON CONFLICT (email_address, contact_type) DO UPDATE SET archived_at = NOW()
+    `;
+    return;
+  }
+  const db = await getSqliteDb();
+  db.prepare(
+    `INSERT INTO email_archived_threads (email_address, contact_type, archived_at)
+     VALUES (?, ?, datetime('now'))
+     ON CONFLICT(email_address, contact_type) DO UPDATE SET archived_at = datetime('now')`
+  ).run(emailAddress, contactType);
+  db.close();
+}
+
+export async function restoreEmailThread(
+  email: string,
+  contactType: EmailMessage["contact_type"]
+): Promise<void> {
+  await ensureSchema();
+  const emailAddress = normalizeArchivedThreadEmail(email);
+  if (usePostgres) {
+    const sql = await getPostgresSql();
+    await sql`
+      DELETE FROM email_archived_threads
+      WHERE email_address = ${emailAddress} AND contact_type = ${contactType}
+    `;
+    return;
+  }
+  const db = await getSqliteDb();
+  db.prepare("DELETE FROM email_archived_threads WHERE email_address = ? AND contact_type = ?").run(
+    emailAddress,
+    contactType
+  );
+  db.close();
+}
+
+export async function getLastEmailMessageForAddress(email: string): Promise<EmailMessage | null> {
+  await ensureSchema();
+  const emailAddress = normalizeArchivedThreadEmail(email);
+  if (usePostgres) {
+    const sql = await getPostgresSql();
+    const rows = await sql`
+      SELECT * FROM email_messages
+      WHERE email_address = ${emailAddress}
+      ORDER BY created_at DESC
+      LIMIT 1
+    `;
+    if (!rows[0]) return null;
+    return mapEmailMessage(rows[0] as Record<string, unknown>);
+  }
+  const db = await getSqliteDb();
+  const row = db
+    .prepare("SELECT * FROM email_messages WHERE email_address = ? ORDER BY created_at DESC LIMIT 1")
+    .get(emailAddress);
+  db.close();
+  return row ? mapEmailMessage(row as Record<string, unknown>) : null;
+}
+
+export async function listEmailMessages(options: {
+  contact_type: EmailMessage["contact_type"];
+  email?: string;
+  archived?: boolean;
+}): Promise<EmailMessage[]> {
+  await ensureSchema();
+  const email = options.email;
+  const archived = options.archived;
+  const contactType = options.contact_type;
+  const archivedEmails = new Set(
+    (await listArchivedEmailThreads(contactType)).map(
+      (archivedEmail) => `${contactType}:${archivedEmail}`
+    )
+  );
+
+  if (usePostgres) {
+    const sql = await getPostgresSql();
+    const rows = email
+      ? await sql`
+          SELECT * FROM email_messages
+          WHERE email_address = ${email} AND contact_type = ${contactType}
+          ORDER BY created_at DESC
+        `
+      : await sql`
+          SELECT * FROM email_messages
+          WHERE contact_type = ${contactType}
+          ORDER BY created_at DESC
+        `;
+    const messages = rows.map((r) => mapEmailMessage(r as Record<string, unknown>));
+    if (archived == null) return messages;
+    return messages.filter((message) =>
+      archived
+        ? isEmailArchived(message.email_address, contactType, archivedEmails)
+        : !isEmailArchived(message.email_address, contactType, archivedEmails)
+    );
+  }
+  const db = await getSqliteDb();
+  const rows = email
+    ? db
+        .prepare(
+          "SELECT * FROM email_messages WHERE email_address = ? AND contact_type = ? ORDER BY created_at DESC"
+        )
+        .all(email, contactType)
+    : db
+        .prepare("SELECT * FROM email_messages WHERE contact_type = ? ORDER BY created_at DESC")
+        .all(contactType);
+  db.close();
+  const messages = rows.map((r) => mapEmailMessage(r as Record<string, unknown>));
+  if (archived == null) return messages;
+  return messages.filter((message) =>
+    archived
+      ? isEmailArchived(message.email_address, contactType, archivedEmails)
+      : !isEmailArchived(message.email_address, contactType, archivedEmails)
+  );
+}
+
+export async function listEmailExternalIds(): Promise<string[]> {
+  await ensureSchema();
+  if (usePostgres) {
+    const sql = await getPostgresSql();
+    const rows = await sql`
+      SELECT external_id FROM email_messages
+      WHERE external_id IS NOT NULL AND external_id <> ''
+    `;
+    return rows
+      .map((row) => String((row as Record<string, unknown>).external_id ?? "").trim())
+      .filter(Boolean);
+  }
+  const db = await getSqliteDb();
+  const rows = db
+    .prepare(
+      "SELECT external_id FROM email_messages WHERE external_id IS NOT NULL AND external_id <> ''"
+    )
+    .all();
+  db.close();
+  return rows
+    .map((row) => String((row as Record<string, unknown>).external_id ?? "").trim())
+    .filter(Boolean);
+}
+
+export async function getGmailSettings(): Promise<GmailSettings | null> {
+  await ensureSchema();
+  if (usePostgres) {
+    const sql = await getPostgresSql();
+    const rows = await sql`SELECT * FROM gmail_settings WHERE id = 1 LIMIT 1`;
+    if (!rows[0]) return null;
+    return mapGmailSettings(rows[0] as Record<string, unknown>);
+  }
+  const db = await getSqliteDb();
+  const row = db.prepare("SELECT * FROM gmail_settings WHERE id = 1").get();
+  db.close();
+  return row ? mapGmailSettings(row as Record<string, unknown>) : null;
+}
+
+export async function upsertGmailSettings(data: {
+  username: string;
+  password?: string | null;
+  smtp_host: string;
+  smtp_port: number;
+  imap_host: string;
+  imap_port: number;
+  from_address: string;
+}): Promise<GmailSettings> {
+  await ensureSchema();
+  const existing = await getGmailSettings();
+  const username = data.username.trim();
+  const password = data.password?.trim()
+    ? data.password.trim()
+    : existing?.password?.trim() ?? null;
+
+  if (!username) throw new Error("Gmail username is required.");
+  if (!password) throw new Error("Gmail password is required.");
+
+  if (usePostgres) {
+    const sql = await getPostgresSql();
+    const rows = await sql`
+      INSERT INTO gmail_settings (
+        id, username, password, smtp_host, smtp_port, imap_host, imap_port, from_address, updated_at
+      )
+      VALUES (
+        1, ${username}, ${password}, ${data.smtp_host}, ${data.smtp_port},
+        ${data.imap_host}, ${data.imap_port}, ${data.from_address}, NOW()
+      )
+      ON CONFLICT (id) DO UPDATE SET
+        username = EXCLUDED.username,
+        password = EXCLUDED.password,
+        smtp_host = EXCLUDED.smtp_host,
+        smtp_port = EXCLUDED.smtp_port,
+        imap_host = EXCLUDED.imap_host,
+        imap_port = EXCLUDED.imap_port,
+        from_address = EXCLUDED.from_address,
+        updated_at = NOW()
+      RETURNING *
+    `;
+    return mapGmailSettings(rows[0] as Record<string, unknown>);
+  }
+
+  const db = await getSqliteDb();
+  const row = db
+    .prepare(
+      `INSERT INTO gmail_settings (
+        id, username, password, smtp_host, smtp_port, imap_host, imap_port, from_address, updated_at
+      ) VALUES (
+        1, @username, @password, @smtp_host, @smtp_port, @imap_host, @imap_port, @from_address, datetime('now')
+      )
+      ON CONFLICT(id) DO UPDATE SET
+        username = excluded.username,
+        password = excluded.password,
+        smtp_host = excluded.smtp_host,
+        smtp_port = excluded.smtp_port,
+        imap_host = excluded.imap_host,
+        imap_port = excluded.imap_port,
+        from_address = excluded.from_address,
+        updated_at = datetime('now')
+      RETURNING *`
+    )
+    .get({
+      username,
+      password,
+      smtp_host: data.smtp_host,
+      smtp_port: data.smtp_port,
+      imap_host: data.imap_host,
+      imap_port: data.imap_port,
+      from_address: data.from_address,
+    });
+  db.close();
+  return mapGmailSettings(row as Record<string, unknown>);
+}
+
+export async function createEmailMessage(
+  data: Omit<EmailMessage, "id" | "created_at">
+): Promise<EmailMessage> {
+  await ensureSchema();
+  if (usePostgres) {
+    const sql = await getPostgresSql();
+    const rows = await sql`
+      INSERT INTO email_messages (
+        contact_type, direction, tenant_id, tenant_name, investor_id, investor_name,
+        property_name, email_address, subject, body, message_type, status, external_id, error_message
+      ) VALUES (
+        ${data.contact_type}, ${data.direction}, ${data.tenant_id}, ${data.tenant_name},
+        ${data.investor_id}, ${data.investor_name}, ${data.property_name}, ${data.email_address},
+        ${data.subject}, ${data.body}, ${data.message_type}, ${data.status}, ${data.external_id},
+        ${data.error_message}
+      ) RETURNING *
+    `;
+    return mapEmailMessage(rows[0] as Record<string, unknown>);
+  }
+  const db = await getSqliteDb();
+  const row = db
+    .prepare(
+      `INSERT INTO email_messages (
+        contact_type, direction, tenant_id, tenant_name, investor_id, investor_name,
+        property_name, email_address, subject, body, message_type, status, external_id, error_message
+      ) VALUES (
+        @contact_type, @direction, @tenant_id, @tenant_name, @investor_id, @investor_name,
+        @property_name, @email_address, @subject, @body, @message_type, @status, @external_id, @error_message
+      ) RETURNING *`
+    )
+    .get(data);
+  db.close();
+  return mapEmailMessage(row as Record<string, unknown>);
 }
 
 export async function getDashboardSummary(): Promise<DashboardSummary> {

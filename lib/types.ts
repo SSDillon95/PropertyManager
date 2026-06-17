@@ -15,7 +15,8 @@ export type SheetTab =
   | "investor_payout"
   | "reports"
   | "users"
-  | "sms_setup";
+  | "sms_setup"
+  | "gmail_setup";
 
 export type UserRole = "admin" | "standard";
 
@@ -246,6 +247,49 @@ export interface SmsSetupStatus {
   webhookUrl: string;
   configSource: SmsConfigSource;
   updatedAt: string | null;
+}
+
+export interface GmailSettings {
+  username: string | null;
+  password: string | null;
+  smtp_host: string;
+  smtp_port: number;
+  imap_host: string;
+  imap_port: number;
+  from_address: string | null;
+  updated_at: string;
+}
+
+export interface GmailSetupStatus {
+  username: string;
+  hasPassword: boolean;
+  configured: boolean;
+  configSource: SmsConfigSource;
+  smtpHost: string;
+  smtpPort: number;
+  imapHost: string;
+  imapPort: number;
+  fromAddress: string;
+  updatedAt: string | null;
+}
+
+export interface EmailMessage {
+  id: number;
+  contact_type: SmsContactType;
+  direction: SmsDirection;
+  tenant_id: number | null;
+  tenant_name: string | null;
+  investor_id: number | null;
+  investor_name: string | null;
+  property_name: string | null;
+  email_address: string;
+  subject: string | null;
+  body: string;
+  message_type: string;
+  status: string;
+  external_id: string | null;
+  error_message: string | null;
+  created_at: string;
 }
 
 export interface SmsMessage {

@@ -7,6 +7,7 @@ export const ADMIN_ONLY_TABS: SheetTab[] = [
   "reports",
   "users",
   "sms_setup",
+  "gmail_setup",
   "communication_investor",
 ];
 
@@ -28,6 +29,7 @@ export function settingsTabsForRole(role: UserRole): { id: SheetTab; label: stri
     tabs.push({ id: "investors", label: "Investor" });
     tabs.push({ id: "users", label: "User Setup" });
     tabs.push({ id: "sms_setup", label: "SMS Setup" });
+    tabs.push({ id: "gmail_setup", label: "Gmail Setup" });
   }
   return tabs;
 }
