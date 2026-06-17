@@ -1,9 +1,10 @@
-import { jsonOk } from "@/lib/api-helpers";
+import { jsonOk, parseArchivedParam } from "@/lib/api-helpers";
 import { listSmsMessages } from "@/lib/db";
 import { getSmsConfig } from "@/lib/sms";
 
-export async function GET() {
-  const messages = await listSmsMessages();
+export async function GET(request: Request) {
+  const archived = parseArchivedParam(request);
+  const messages = await listSmsMessages({ archived });
   const config = await getSmsConfig();
   return jsonOk({
     messages,

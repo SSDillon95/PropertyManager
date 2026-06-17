@@ -76,11 +76,14 @@ export default function CommunicationView({
   const [sending, setSending] = useState(false);
   const [newTenantId, setNewTenantId] = useState("");
   const [actionId, setActionId] = useState<number | null>(null);
+  const [showArchived, setShowArchived] = useState(false);
+  const [threadActionPhone, setThreadActionPhone] = useState<string | null>(null);
 
-  const loadMessages = useCallback(async (silent = false) => {
+  const loadMessages = useCallback(async (silent = false, archived = showArchived) => {
     if (!silent) setRefreshing(true);
     try {
-      const res = await fetch("/api/sms", { cache: "no-store" });
+      const url = archived ? "/api/sms?archived=1" : "/api/sms";
+      const res = await fetch(url, { cache: "no-store" });
       const json = await res.json();
       if (json.success) {
         setMessages(json.data.messages);
@@ -89,7 +92,7 @@ export default function CommunicationView({
     } finally {
       if (!silent) setRefreshing(false);
     }
-  }, []);
+  }, [showArchived]);
 
   useEffect(() => {
     setLoading(true);
@@ -98,10 +101,39 @@ export default function CommunicationView({
 
   useEffect(() => {
     const interval = window.setInterval(() => {
-      loadMessages(true);
+      loadMessages(true, showArchived);
     }, POLL_INTERVAL_MS);
     return () => window.clearInterval(interval);
-  }, [loadMessages]);
+  }, [loadMessages, showArchived]);
+
+  const toggleArchiveView = async () => {
+    const next = !showArchived;
+    setShowArchived(next);
+    setSelectedPhone(null);
+    setComposeText("");
+    await loadMessages(false, next);
+  };
+
+  const handleThreadArchiveToggle = async (archived: boolean) => {
+    if (!selectedThread?.phone) return;
+    setThreadActionPhone(selectedThread.phone);
+    try {
+      const res = await fetch("/api/sms/threads", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ phone: selectedThread.phone, archived }),
+      });
+      const json = await res.json();
+      if (!json.success) throw new Error(json.error || "Failed to update conversation.");
+      setSelectedPhone(null);
+      await loadMessages(true, showArchived);
+      onNotify("success", archived ? "Conversation archived." : "Conversation restored.");
+    } catch (error) {
+      onNotify("error", (error as Error).message);
+    } finally {
+      setThreadActionPhone(null);
+    }
+  };
 
   const threads = useMemo(() => {
     const grouped = groupMessagesByPhone(messages);
@@ -321,14 +353,27 @@ export default function CommunicationView({
             Send and receive text messages with tenants for rent reminders and maintenance updates.
           </p>
         </div>
-        <button
-          type="button"
-          onClick={() => loadMessages()}
-          disabled={refreshing}
-          className="text-xs px-3 py-1.5 rounded-lg border border-zinc-600 bg-zinc-700/80 text-zinc-200 hover:bg-zinc-700 disabled:opacity-50"
-        >
-          {refreshing ? "Refreshing..." : "Refresh messages"}
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={toggleArchiveView}
+            className={`text-xs px-3 py-1.5 rounded-lg border ${
+              showArchived
+                ? "border-emerald-600/60 bg-emerald-950/40 text-emerald-300 hover:bg-emerald-900/50"
+                : "border-zinc-600 bg-zinc-700/80 text-zinc-200 hover:bg-zinc-700"
+            }`}
+          >
+            {showArchived ? "Back to Active" : "View Archive"}
+          </button>
+          <button
+            type="button"
+            onClick={() => loadMessages(false, showArchived)}
+            disabled={refreshing}
+            className="text-xs px-3 py-1.5 rounded-lg border border-zinc-600 bg-zinc-700/80 text-zinc-200 hover:bg-zinc-700 disabled:opacity-50"
+          >
+            {refreshing ? "Refreshing..." : "Refresh messages"}
+          </button>
+        </div>
       </div>
 
       {!config.configured && (
@@ -344,8 +389,10 @@ export default function CommunicationView({
         <section className="rounded-xl border border-zinc-600/60 bg-zinc-800/90 flex flex-col min-h-[400px] xl:min-h-0">
           <div className="px-4 py-3 border-b border-zinc-600/60">
             <div className="flex items-center justify-between gap-2">
-              <h2 className="font-semibold text-sm text-zinc-100">Conversations</h2>
-              {unreadCount > 0 && (
+              <h2 className="font-semibold text-sm text-zinc-100">
+                {showArchived ? "Archived Conversations" : "Conversations"}
+              </h2>
+              {!showArchived && unreadCount > 0 && (
                 <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-600/30 text-emerald-300 border border-emerald-600/40">
                   {unreadCount} new
                 </span>
@@ -357,33 +404,37 @@ export default function CommunicationView({
                 : "Two-way tenant texting"}
             </p>
           </div>
-          <div className="p-3 border-b border-zinc-600/60 space-y-2">
-            <select
-              value={newTenantId}
-              onChange={(e) => setNewTenantId(e.target.value)}
-              className="form-select text-sm w-full"
-            >
-              <option value="">Start new conversation...</option>
-              {activeTenantsWithPhone.map((tenant) => (
-                <option key={tenant.id} value={tenant.id}>
-                  {tenantDisplayName(tenant)}
-                  {tenant.property_name ? ` · ${tenant.property_name}` : ""}
-                </option>
-              ))}
-            </select>
-            <button
-              type="button"
-              onClick={handleStartConversation}
-              disabled={!newTenantId}
-              className="w-full text-xs px-3 py-2 rounded-lg border border-emerald-600/60 bg-emerald-900/30 text-emerald-300 hover:bg-emerald-900/50 disabled:opacity-50"
-            >
-              Open conversation
-            </button>
-          </div>
+          {!showArchived && (
+            <div className="p-3 border-b border-zinc-600/60 space-y-2">
+              <select
+                value={newTenantId}
+                onChange={(e) => setNewTenantId(e.target.value)}
+                className="form-select text-sm w-full"
+              >
+                <option value="">Start new conversation...</option>
+                {activeTenantsWithPhone.map((tenant) => (
+                  <option key={tenant.id} value={tenant.id}>
+                    {tenantDisplayName(tenant)}
+                    {tenant.property_name ? ` · ${tenant.property_name}` : ""}
+                  </option>
+                ))}
+              </select>
+              <button
+                type="button"
+                onClick={handleStartConversation}
+                disabled={!newTenantId}
+                className="w-full text-xs px-3 py-2 rounded-lg border border-emerald-600/60 bg-emerald-900/30 text-emerald-300 hover:bg-emerald-900/50 disabled:opacity-50"
+              >
+                Open conversation
+              </button>
+            </div>
+          )}
           <div className="flex-1 overflow-y-auto">
             {threads.length === 0 ? (
               <p className="text-xs text-zinc-500 px-4 py-6 text-center">
-                No conversations yet. Select a tenant above or send a rent reminder to get started.
+                {showArchived
+                  ? "No archived conversations."
+                  : "No conversations yet. Select a tenant above or send a rent reminder to get started."}
               </p>
             ) : (
               threads.map((thread) => (
@@ -427,13 +478,35 @@ export default function CommunicationView({
           {selectedThread ? (
             <>
               <div className="px-4 py-3 border-b border-zinc-600/60">
-                <h2 className="font-semibold text-sm text-zinc-100">
-                  {selectedThread.displayName}
-                </h2>
-                <p className="text-xs text-zinc-400">
-                  {formatPhoneDisplay(selectedThread.phone)}
-                  {selectedThread.propertyName ? ` · ${selectedThread.propertyName}` : ""}
-                </p>
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <h2 className="font-semibold text-sm text-zinc-100">
+                      {selectedThread.displayName}
+                    </h2>
+                    <p className="text-xs text-zinc-400">
+                      {formatPhoneDisplay(selectedThread.phone)}
+                      {selectedThread.propertyName ? ` · ${selectedThread.propertyName}` : ""}
+                    </p>
+                  </div>
+                  {selectedThread.thread.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => handleThreadArchiveToggle(!showArchived)}
+                      disabled={threadActionPhone === selectedThread.phone}
+                      className={`text-xs px-2.5 py-1.5 rounded-lg border whitespace-nowrap disabled:opacity-50 ${
+                        showArchived
+                          ? "border-emerald-600/60 bg-emerald-950/40 text-emerald-300 hover:bg-emerald-900/50"
+                          : "border-amber-600/60 bg-amber-950/40 text-amber-300 hover:bg-amber-900/50"
+                      }`}
+                    >
+                      {threadActionPhone === selectedThread.phone
+                        ? "..."
+                        : showArchived
+                          ? "Restore"
+                          : "Archive"}
+                    </button>
+                  )}
+                </div>
               </div>
               <div className="flex-1 overflow-y-auto p-4 space-y-3">
                 {selectedThread.thread.length === 0 ? (
@@ -478,29 +551,31 @@ export default function CommunicationView({
                   ))
                 )}
               </div>
-              <div className="p-3 border-t border-zinc-600/60 flex gap-2">
-                <textarea
-                  value={composeText}
-                  onChange={(e) => setComposeText(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" && !e.shiftKey) {
-                      e.preventDefault();
-                      void handleComposeSend();
-                    }
-                  }}
-                  rows={2}
-                  placeholder="Type a text message..."
-                  className="form-input flex-1 resize-none text-sm"
-                />
-                <button
-                  type="button"
-                  onClick={handleComposeSend}
-                  disabled={sending || !composeText.trim()}
-                  className="self-end px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-medium disabled:opacity-50"
-                >
-                  {sending ? "..." : "Send"}
-                </button>
-              </div>
+              {!showArchived && (
+                <div className="p-3 border-t border-zinc-600/60 flex gap-2">
+                  <textarea
+                    value={composeText}
+                    onChange={(e) => setComposeText(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" && !e.shiftKey) {
+                        e.preventDefault();
+                        void handleComposeSend();
+                      }
+                    }}
+                    rows={2}
+                    placeholder="Type a text message..."
+                    className="form-input flex-1 resize-none text-sm"
+                  />
+                  <button
+                    type="button"
+                    onClick={handleComposeSend}
+                    disabled={sending || !composeText.trim()}
+                    className="self-end px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-medium disabled:opacity-50"
+                  >
+                    {sending ? "..." : "Send"}
+                  </button>
+                </div>
+              )}
             </>
           ) : (
             <div className="flex-1 flex items-center justify-center text-zinc-500 text-sm px-6 text-center">

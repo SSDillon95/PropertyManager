@@ -1,5 +1,6 @@
 import { hashPassword, verifyPassword } from "./password";
 import { isRecoveryUsername } from "./recovery-auth";
+import { normalizePhoneNumber } from "./sms-utils";
 import type {
   AppUser,
   Business,
@@ -267,6 +268,11 @@ const SQLITE_SCHEMA = `
     auth_token TEXT,
     phone_number TEXT,
     updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+
+  CREATE TABLE IF NOT EXISTS sms_archived_threads (
+    phone_number TEXT PRIMARY KEY,
+    archived_at TEXT NOT NULL DEFAULT (datetime('now'))
   );
 `;
 
@@ -567,6 +573,12 @@ async function initSchema(): Promise<void> {
         updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
       )
     `;
+    await sql`
+      CREATE TABLE IF NOT EXISTS sms_archived_threads (
+        phone_number TEXT PRIMARY KEY,
+        archived_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `;
     return;
   }
 
@@ -751,6 +763,17 @@ async function initSchema(): Promise<void> {
         auth_token TEXT,
         phone_number TEXT,
         updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+      )
+    `);
+  }
+  const smsArchivedThreadsTable = db
+    .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='sms_archived_threads'")
+    .get();
+  if (!smsArchivedThreadsTable) {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS sms_archived_threads (
+        phone_number TEXT PRIMARY KEY,
+        archived_at TEXT NOT NULL DEFAULT (datetime('now'))
       )
     `);
   }
@@ -2285,8 +2308,75 @@ function mapSmsMessage(row: Record<string, unknown>): SmsMessage {
   };
 }
 
-export async function listSmsMessages(phone?: string): Promise<SmsMessage[]> {
+function normalizeArchivedThreadPhone(phone: string): string {
+  const trimmed = phone.trim();
+  if (!trimmed) throw new Error("Phone number is required.");
+  return normalizePhoneNumber(trimmed) ?? trimmed;
+}
+
+function isPhoneArchived(phone: string, archivedPhones: Set<string>): boolean {
+  const normalized = normalizeArchivedThreadPhone(phone);
+  return archivedPhones.has(normalized);
+}
+
+export async function listArchivedThreadPhones(): Promise<string[]> {
   await ensureSchema();
+  if (usePostgres) {
+    const sql = await getPostgresSql();
+    const rows = await sql`SELECT phone_number FROM sms_archived_threads ORDER BY archived_at DESC`;
+    return rows.map((row) => String((row as Record<string, unknown>).phone_number));
+  }
+  const db = await getSqliteDb();
+  const rows = db
+    .prepare("SELECT phone_number FROM sms_archived_threads ORDER BY archived_at DESC")
+    .all();
+  db.close();
+  return rows.map((row) => String((row as Record<string, unknown>).phone_number));
+}
+
+export async function archiveSmsThread(phone: string): Promise<void> {
+  await ensureSchema();
+  const phoneNumber = normalizeArchivedThreadPhone(phone);
+  if (usePostgres) {
+    const sql = await getPostgresSql();
+    await sql`
+      INSERT INTO sms_archived_threads (phone_number, archived_at)
+      VALUES (${phoneNumber}, NOW())
+      ON CONFLICT (phone_number) DO UPDATE SET archived_at = NOW()
+    `;
+    return;
+  }
+  const db = await getSqliteDb();
+  db.prepare(
+    `INSERT INTO sms_archived_threads (phone_number, archived_at)
+     VALUES (?, datetime('now'))
+     ON CONFLICT(phone_number) DO UPDATE SET archived_at = datetime('now')`
+  ).run(phoneNumber);
+  db.close();
+}
+
+export async function restoreSmsThread(phone: string): Promise<void> {
+  await ensureSchema();
+  const phoneNumber = normalizeArchivedThreadPhone(phone);
+  if (usePostgres) {
+    const sql = await getPostgresSql();
+    await sql`DELETE FROM sms_archived_threads WHERE phone_number = ${phoneNumber}`;
+    return;
+  }
+  const db = await getSqliteDb();
+  db.prepare("DELETE FROM sms_archived_threads WHERE phone_number = ?").run(phoneNumber);
+  db.close();
+}
+
+export async function listSmsMessages(options?: {
+  phone?: string;
+  archived?: boolean;
+}): Promise<SmsMessage[]> {
+  await ensureSchema();
+  const phone = options?.phone;
+  const archived = options?.archived;
+  const archivedPhones = new Set(await listArchivedThreadPhones());
+
   if (usePostgres) {
     const sql = await getPostgresSql();
     const rows = phone
@@ -2296,7 +2386,13 @@ export async function listSmsMessages(phone?: string): Promise<SmsMessage[]> {
           ORDER BY created_at DESC
         `
       : await sql`SELECT * FROM sms_messages ORDER BY created_at DESC`;
-    return rows.map((r) => mapSmsMessage(r as Record<string, unknown>));
+    const messages = rows.map((r) => mapSmsMessage(r as Record<string, unknown>));
+    if (archived == null) return messages;
+    return messages.filter((message) =>
+      archived
+        ? isPhoneArchived(message.phone_number, archivedPhones)
+        : !isPhoneArchived(message.phone_number, archivedPhones)
+    );
   }
   const db = await getSqliteDb();
   const rows = phone
@@ -2305,7 +2401,13 @@ export async function listSmsMessages(phone?: string): Promise<SmsMessage[]> {
         .all(phone)
     : db.prepare("SELECT * FROM sms_messages ORDER BY created_at DESC").all();
   db.close();
-  return rows.map((r) => mapSmsMessage(r as Record<string, unknown>));
+  const messages = rows.map((r) => mapSmsMessage(r as Record<string, unknown>));
+  if (archived == null) return messages;
+  return messages.filter((message) =>
+    archived
+      ? isPhoneArchived(message.phone_number, archivedPhones)
+      : !isPhoneArchived(message.phone_number, archivedPhones)
+  );
 }
 
 function mapSmsSettings(row: Record<string, unknown>): SmsSettings {
