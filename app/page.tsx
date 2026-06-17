@@ -4,6 +4,7 @@ import Image from "next/image";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import InvestorPayoutSummaryPanel from "@/components/InvestorPayoutSummaryPanel";
 import CommunicationView from "@/components/CommunicationView";
+import AvailableView from "@/components/AvailableView";
 import MultiSelectFilter from "@/components/MultiSelectFilter";
 import PropertyDetailPanel from "@/components/PropertyDetailPanel";
 import ReportsView from "@/components/ReportsView";
@@ -60,7 +61,17 @@ function apiFetch(input: RequestInfo | URL, init?: RequestInit) {
   return fetch(input, { cache: "no-store", ...init });
 }
 
-type DataTab = Exclude<SheetTab, "dashboard" | "reports" | "communication">;
+const VIEW_ONLY_TABS: SheetTab[] = ["dashboard", "reports", "communication", "available"];
+
+function isViewOnlyTab(tab: SheetTab): boolean {
+  return VIEW_ONLY_TABS.includes(tab);
+}
+
+type DataTab = Exclude<SheetTab, "dashboard" | "reports" | "communication" | "available">;
+
+function asDataTab(tab: SheetTab): DataTab {
+  return tab as DataTab;
+}
 
 const API_MAP: Record<DataTab, string> = {
   businesses: "/api/businesses",
@@ -468,6 +479,11 @@ export default function PropertyManagerApp() {
         setRows([]);
         return;
       }
+      if (activeTab === "available") {
+        await Promise.all([loadProperties(), loadLeases()]);
+        setRows([]);
+        return;
+      }
       if (activeTab === "properties") {
         await loadBusinesses();
       }
@@ -499,7 +515,7 @@ export default function PropertyManagerApp() {
       if (activeTab === "investor_payout") {
         await loadInvestorCapitalRows(archived);
       }
-      const endpoint = API_MAP[activeTab];
+      const endpoint = API_MAP[asDataTab(activeTab)];
       const kind = activeTab === "investor_capital"
         ? "capital"
         : activeTab === "investor_payout"
@@ -884,8 +900,20 @@ export default function PropertyManagerApp() {
     );
   };
 
+  const clearAllPropertyFilters = () => {
+    setPropertyBusinessFilter([]);
+    setPropertyTypeFilter([]);
+    setPropertyStatusFilter([]);
+    setOpenPropertyFilter(null);
+  };
+
+  const hasActivePropertyFilters =
+    propertyBusinessFilter.length > 0 ||
+    propertyTypeFilter.length > 0 ||
+    propertyStatusFilter.length > 0;
+
   useEffect(() => {
-    if (tab !== "dashboard" && tab !== "reports" && tab !== "communication") {
+    if (!isViewOnlyTab(tab)) {
       setForm(emptyForm(columns));
       setFormOpen(false);
       setEditingId(null);
@@ -1031,7 +1059,7 @@ export default function PropertyManagerApp() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (tab === "dashboard" || tab === "reports" || tab === "communication") return;
+    if (isViewOnlyTab(tab)) return;
 
     const missing = columns.find((c) => {
       if (
@@ -1059,7 +1087,7 @@ export default function PropertyManagerApp() {
 
     setSaving(true);
     try {
-      const endpoint = API_MAP[tab];
+      const endpoint = API_MAP[asDataTab(tab)];
       const isEdit = editingId != null;
       const url = isEdit ? `${endpoint}?id=${editingId}` : endpoint;
       let payload: Record<string, unknown> = isInvestorRecordTab(tab)
@@ -1104,10 +1132,10 @@ export default function PropertyManagerApp() {
   };
 
   const handleArchive = async (id: number) => {
-    if (tab === "dashboard" || tab === "reports" || tab === "communication") return;
+    if (isViewOnlyTab(tab)) return;
     setActionId(id);
     try {
-      const endpoint = API_MAP[tab];
+      const endpoint = API_MAP[asDataTab(tab)];
       const res = await apiFetch(`${endpoint}?id=${id}`, { method: "DELETE" });
       const json = await res.json();
       if (!json.success) throw new Error(json.error || "Archive failed");
@@ -1155,10 +1183,10 @@ export default function PropertyManagerApp() {
   };
 
   const handleRestore = async (id: number) => {
-    if (tab === "dashboard" || tab === "reports" || tab === "communication") return;
+    if (isViewOnlyTab(tab)) return;
     setActionId(id);
     try {
-      const endpoint = API_MAP[tab];
+      const endpoint = API_MAP[asDataTab(tab)];
       const res = await apiFetch(`${endpoint}?id=${id}`, { method: "PATCH" });
       const json = await res.json();
       if (!json.success) throw new Error(json.error || "Restore failed");
@@ -1184,8 +1212,7 @@ export default function PropertyManagerApp() {
     tab === "properties" || tab === "investor_capital" ? displayRows : rows;
 
   const exportCsv = () => {
-    if (tab === "dashboard" || tab === "reports" || tab === "communication" || tableRows.length === 0)
-      return;
+    if (isViewOnlyTab(tab) || tableRows.length === 0) return;
     const headers = columns.map((c) => c.label);
     const lines = [
       headers.join(","),
@@ -1758,6 +1785,8 @@ export default function PropertyManagerApp() {
             maintenance={maintenanceRows}
             onNotify={showMessage}
           />
+        ) : tab === "available" ? (
+          <AvailableView properties={properties} leases={leases} />
         ) : (
           <div className="space-y-6">
             {!showArchived && formOpen && (
@@ -1946,6 +1975,15 @@ export default function PropertyManagerApp() {
                         onOpenChange={(open) => setOpenPropertyFilter(open ? "status" : null)}
                         selectedCountLabel="statuses"
                       />
+                      {hasActivePropertyFilters && (
+                        <button
+                          type="button"
+                          onClick={clearAllPropertyFilters}
+                          className="text-xs px-3 py-1.5 rounded-lg border border-amber-600/60 bg-amber-950/40 text-amber-300 hover:bg-amber-900/50 whitespace-nowrap"
+                        >
+                          Clear all filters
+                        </button>
+                      )}
                     </div>
                   )}
                   {tab === "investor_capital" && !showArchived && (

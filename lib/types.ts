@@ -3,6 +3,7 @@ export type SheetTab =
   | "businesses"
   | "properties"
   | "tenants"
+  | "available"
   | "leases"
   | "rent_ledger"
   | "expenses"

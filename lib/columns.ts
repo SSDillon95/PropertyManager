@@ -20,6 +20,7 @@ export interface ColumnDef {
 }
 
 export const MANAGEMENT_TABS: { id: SheetTab; label: string }[] = [
+  { id: "available", label: "Available" },
   { id: "leases", label: "Leases" },
   { id: "rent_ledger", label: "Rent Ledger" },
   { id: "expenses", label: "Expenses" },
@@ -556,6 +557,11 @@ export function getColumnsForTab(tab: SheetTab): ColumnDef[] {
       return INVESTOR_PAYOUT_COLUMNS;
     case "users":
       return USER_COLUMNS;
+    case "available":
+    case "dashboard":
+    case "reports":
+    case "communication":
+      return [];
     default:
       return [];
   }
