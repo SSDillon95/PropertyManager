@@ -10,7 +10,13 @@ import type {
   RentPayment,
 } from "./types";
 
-export type ReportKind = "pl" | "income" | "expense" | "investor_capital" | "investor_payout";
+export type ReportKind =
+  | "pl"
+  | "income"
+  | "expense"
+  | "investor_capital"
+  | "investor_payout"
+  | "property_insurance";
 
 export interface ReportFilters {
   startDate: string;
@@ -452,5 +458,78 @@ export function buildInvestorPayoutReport(
     loanSummaries: lines
       .map((l) => l.loanSummary)
       .filter((summary): summary is InvestorPayoutLoanSummary => summary != null),
+  };
+}
+
+export interface PropertyInsuranceReportFilters {
+  businessName?: string;
+  lienHolder?: string;
+}
+
+export interface PropertyInsuranceLine {
+  property_name: string;
+  property_address: string;
+  business_name: string;
+  lien_holder: string;
+  year_built: number | null;
+  property_value: number | null;
+  annual_insurance: number | null;
+  insurance_carrier_name: string | null;
+  insurance_policy_number: string | null;
+  missingInsurance: boolean;
+}
+
+export interface PropertyInsuranceReport {
+  filters: PropertyInsuranceReportFilters;
+  lines: PropertyInsuranceLine[];
+  missingInsuranceCount: number;
+}
+
+export const NO_INSURANCE_ON_FILE = "No Insurance on file";
+
+function formatPropertyAddress(property: Property): string {
+  return [property.address, property.city, property.state, property.zip]
+    .filter((part) => part?.trim())
+    .join(", ");
+}
+
+export function hasInsuranceOnFile(property: Property): boolean {
+  return Boolean(
+    property.insurance_carrier_name?.trim() && property.insurance_policy_number?.trim()
+  );
+}
+
+export function buildPropertyInsuranceReport(
+  properties: Property[],
+  filters: PropertyInsuranceReportFilters
+): PropertyInsuranceReport {
+  const lines = properties
+    .filter((property) => {
+      if (filters.businessName && property.business_name !== filters.businessName) {
+        return false;
+      }
+      if (filters.lienHolder && property.lien_holder !== filters.lienHolder) {
+        return false;
+      }
+      return true;
+    })
+    .map((property) => ({
+      property_name: property.property_name,
+      property_address: formatPropertyAddress(property),
+      business_name: property.business_name?.trim() || "—",
+      lien_holder: property.lien_holder?.trim() || "—",
+      year_built: property.year_built,
+      property_value: property.current_value,
+      annual_insurance: property.annual_insurance,
+      insurance_carrier_name: property.insurance_carrier_name,
+      insurance_policy_number: property.insurance_policy_number,
+      missingInsurance: !hasInsuranceOnFile(property),
+    }))
+    .sort((left, right) => left.property_name.localeCompare(right.property_name));
+
+  return {
+    filters,
+    lines,
+    missingInsuranceCount: lines.filter((line) => line.missingInsurance).length,
   };
 }

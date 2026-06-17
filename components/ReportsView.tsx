@@ -11,7 +11,9 @@ import {
   buildInvestorCapitalReport,
   buildInvestorPayoutReport,
   buildPLReport,
+  buildPropertyInsuranceReport,
   defaultReportRange,
+  NO_INSURANCE_ON_FILE,
   type ReportKind,
 } from "@/lib/reports";
 import type {
@@ -56,9 +58,17 @@ const REPORT_OPTIONS: { id: ReportKind; label: string; description: string }[] =
     label: "Investor Payout Report",
     description: "Totals investor payouts by investor with optional property and investor filters.",
   },
+  {
+    id: "property_insurance",
+    label: "Property Insurance Report",
+    description:
+      "Insurance, lien holder, property value, and address details with missing coverage flagged in red.",
+  },
 ];
 
 const INVESTOR_FILTER_REPORTS: ReportKind[] = ["investor_capital", "investor_payout"];
+const PROPERTY_INSURANCE_REPORTS: ReportKind[] = ["property_insurance"];
+const DATE_FILTER_REPORTS: ReportKind[] = ["pl", "income", "expense", "investor_capital", "investor_payout"];
 
 export default function ReportsView({
   properties,
@@ -73,7 +83,25 @@ export default function ReportsView({
   const [endDate, setEndDate] = useState(defaults.endDate);
   const [propertyName, setPropertyName] = useState("");
   const [investorName, setInvestorName] = useState("");
+  const [reportBusinessFilter, setReportBusinessFilter] = useState("");
+  const [reportLienHolderFilter, setReportLienHolderFilter] = useState("");
   const [generating, setGenerating] = useState(false);
+
+  const reportBusinessOptions = useMemo(() => {
+    const names = new Set<string>();
+    for (const property of properties) {
+      if (property.business_name?.trim()) names.add(property.business_name.trim());
+    }
+    return Array.from(names).sort((a, b) => a.localeCompare(b));
+  }, [properties]);
+
+  const reportLienHolderOptions = useMemo(() => {
+    const names = new Set<string>();
+    for (const property of properties) {
+      if (property.lien_holder?.trim()) names.add(property.lien_holder.trim());
+    }
+    return Array.from(names).sort((a, b) => a.localeCompare(b));
+  }, [properties]);
 
   const investorOptions = useMemo(() => {
     const names = new Set<string>();
@@ -119,12 +147,26 @@ export default function ReportsView({
     () => buildInvestorPayoutReport(investorPayouts, filters),
     [investorPayouts, filters]
   );
+  const propertyInsuranceReport = useMemo(
+    () =>
+      buildPropertyInsuranceReport(properties, {
+        businessName: reportBusinessFilter || undefined,
+        lienHolder: reportLienHolderFilter || undefined,
+      }),
+    [properties, reportBusinessFilter, reportLienHolderFilter]
+  );
 
   const selectedReport = REPORT_OPTIONS.find((opt) => opt.id === reportKind);
+  const usesDateFilters = DATE_FILTER_REPORTS.includes(reportKind);
 
   const handleReportKindChange = (next: ReportKind) => {
     setReportKind(next);
     if (!INVESTOR_FILTER_REPORTS.includes(next)) setInvestorName("");
+    if (!PROPERTY_INSURANCE_REPORTS.includes(next)) {
+      setReportBusinessFilter("");
+      setReportLienHolderFilter("");
+    }
+    if (PROPERTY_INSURANCE_REPORTS.includes(next)) setPropertyName("");
   };
 
   const handleDownload = async () => {
@@ -138,6 +180,8 @@ export default function ReportsView({
         await requestReportPdf("investor_capital", { report: investorCapitalReport });
       } else if (reportKind === "investor_payout") {
         await requestReportPdf("investor_payout", { report: investorPayoutReport });
+      } else if (reportKind === "property_insurance") {
+        await requestReportPdf("property_insurance", { report: propertyInsuranceReport });
       } else {
         await requestReportPdf("pl", { report: plReport });
       }
@@ -217,36 +261,65 @@ export default function ReportsView({
                   tone: "zinc",
                 },
               ]
-            : [
-                {
-                  label: "Total Payouts",
-                  value: formatCurrency(investorPayoutReport.totalPayouts),
-                  tone: "emerald",
-                },
-                {
-                  label: "Investors",
-                  value: String(investorPayoutReport.byInvestor.length),
-                  tone: "zinc",
-                },
-                {
-                  label: "Properties",
-                  value: String(investorPayoutReport.byProperty.length),
-                  tone: "zinc",
-                },
-                {
-                  label: "Payouts",
-                  value: String(investorPayoutReport.lines.length),
-                  tone: "zinc",
-                },
-              ];
+            : reportKind === "property_insurance"
+              ? [
+                  {
+                    label: "Properties Listed",
+                    value: String(propertyInsuranceReport.lines.length),
+                    tone: "zinc",
+                  },
+                  {
+                    label: "Missing Insurance",
+                    value: String(propertyInsuranceReport.missingInsuranceCount),
+                    tone:
+                      propertyInsuranceReport.missingInsuranceCount > 0 ? "red" : "emerald",
+                  },
+                  {
+                    label: "With Insurance On File",
+                    value: String(
+                      propertyInsuranceReport.lines.length -
+                        propertyInsuranceReport.missingInsuranceCount
+                    ),
+                    tone: "emerald",
+                  },
+                  {
+                    label: "Filters Applied",
+                    value:
+                      [reportBusinessFilter, reportLienHolderFilter].filter(Boolean).length > 0
+                        ? "Yes"
+                        : "No",
+                    tone: "zinc",
+                  },
+                ]
+              : [
+                  {
+                    label: "Total Payouts",
+                    value: formatCurrency(investorPayoutReport.totalPayouts),
+                    tone: "emerald",
+                  },
+                  {
+                    label: "Investors",
+                    value: String(investorPayoutReport.byInvestor.length),
+                    tone: "zinc",
+                  },
+                  {
+                    label: "Properties",
+                    value: String(investorPayoutReport.byProperty.length),
+                    tone: "zinc",
+                  },
+                  {
+                    label: "Payouts",
+                    value: String(investorPayoutReport.lines.length),
+                    tone: "zinc",
+                  },
+                ];
 
   return (
     <div className="space-y-6">
       <div>
         <h1 className="text-3xl font-semibold tracking-tighter mb-2">Reports</h1>
         <p className="text-sm text-zinc-400">
-          Generate P/L, income, expense, investor capital, and investor payout reports as PDF
-          downloads.
+          Generate P/L, income, expense, investor, and property insurance reports as PDF downloads.
         </p>
       </div>
 
@@ -272,77 +345,122 @@ export default function ReportsView({
           )}
         </label>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-          <label className="block">
-            <span className="text-xs font-semibold uppercase tracking-wide text-amber-400 mb-1 block">
-              Start Date
-            </span>
-            <input
-              type="date"
-              value={startDate}
-              onChange={(e) => setStartDate(e.target.value)}
-              className="form-field"
-            />
-          </label>
-          <label className="block">
-            <span className="text-xs font-semibold uppercase tracking-wide text-amber-400 mb-1 block">
-              End Date
-            </span>
-            <input
-              type="date"
-              value={endDate}
-              onChange={(e) => setEndDate(e.target.value)}
-              className="form-field"
-            />
-          </label>
-          <label
-            className={`block ${INVESTOR_FILTER_REPORTS.includes(reportKind) ? "" : "sm:col-span-2"}`}
-          >
-            <span className="text-xs font-semibold uppercase tracking-wide text-amber-400 mb-1 block">
-              Property (optional)
-            </span>
-            <select
-              value={propertyName}
-              onChange={(e) => setPropertyName(e.target.value)}
-              className="form-select"
-            >
-              <option value="">All properties</option>
-              {properties.map((p) => (
-                <option key={p.id} value={p.property_name}>
-                  {p.property_name}
-                </option>
-              ))}
-            </select>
-          </label>
-          {INVESTOR_FILTER_REPORTS.includes(reportKind) && (
-            <label className="block">
-              <span className="text-xs font-semibold uppercase tracking-wide text-amber-400 mb-1 block">
-                Investor (optional)
-              </span>
-              <select
-                value={investorName}
-                onChange={(e) => setInvestorName(e.target.value)}
-                className="form-select"
+          {usesDateFilters && (
+            <>
+              <label className="block">
+                <span className="text-xs font-semibold uppercase tracking-wide text-amber-400 mb-1 block">
+                  Start Date
+                </span>
+                <input
+                  type="date"
+                  value={startDate}
+                  onChange={(e) => setStartDate(e.target.value)}
+                  className="form-field"
+                />
+              </label>
+              <label className="block">
+                <span className="text-xs font-semibold uppercase tracking-wide text-amber-400 mb-1 block">
+                  End Date
+                </span>
+                <input
+                  type="date"
+                  value={endDate}
+                  onChange={(e) => setEndDate(e.target.value)}
+                  className="form-field"
+                />
+              </label>
+            </>
+          )}
+          {PROPERTY_INSURANCE_REPORTS.includes(reportKind) ? (
+            <>
+              <label className="block">
+                <span className="text-xs font-semibold uppercase tracking-wide text-amber-400 mb-1 block">
+                  Business (optional)
+                </span>
+                <select
+                  value={reportBusinessFilter}
+                  onChange={(e) => setReportBusinessFilter(e.target.value)}
+                  className="form-select"
+                >
+                  <option value="">All businesses</option>
+                  {reportBusinessOptions.map((name) => (
+                    <option key={name} value={name}>
+                      {name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="block">
+                <span className="text-xs font-semibold uppercase tracking-wide text-amber-400 mb-1 block">
+                  Lien Holder (optional)
+                </span>
+                <select
+                  value={reportLienHolderFilter}
+                  onChange={(e) => setReportLienHolderFilter(e.target.value)}
+                  className="form-select"
+                >
+                  <option value="">All lien holders</option>
+                  {reportLienHolderOptions.map((name) => (
+                    <option key={name} value={name}>
+                      {name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </>
+          ) : (
+            <>
+              <label
+                className={`block ${INVESTOR_FILTER_REPORTS.includes(reportKind) ? "" : "sm:col-span-2"}`}
               >
-                <option value="">All investors</option>
-                {investorOptions.map((name) => (
-                  <option key={name} value={name}>
-                    {name}
-                  </option>
-                ))}
-              </select>
-            </label>
+                <span className="text-xs font-semibold uppercase tracking-wide text-amber-400 mb-1 block">
+                  Property (optional)
+                </span>
+                <select
+                  value={propertyName}
+                  onChange={(e) => setPropertyName(e.target.value)}
+                  className="form-select"
+                >
+                  <option value="">All properties</option>
+                  {properties.map((p) => (
+                    <option key={p.id} value={p.property_name}>
+                      {p.property_name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              {INVESTOR_FILTER_REPORTS.includes(reportKind) && (
+                <label className="block">
+                  <span className="text-xs font-semibold uppercase tracking-wide text-amber-400 mb-1 block">
+                    Investor (optional)
+                  </span>
+                  <select
+                    value={investorName}
+                    onChange={(e) => setInvestorName(e.target.value)}
+                    className="form-select"
+                  >
+                    <option value="">All investors</option>
+                    {investorOptions.map((name) => (
+                      <option key={name} value={name}>
+                        {name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              )}
+            </>
           )}
         </div>
 
         <button
           type="button"
           onClick={handleDownload}
-          disabled={generating || startDate > endDate}
+          disabled={generating || (usesDateFilters && startDate > endDate)}
           className="mt-5 px-5 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-medium disabled:opacity-50"
         >
           {generating ? "Generating..." : "Download PDF"}
         </button>
-        {startDate > endDate && (
+        {usesDateFilters && startDate > endDate && (
           <p className="text-xs text-red-400 mt-2">End date must be on or after start date.</p>
         )}
       </section>
@@ -446,6 +564,85 @@ export default function ReportsView({
                 {formatMoneyPrecise(investorCapitalReport.calculatedTotalPayouts)}
               </span>
             </div>
+          </div>
+        )}
+
+        {reportKind === "property_insurance" && (
+          <div className="mt-6">
+            <h3 className="text-sm font-semibold text-emerald-300 mb-3">Property Insurance Details</h3>
+            {propertyInsuranceReport.lines.length === 0 ? (
+              <p className="text-sm text-zinc-400">
+                No properties match the selected filters.
+              </p>
+            ) : (
+              <div className="overflow-x-auto rounded-lg border border-zinc-600/60">
+                <table className="w-full text-sm min-w-max">
+                  <thead>
+                    <tr className="bg-emerald-900/40 text-left">
+                      <th className="px-3 py-2 font-semibold text-emerald-200">Property</th>
+                      <th className="px-3 py-2 font-semibold text-emerald-200">Address</th>
+                      <th className="px-3 py-2 font-semibold text-emerald-200">Business</th>
+                      <th className="px-3 py-2 font-semibold text-emerald-200">Lien Holder</th>
+                      <th className="px-3 py-2 font-semibold text-emerald-200">Year Built</th>
+                      <th className="px-3 py-2 font-semibold text-emerald-200 text-right">
+                        Property Value
+                      </th>
+                      <th className="px-3 py-2 font-semibold text-emerald-200 text-right">
+                        Annual Insurance
+                      </th>
+                      <th className="px-3 py-2 font-semibold text-emerald-200">Carrier</th>
+                      <th className="px-3 py-2 font-semibold text-emerald-200">Policy #</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {propertyInsuranceReport.lines.map((line, idx) => (
+                      <tr
+                        key={`${line.property_name}-${idx}`}
+                        className={`border-t border-zinc-700/60 ${
+                          idx % 2 === 0 ? "bg-zinc-800/50" : "bg-zinc-700/30"
+                        }`}
+                      >
+                        <td className="px-3 py-2 text-zinc-100">{line.property_name}</td>
+                        <td className="px-3 py-2 text-zinc-300">{line.property_address}</td>
+                        <td className="px-3 py-2 text-zinc-300">{line.business_name}</td>
+                        <td className="px-3 py-2 text-zinc-300">{line.lien_holder}</td>
+                        <td className="px-3 py-2 text-zinc-300">
+                          {line.year_built ?? "—"}
+                        </td>
+                        <td className="px-3 py-2 text-zinc-200 text-right">
+                          {formatCurrency(line.property_value) || "—"}
+                        </td>
+                        <td className="px-3 py-2 text-zinc-200 text-right">
+                          {formatCurrency(line.annual_insurance) || "—"}
+                        </td>
+                        <td
+                          className={`px-3 py-2 ${
+                            line.missingInsurance
+                              ? "text-red-400 font-semibold"
+                              : "text-zinc-200"
+                          }`}
+                        >
+                          {line.missingInsurance
+                            ? NO_INSURANCE_ON_FILE
+                            : line.insurance_carrier_name || "—"}
+                        </td>
+                        <td
+                          className={`px-3 py-2 ${
+                            line.missingInsurance
+                              ? "text-red-400 font-semibold"
+                              : "text-zinc-200"
+                          }`}
+                        >
+                          {line.missingInsurance
+                            ? NO_INSURANCE_ON_FILE
+                            : line.insurance_policy_number || "—"}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
         )}
 

@@ -1,12 +1,14 @@
 import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
-import type {
-  ExpenseReport,
-  IncomeReport,
-  InvestorPayoutReportSummary,
-  PLReport,
-  ReportKind,
-  InvestorCapitalReport,
+import {
+  NO_INSURANCE_ON_FILE,
+  type ExpenseReport,
+  type IncomeReport,
+  type InvestorPayoutReportSummary,
+  type PLReport,
+  type ReportKind,
+  type InvestorCapitalReport,
+  type PropertyInsuranceReport,
 } from "./reports";
 import {
   formatRate,
@@ -713,6 +715,103 @@ export async function downloadInvestorPayoutReportPdf(
   report: InvestorPayoutReportSummary
 ): Promise<void> {
   triggerBrowserDownload(await buildInvestorPayoutReportPdf(report));
+}
+
+const PDF_RED: [number, number, number] = [220, 38, 38];
+
+export async function buildPropertyInsurancePdf(
+  report: PropertyInsuranceReport
+): Promise<PdfResult> {
+  const doc = new jsPDF({ orientation: "landscape" });
+  const { businessName, lienHolder } = report.filters;
+  const filterParts = [
+    businessName ? `Business: ${businessName}` : null,
+    lienHolder ? `Lien Holder: ${lienHolder}` : null,
+  ].filter((part): part is string => Boolean(part));
+  const generatedOn = new Date().toISOString().slice(0, 10);
+
+  const contentStartY = await renderPdfHeader(doc, "Property Insurance Report", [
+    `Generated: ${new Date().toLocaleString()}`,
+    filterParts.length > 0 ? filterParts.join("  |  ") : "All properties",
+  ]);
+
+  autoTable(doc, {
+    startY: contentStartY,
+    head: [
+      [
+        "Property",
+        "Address",
+        "Business",
+        "Lien Holder",
+        "Year Built",
+        "Property Value",
+        "Annual Insurance",
+        "Insurance Carrier",
+        "Policy Number",
+      ],
+    ],
+    body: report.lines.map((line) => [
+      line.property_name,
+      line.property_address,
+      line.business_name,
+      line.lien_holder,
+      line.year_built != null ? String(line.year_built) : "—",
+      line.property_value != null ? money(line.property_value) : "—",
+      line.annual_insurance != null ? money(line.annual_insurance) : "—",
+      line.missingInsurance
+        ? NO_INSURANCE_ON_FILE
+        : displayField(line.insurance_carrier_name),
+      line.missingInsurance
+        ? NO_INSURANCE_ON_FILE
+        : displayField(line.insurance_policy_number),
+    ]),
+    styles: { fontSize: 7, cellPadding: 2, overflow: "linebreak" },
+    headStyles: { fillColor: REPORT_GREEN_RGB, textColor: [255, 255, 255] },
+    alternateRowStyles: { fillColor: [245, 245, 245] },
+    columnStyles: {
+      0: { cellWidth: 24 },
+      1: { cellWidth: 42 },
+      2: { cellWidth: 24 },
+      3: { cellWidth: 24 },
+      4: { cellWidth: 16 },
+      5: { cellWidth: 22 },
+      6: { cellWidth: 22 },
+      7: { cellWidth: 30 },
+      8: { cellWidth: 28 },
+    },
+    didParseCell: (hookData) => {
+      if (hookData.section !== "body") return;
+      const line = report.lines[hookData.row.index];
+      if (!line?.missingInsurance) return;
+      if (hookData.column.index === 7 || hookData.column.index === 8) {
+        hookData.cell.styles.textColor = PDF_RED;
+        hookData.cell.styles.fontStyle = "bold";
+      }
+    },
+  });
+
+  const summaryY =
+    (doc as jsPDF & { lastAutoTable?: { finalY: number } }).lastAutoTable?.finalY ??
+    contentStartY;
+
+  autoTable(doc, {
+    startY: summaryY + 10,
+    head: [["Properties Listed", "Missing Insurance On File"]],
+    body: [
+      [String(report.lines.length), String(report.missingInsuranceCount)],
+    ],
+    styles: { fontSize: 9, cellPadding: 3 },
+    headStyles: { fillColor: [251, 191, 36], textColor: [24, 24, 27] },
+    theme: "plain",
+  });
+
+  return finishPdf(doc, `hop2it-property-insurance-report-${generatedOn}.pdf`);
+}
+
+export async function downloadPropertyInsurancePdf(
+  report: PropertyInsuranceReport
+): Promise<void> {
+  triggerBrowserDownload(await buildPropertyInsurancePdf(report));
 }
 
 export async function buildInvestorPayoutPdf(
