@@ -238,9 +238,12 @@ const SQLITE_SCHEMA = `
 
   CREATE TABLE IF NOT EXISTS sms_messages (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
+    contact_type TEXT NOT NULL DEFAULT 'tenant',
     direction TEXT NOT NULL,
     tenant_id INTEGER,
     tenant_name TEXT,
+    investor_id INTEGER,
+    investor_name TEXT,
     property_name TEXT,
     phone_number TEXT NOT NULL,
     body TEXT NOT NULL,
@@ -271,8 +274,10 @@ const SQLITE_SCHEMA = `
   );
 
   CREATE TABLE IF NOT EXISTS sms_archived_threads (
-    phone_number TEXT PRIMARY KEY,
-    archived_at TEXT NOT NULL DEFAULT (datetime('now'))
+    phone_number TEXT NOT NULL,
+    contact_type TEXT NOT NULL DEFAULT 'tenant',
+    archived_at TEXT NOT NULL DEFAULT (datetime('now')),
+    PRIMARY KEY (phone_number, contact_type)
   );
 `;
 
@@ -575,10 +580,16 @@ async function initSchema(): Promise<void> {
     `;
     await sql`
       CREATE TABLE IF NOT EXISTS sms_archived_threads (
-        phone_number TEXT PRIMARY KEY,
-        archived_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        phone_number TEXT NOT NULL,
+        contact_type TEXT NOT NULL DEFAULT 'tenant',
+        archived_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        PRIMARY KEY (phone_number, contact_type)
       )
     `;
+    await sql`ALTER TABLE sms_messages ADD COLUMN IF NOT EXISTS contact_type TEXT NOT NULL DEFAULT 'tenant'`;
+    await sql`ALTER TABLE sms_messages ADD COLUMN IF NOT EXISTS investor_id INTEGER`;
+    await sql`ALTER TABLE sms_messages ADD COLUMN IF NOT EXISTS investor_name TEXT`;
+    await sql`ALTER TABLE sms_archived_threads ADD COLUMN IF NOT EXISTS contact_type TEXT NOT NULL DEFAULT 'tenant'`;
     return;
   }
 
@@ -772,10 +783,37 @@ async function initSchema(): Promise<void> {
   if (!smsArchivedThreadsTable) {
     db.exec(`
       CREATE TABLE IF NOT EXISTS sms_archived_threads (
-        phone_number TEXT PRIMARY KEY,
-        archived_at TEXT NOT NULL DEFAULT (datetime('now'))
+        phone_number TEXT NOT NULL,
+        contact_type TEXT NOT NULL DEFAULT 'tenant',
+        archived_at TEXT NOT NULL DEFAULT (datetime('now')),
+        PRIMARY KEY (phone_number, contact_type)
       )
     `);
+  } else {
+    const archiveCols = db.pragma("table_info(sms_archived_threads)") as { name: string }[];
+    if (!archiveCols.some((column) => column.name === "contact_type")) {
+      db.exec(`
+        CREATE TABLE sms_archived_threads_migrated (
+          phone_number TEXT NOT NULL,
+          contact_type TEXT NOT NULL DEFAULT 'tenant',
+          archived_at TEXT NOT NULL DEFAULT (datetime('now')),
+          PRIMARY KEY (phone_number, contact_type)
+        );
+        INSERT INTO sms_archived_threads_migrated (phone_number, contact_type, archived_at)
+        SELECT phone_number, 'tenant', archived_at FROM sms_archived_threads;
+        DROP TABLE sms_archived_threads;
+        ALTER TABLE sms_archived_threads_migrated RENAME TO sms_archived_threads;
+      `);
+    }
+  }
+  const smsCols = db.pragma("table_info(sms_messages)") as { name: string }[];
+  const hasSmsCol = (name: string) => smsCols.some((column) => column.name === name);
+  if (!hasSmsCol("contact_type")) {
+    db.exec("ALTER TABLE sms_messages ADD COLUMN contact_type TEXT NOT NULL DEFAULT 'tenant'");
+  }
+  if (!hasSmsCol("investor_id")) db.exec("ALTER TABLE sms_messages ADD COLUMN investor_id INTEGER");
+  if (!hasSmsCol("investor_name")) {
+    db.exec("ALTER TABLE sms_messages ADD COLUMN investor_name TEXT");
   }
   db.close();
 }
@@ -2290,11 +2328,16 @@ export async function updateInvestorPayout(
 }
 
 function mapSmsMessage(row: Record<string, unknown>): SmsMessage {
+  const contactType = String(row.contact_type ?? "tenant");
   return {
     id: Number(row.id),
+    contact_type:
+      contactType === "investor" ? "investor" : ("tenant" as SmsMessage["contact_type"]),
     direction: String(row.direction) as SmsMessage["direction"],
     tenant_id: num(row.tenant_id) != null ? Number(row.tenant_id) : null,
     tenant_name: str(row.tenant_name),
+    investor_id: num(row.investor_id) != null ? Number(row.investor_id) : null,
+    investor_name: str(row.investor_name),
     property_name: str(row.property_name),
     phone_number: String(row.phone_number),
     body: String(row.body),
@@ -2314,99 +2357,159 @@ function normalizeArchivedThreadPhone(phone: string): string {
   return normalizePhoneNumber(trimmed) ?? trimmed;
 }
 
-function isPhoneArchived(phone: string, archivedPhones: Set<string>): boolean {
+function isPhoneArchived(
+  phone: string,
+  contactType: SmsMessage["contact_type"],
+  archivedPhones: Set<string>
+): boolean {
   const normalized = normalizeArchivedThreadPhone(phone);
-  return archivedPhones.has(normalized);
+  return archivedPhones.has(`${contactType}:${normalized}`);
 }
 
-export async function listArchivedThreadPhones(): Promise<string[]> {
+export async function listArchivedThreadPhones(
+  contactType: SmsMessage["contact_type"]
+): Promise<string[]> {
   await ensureSchema();
   if (usePostgres) {
     const sql = await getPostgresSql();
-    const rows = await sql`SELECT phone_number FROM sms_archived_threads ORDER BY archived_at DESC`;
+    const rows = await sql`
+      SELECT phone_number FROM sms_archived_threads
+      WHERE contact_type = ${contactType}
+      ORDER BY archived_at DESC
+    `;
     return rows.map((row) => String((row as Record<string, unknown>).phone_number));
   }
   const db = await getSqliteDb();
   const rows = db
-    .prepare("SELECT phone_number FROM sms_archived_threads ORDER BY archived_at DESC")
-    .all();
+    .prepare(
+      "SELECT phone_number FROM sms_archived_threads WHERE contact_type = ? ORDER BY archived_at DESC"
+    )
+    .all(contactType);
   db.close();
   return rows.map((row) => String((row as Record<string, unknown>).phone_number));
 }
 
-export async function archiveSmsThread(phone: string): Promise<void> {
+export async function archiveSmsThread(
+  phone: string,
+  contactType: SmsMessage["contact_type"]
+): Promise<void> {
   await ensureSchema();
   const phoneNumber = normalizeArchivedThreadPhone(phone);
   if (usePostgres) {
     const sql = await getPostgresSql();
     await sql`
-      INSERT INTO sms_archived_threads (phone_number, archived_at)
-      VALUES (${phoneNumber}, NOW())
-      ON CONFLICT (phone_number) DO UPDATE SET archived_at = NOW()
+      INSERT INTO sms_archived_threads (phone_number, contact_type, archived_at)
+      VALUES (${phoneNumber}, ${contactType}, NOW())
+      ON CONFLICT (phone_number, contact_type) DO UPDATE SET archived_at = NOW()
     `;
     return;
   }
   const db = await getSqliteDb();
   db.prepare(
-    `INSERT INTO sms_archived_threads (phone_number, archived_at)
-     VALUES (?, datetime('now'))
-     ON CONFLICT(phone_number) DO UPDATE SET archived_at = datetime('now')`
-  ).run(phoneNumber);
+    `INSERT INTO sms_archived_threads (phone_number, contact_type, archived_at)
+     VALUES (?, ?, datetime('now'))
+     ON CONFLICT(phone_number, contact_type) DO UPDATE SET archived_at = datetime('now')`
+  ).run(phoneNumber, contactType);
   db.close();
 }
 
-export async function restoreSmsThread(phone: string): Promise<void> {
+export async function restoreSmsThread(
+  phone: string,
+  contactType: SmsMessage["contact_type"]
+): Promise<void> {
   await ensureSchema();
   const phoneNumber = normalizeArchivedThreadPhone(phone);
   if (usePostgres) {
     const sql = await getPostgresSql();
-    await sql`DELETE FROM sms_archived_threads WHERE phone_number = ${phoneNumber}`;
+    await sql`
+      DELETE FROM sms_archived_threads
+      WHERE phone_number = ${phoneNumber} AND contact_type = ${contactType}
+    `;
     return;
   }
   const db = await getSqliteDb();
-  db.prepare("DELETE FROM sms_archived_threads WHERE phone_number = ?").run(phoneNumber);
+  db.prepare("DELETE FROM sms_archived_threads WHERE phone_number = ? AND contact_type = ?").run(
+    phoneNumber,
+    contactType
+  );
   db.close();
 }
 
-export async function listSmsMessages(options?: {
+export async function getLastSmsMessageForPhone(phone: string): Promise<SmsMessage | null> {
+  await ensureSchema();
+  const phoneNumber = normalizeArchivedThreadPhone(phone);
+  if (usePostgres) {
+    const sql = await getPostgresSql();
+    const rows = await sql`
+      SELECT * FROM sms_messages
+      WHERE phone_number = ${phoneNumber}
+      ORDER BY created_at DESC
+      LIMIT 1
+    `;
+    if (!rows[0]) return null;
+    return mapSmsMessage(rows[0] as Record<string, unknown>);
+  }
+  const db = await getSqliteDb();
+  const row = db
+    .prepare("SELECT * FROM sms_messages WHERE phone_number = ? ORDER BY created_at DESC LIMIT 1")
+    .get(phoneNumber);
+  db.close();
+  return row ? mapSmsMessage(row as Record<string, unknown>) : null;
+}
+
+export async function listSmsMessages(options: {
+  contact_type: SmsMessage["contact_type"];
   phone?: string;
   archived?: boolean;
 }): Promise<SmsMessage[]> {
   await ensureSchema();
-  const phone = options?.phone;
-  const archived = options?.archived;
-  const archivedPhones = new Set(await listArchivedThreadPhones());
+  const phone = options.phone;
+  const archived = options.archived;
+  const contactType = options.contact_type;
+  const archivedPhones = new Set(
+    (await listArchivedThreadPhones(contactType)).map(
+      (archivedPhone) => `${contactType}:${archivedPhone}`
+    )
+  );
 
   if (usePostgres) {
     const sql = await getPostgresSql();
     const rows = phone
       ? await sql`
           SELECT * FROM sms_messages
-          WHERE phone_number = ${phone}
+          WHERE phone_number = ${phone} AND contact_type = ${contactType}
           ORDER BY created_at DESC
         `
-      : await sql`SELECT * FROM sms_messages ORDER BY created_at DESC`;
+      : await sql`
+          SELECT * FROM sms_messages
+          WHERE contact_type = ${contactType}
+          ORDER BY created_at DESC
+        `;
     const messages = rows.map((r) => mapSmsMessage(r as Record<string, unknown>));
     if (archived == null) return messages;
     return messages.filter((message) =>
       archived
-        ? isPhoneArchived(message.phone_number, archivedPhones)
-        : !isPhoneArchived(message.phone_number, archivedPhones)
+        ? isPhoneArchived(message.phone_number, contactType, archivedPhones)
+        : !isPhoneArchived(message.phone_number, contactType, archivedPhones)
     );
   }
   const db = await getSqliteDb();
   const rows = phone
     ? db
-        .prepare("SELECT * FROM sms_messages WHERE phone_number = ? ORDER BY created_at DESC")
-        .all(phone)
-    : db.prepare("SELECT * FROM sms_messages ORDER BY created_at DESC").all();
+        .prepare(
+          "SELECT * FROM sms_messages WHERE phone_number = ? AND contact_type = ? ORDER BY created_at DESC"
+        )
+        .all(phone, contactType)
+    : db
+        .prepare("SELECT * FROM sms_messages WHERE contact_type = ? ORDER BY created_at DESC")
+        .all(contactType);
   db.close();
   const messages = rows.map((r) => mapSmsMessage(r as Record<string, unknown>));
   if (archived == null) return messages;
   return messages.filter((message) =>
     archived
-      ? isPhoneArchived(message.phone_number, archivedPhones)
-      : !isPhoneArchived(message.phone_number, archivedPhones)
+      ? isPhoneArchived(message.phone_number, contactType, archivedPhones)
+      : !isPhoneArchived(message.phone_number, contactType, archivedPhones)
   );
 }
 
@@ -2494,12 +2597,14 @@ export async function createSmsMessage(
     const sql = await getPostgresSql();
     const rows = await sql`
       INSERT INTO sms_messages (
-        direction, tenant_id, tenant_name, property_name, phone_number, body,
-        message_type, status, external_id, related_id, related_type, error_message
+        contact_type, direction, tenant_id, tenant_name, investor_id, investor_name,
+        property_name, phone_number, body, message_type, status, external_id,
+        related_id, related_type, error_message
       ) VALUES (
-        ${data.direction}, ${data.tenant_id}, ${data.tenant_name}, ${data.property_name},
-        ${data.phone_number}, ${data.body}, ${data.message_type}, ${data.status},
-        ${data.external_id}, ${data.related_id}, ${data.related_type}, ${data.error_message}
+        ${data.contact_type}, ${data.direction}, ${data.tenant_id}, ${data.tenant_name},
+        ${data.investor_id}, ${data.investor_name}, ${data.property_name}, ${data.phone_number},
+        ${data.body}, ${data.message_type}, ${data.status}, ${data.external_id},
+        ${data.related_id}, ${data.related_type}, ${data.error_message}
       ) RETURNING *
     `;
     return mapSmsMessage(rows[0] as Record<string, unknown>);
@@ -2508,11 +2613,13 @@ export async function createSmsMessage(
   const row = db
     .prepare(
       `INSERT INTO sms_messages (
-        direction, tenant_id, tenant_name, property_name, phone_number, body,
-        message_type, status, external_id, related_id, related_type, error_message
+        contact_type, direction, tenant_id, tenant_name, investor_id, investor_name,
+        property_name, phone_number, body, message_type, status, external_id,
+        related_id, related_type, error_message
       ) VALUES (
-        @direction, @tenant_id, @tenant_name, @property_name, @phone_number, @body,
-        @message_type, @status, @external_id, @related_id, @related_type, @error_message
+        @contact_type, @direction, @tenant_id, @tenant_name, @investor_id, @investor_name,
+        @property_name, @phone_number, @body, @message_type, @status, @external_id,
+        @related_id, @related_type, @error_message
       ) RETURNING *`
     )
     .get(data);

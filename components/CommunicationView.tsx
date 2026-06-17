@@ -6,14 +6,25 @@ import { tenantDisplayName } from "@/lib/rent-ledger";
 import {
   buildMaintenanceMessage,
   buildRentReminderMessage,
+  findInvestorByPhone,
   formatPhoneDisplay,
   groupMessagesByPhone,
+  investorSmsName,
   normalizePhoneNumber,
 } from "@/lib/sms-utils";
-import type { MaintenanceRecord, RentPayment, SmsMessage, Tenant } from "@/lib/types";
+import type {
+  Investor,
+  MaintenanceRecord,
+  RentPayment,
+  SmsContactType,
+  SmsMessage,
+  Tenant,
+} from "@/lib/types";
 
 interface CommunicationViewProps {
+  contactType: SmsContactType;
   tenants: Tenant[];
+  investors: Investor[];
   rentPayments: RentPayment[];
   maintenance: MaintenanceRecord[];
   onNotify: (type: "success" | "error", text: string) => void;
@@ -30,6 +41,7 @@ interface ThreadView {
   thread: SmsMessage[];
   last: SmsMessage | null;
   tenant: Tenant | null;
+  investor: Investor | null;
   displayName: string;
   propertyName: string | null;
   unread: boolean;
@@ -61,12 +73,19 @@ function tenantForPhone(tenants: Tenant[], phone: string): Tenant | null {
   );
 }
 
+function investorForPhone(investors: Investor[], phone: string): Investor | null {
+  return findInvestorByPhone(investors, phone);
+}
+
 export default function CommunicationView({
+  contactType,
   tenants,
+  investors,
   rentPayments,
   maintenance,
   onNotify,
 }: CommunicationViewProps) {
+  const isTenantPortal = contactType === "tenant";
   const [messages, setMessages] = useState<SmsMessage[]>([]);
   const [config, setConfig] = useState<SmsConfig>({ configured: false, fromNumber: null });
   const [loading, setLoading] = useState(true);
@@ -74,30 +93,37 @@ export default function CommunicationView({
   const [selectedPhone, setSelectedPhone] = useState<string | null>(null);
   const [composeText, setComposeText] = useState("");
   const [sending, setSending] = useState(false);
-  const [newTenantId, setNewTenantId] = useState("");
+  const [newContactId, setNewContactId] = useState("");
   const [actionId, setActionId] = useState<number | null>(null);
   const [showArchived, setShowArchived] = useState(false);
   const [threadActionPhone, setThreadActionPhone] = useState<string | null>(null);
 
-  const loadMessages = useCallback(async (silent = false, archived = showArchived) => {
-    if (!silent) setRefreshing(true);
-    try {
-      const url = archived ? "/api/sms?archived=1" : "/api/sms";
-      const res = await fetch(url, { cache: "no-store" });
-      const json = await res.json();
-      if (json.success) {
-        setMessages(json.data.messages);
-        setConfig(json.data.config);
+  const loadMessages = useCallback(
+    async (silent = false, archived = showArchived) => {
+      if (!silent) setRefreshing(true);
+      try {
+        const params = new URLSearchParams({ contact_type: contactType });
+        if (archived) params.set("archived", "1");
+        const res = await fetch(`/api/sms?${params.toString()}`, { cache: "no-store" });
+        const json = await res.json();
+        if (json.success) {
+          setMessages(json.data.messages);
+          setConfig(json.data.config);
+        }
+      } finally {
+        if (!silent) setRefreshing(false);
       }
-    } finally {
-      if (!silent) setRefreshing(false);
-    }
-  }, [showArchived]);
+    },
+    [contactType, showArchived]
+  );
 
   useEffect(() => {
     setLoading(true);
-    loadMessages().finally(() => setLoading(false));
-  }, [loadMessages]);
+    setSelectedPhone(null);
+    setComposeText("");
+    setShowArchived(false);
+    loadMessages(false, false).finally(() => setLoading(false));
+  }, [contactType, loadMessages]);
 
   useEffect(() => {
     const interval = window.setInterval(() => {
@@ -121,7 +147,11 @@ export default function CommunicationView({
       const res = await fetch("/api/sms/threads", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ phone: selectedThread.phone, archived }),
+        body: JSON.stringify({
+          phone: selectedThread.phone,
+          contact_type: contactType,
+          archived,
+        }),
       });
       const json = await res.json();
       if (!json.success) throw new Error(json.error || "Failed to update conversation.");
@@ -140,16 +170,22 @@ export default function CommunicationView({
     return [...grouped.entries()]
       .map(([phone, thread]) => {
         const last = thread[thread.length - 1];
-        const tenant = tenantForPhone(tenants, phone);
+        const tenant = isTenantPortal ? tenantForPhone(tenants, phone) : null;
+        const investor = !isTenantPortal ? investorForPhone(investors, phone) : null;
+        const displayName = isTenantPortal
+          ? (last.tenant_name ??
+            (tenant ? tenantDisplayName(tenant) : formatPhoneDisplay(phone)))
+          : (last.investor_name ??
+            (investor ? investorSmsName(investor) : formatPhoneDisplay(phone)));
         return {
           phone,
           thread,
           last,
           tenant,
-          displayName:
-            last.tenant_name ??
-            (tenant ? tenantDisplayName(tenant) : formatPhoneDisplay(phone)),
-          propertyName: last.property_name ?? tenant?.property_name ?? null,
+          investor,
+          displayName,
+          propertyName:
+            last.property_name ?? tenant?.property_name ?? investor?.property_name ?? null,
           unread: last.direction === "inbound",
         } satisfies ThreadView;
       })
@@ -158,7 +194,7 @@ export default function CommunicationView({
         const bTime = b.last?.created_at ?? "";
         return bTime.localeCompare(aTime);
       });
-  }, [messages, tenants]);
+  }, [messages, tenants, investors, isTenantPortal]);
 
   const unreadCount = useMemo(
     () => threads.filter((thread) => thread.unread).length,
@@ -170,17 +206,25 @@ export default function CommunicationView({
     if (existing) return existing;
     if (!selectedPhone) return null;
 
-    const tenant = tenantForPhone(tenants, selectedPhone);
+    const tenant = isTenantPortal ? tenantForPhone(tenants, selectedPhone) : null;
+    const investor = !isTenantPortal ? investorForPhone(investors, selectedPhone) : null;
     return {
       phone: selectedPhone,
       thread: [],
       last: null,
       tenant,
-      displayName: tenant ? tenantDisplayName(tenant) : formatPhoneDisplay(selectedPhone),
-      propertyName: tenant?.property_name ?? null,
+      investor,
+      displayName: isTenantPortal
+        ? tenant
+          ? tenantDisplayName(tenant)
+          : formatPhoneDisplay(selectedPhone)
+        : investor
+          ? investorSmsName(investor)
+          : formatPhoneDisplay(selectedPhone),
+      propertyName: tenant?.property_name ?? investor?.property_name ?? null,
       unread: false,
     };
-  }, [threads, selectedPhone, tenants]);
+  }, [threads, selectedPhone, tenants, investors, isTenantPortal]);
 
   const outstandingRent = useMemo(
     () =>
@@ -196,10 +240,12 @@ export default function CommunicationView({
     [maintenance]
   );
 
-  const activeTenantsWithPhone = useMemo(
-    () => tenants.filter((tenant) => tenant.status === "Active" && tenant.phone?.trim()),
-    [tenants]
-  );
+  const activeContactsWithPhone = useMemo(() => {
+    if (isTenantPortal) {
+      return tenants.filter((tenant) => tenant.status === "Active" && tenant.phone?.trim());
+    }
+    return investors.filter((investor) => investor.status === "Active" && investor.phone?.trim());
+  }, [isTenantPortal, tenants, investors]);
 
   const sendToPhone = async (
     phone: string,
@@ -207,6 +253,8 @@ export default function CommunicationView({
     extras?: {
       tenantId?: number;
       tenantName?: string;
+      investorId?: number;
+      investorName?: string;
       propertyName?: string;
       messageType?: "general" | "rent_reminder" | "maintenance";
       relatedId?: number;
@@ -221,8 +269,11 @@ export default function CommunicationView({
         body: JSON.stringify({
           phone,
           message: body,
+          contact_type: contactType,
           tenantId: extras?.tenantId,
           tenantName: extras?.tenantName,
+          investorId: extras?.investorId,
+          investorName: extras?.investorName,
           propertyName: extras?.propertyName,
           messageType: extras?.messageType,
           relatedId: extras?.relatedId,
@@ -231,7 +282,7 @@ export default function CommunicationView({
       });
       const json = await res.json();
       if (!json.success) throw new Error(json.error || "Failed to send message");
-      await loadMessages(true);
+      await loadMessages(true, showArchived);
       setSelectedPhone(phone);
       onNotify("success", "Text message sent.");
       return true;
@@ -247,28 +298,59 @@ export default function CommunicationView({
     const body = composeText.trim();
     if (!body || !selectedThread) return;
 
-    const tenant = selectedThread.tenant;
+    if (isTenantPortal) {
+      const tenant = selectedThread.tenant;
+      const ok = await sendToPhone(selectedThread.phone, body, {
+        tenantId: tenant?.id,
+        tenantName: tenant ? tenantDisplayName(tenant) : selectedThread.displayName,
+        propertyName: tenant?.property_name ?? selectedThread.propertyName ?? undefined,
+      });
+      if (ok) setComposeText("");
+      return;
+    }
+
+    const investor = selectedThread.investor;
     const ok = await sendToPhone(selectedThread.phone, body, {
-      tenantId: tenant?.id,
-      tenantName: tenant ? tenantDisplayName(tenant) : selectedThread.displayName,
-      propertyName: tenant?.property_name ?? selectedThread.propertyName ?? undefined,
+      investorId: investor?.id,
+      investorName: investor ? investorSmsName(investor) : selectedThread.displayName,
+      propertyName: investor?.property_name ?? selectedThread.propertyName ?? undefined,
     });
     if (ok) setComposeText("");
   };
 
   const handleStartConversation = () => {
-    const tenant = activeTenantsWithPhone.find((t) => String(t.id) === newTenantId);
-    if (!tenant?.phone) {
-      onNotify("error", "Select a tenant with a phone number.");
+    if (isTenantPortal) {
+      const tenant = activeContactsWithPhone.find(
+        (contact) => String(contact.id) === newContactId
+      ) as Tenant | undefined;
+      if (!tenant?.phone) {
+        onNotify("error", "Select a tenant with a phone number.");
+        return;
+      }
+      const phone = normalizePhoneNumber(tenant.phone);
+      if (!phone) {
+        onNotify("error", "Tenant phone number is invalid.");
+        return;
+      }
+      setSelectedPhone(phone);
+      setNewContactId("");
       return;
     }
-    const phone = normalizePhoneNumber(tenant.phone);
+
+    const investor = activeContactsWithPhone.find(
+      (contact) => String(contact.id) === newContactId
+    ) as Investor | undefined;
+    if (!investor?.phone) {
+      onNotify("error", "Select an investor with a phone number.");
+      return;
+    }
+    const phone = normalizePhoneNumber(investor.phone);
     if (!phone) {
-      onNotify("error", "Tenant phone number is invalid.");
+      onNotify("error", "Investor phone number is invalid.");
       return;
     }
     setSelectedPhone(phone);
-    setNewTenantId("");
+    setNewContactId("");
   };
 
   const handleRentReminder = async (paymentId?: number) => {
@@ -281,7 +363,7 @@ export default function CommunicationView({
       });
       const json = await res.json();
       if (!json.success) throw new Error(json.error || "Failed to send reminders");
-      await loadMessages(true);
+      await loadMessages(true, showArchived);
       const { sent, failed } = json.data;
       onNotify(
         failed > 0 ? "error" : "success",
@@ -304,7 +386,7 @@ export default function CommunicationView({
       });
       const json = await res.json();
       if (!json.success) throw new Error(json.error || "Failed to send update");
-      await loadMessages(true);
+      await loadMessages(true, showArchived);
       const phone = json.data.message?.phone_number;
       if (phone) setSelectedPhone(phone);
       onNotify("success", "Maintenance update sent.");
@@ -341,16 +423,24 @@ export default function CommunicationView({
   };
 
   if (loading) {
-    return <div className="text-zinc-400 py-12 text-center">Loading communication...</div>;
+    return (
+      <div className="text-zinc-400 py-12 text-center">
+        Loading {isTenantPortal ? "tenant" : "investor"} communication...
+      </div>
+    );
   }
 
   return (
     <div className="space-y-4">
       <div className="flex items-start justify-between gap-3 flex-wrap">
         <div>
-          <h1 className="text-xl font-semibold text-zinc-100">Communication</h1>
+          <h1 className="text-xl font-semibold text-zinc-100">
+            {isTenantPortal ? "Tenant Communication" : "Investor Communication"}
+          </h1>
           <p className="text-sm text-zinc-400 mt-1">
-            Send and receive text messages with tenants for rent reminders and maintenance updates.
+            {isTenantPortal
+              ? "Send and receive text messages with tenants for rent reminders and maintenance updates."
+              : "Send and receive text messages with investors. Messages here stay separate from tenant conversations."}
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -385,12 +475,18 @@ export default function CommunicationView({
         </div>
       )}
 
-      <div className="grid grid-cols-1 xl:grid-cols-[280px_1fr_300px] gap-4 min-h-[560px]">
+      <div
+        className={`grid grid-cols-1 gap-4 min-h-[560px] ${
+          isTenantPortal ? "xl:grid-cols-[280px_1fr_300px]" : "xl:grid-cols-[280px_1fr]"
+        }`}
+      >
         <section className="rounded-xl border border-zinc-600/60 bg-zinc-800/90 flex flex-col min-h-[400px] xl:min-h-0">
           <div className="px-4 py-3 border-b border-zinc-600/60">
             <div className="flex items-center justify-between gap-2">
               <h2 className="font-semibold text-sm text-zinc-100">
-                {showArchived ? "Archived Conversations" : "Conversations"}
+                {showArchived
+                  ? `Archived ${isTenantPortal ? "Tenant" : "Investor"} Conversations`
+                  : `${isTenantPortal ? "Tenant" : "Investor"} Conversations`}
               </h2>
               {!showArchived && unreadCount > 0 && (
                 <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-600/30 text-emerald-300 border border-emerald-600/40">
@@ -401,28 +497,35 @@ export default function CommunicationView({
             <p className="text-xs text-zinc-400 mt-1">
               {config.fromNumber
                 ? `Sending from ${formatPhoneDisplay(config.fromNumber)}`
-                : "Two-way tenant texting"}
+                : `Two-way ${isTenantPortal ? "tenant" : "investor"} texting`}
             </p>
           </div>
           {!showArchived && (
             <div className="p-3 border-b border-zinc-600/60 space-y-2">
               <select
-                value={newTenantId}
-                onChange={(e) => setNewTenantId(e.target.value)}
+                value={newContactId}
+                onChange={(e) => setNewContactId(e.target.value)}
                 className="form-select text-sm w-full"
               >
                 <option value="">Start new conversation...</option>
-                {activeTenantsWithPhone.map((tenant) => (
-                  <option key={tenant.id} value={tenant.id}>
-                    {tenantDisplayName(tenant)}
-                    {tenant.property_name ? ` · ${tenant.property_name}` : ""}
-                  </option>
-                ))}
+                {isTenantPortal
+                  ? (activeContactsWithPhone as Tenant[]).map((tenant) => (
+                      <option key={tenant.id} value={tenant.id}>
+                        {tenantDisplayName(tenant)}
+                        {tenant.property_name ? ` · ${tenant.property_name}` : ""}
+                      </option>
+                    ))
+                  : (activeContactsWithPhone as Investor[]).map((investor) => (
+                      <option key={investor.id} value={investor.id}>
+                        {investorSmsName(investor)}
+                        {investor.property_name ? ` · ${investor.property_name}` : ""}
+                      </option>
+                    ))}
               </select>
               <button
                 type="button"
                 onClick={handleStartConversation}
-                disabled={!newTenantId}
+                disabled={!newContactId}
                 className="w-full text-xs px-3 py-2 rounded-lg border border-emerald-600/60 bg-emerald-900/30 text-emerald-300 hover:bg-emerald-900/50 disabled:opacity-50"
               >
                 Open conversation
@@ -434,7 +537,9 @@ export default function CommunicationView({
               <p className="text-xs text-zinc-500 px-4 py-6 text-center">
                 {showArchived
                   ? "No archived conversations."
-                  : "No conversations yet. Select a tenant above or send a rent reminder to get started."}
+                  : isTenantPortal
+                    ? "No tenant conversations yet. Select a tenant above or send a rent reminder to get started."
+                    : "No investor conversations yet. Select an investor above to get started."}
               </p>
             ) : (
               threads.map((thread) => (
@@ -584,105 +689,107 @@ export default function CommunicationView({
           )}
         </section>
 
-        <section className="rounded-xl border border-zinc-600/60 bg-zinc-800/90 flex flex-col min-h-[300px] xl:min-h-0">
-          <div className="px-4 py-3 border-b border-zinc-600/60">
-            <h2 className="font-semibold text-sm text-zinc-100">Quick actions</h2>
-            <p className="text-xs text-zinc-400 mt-1">Rent reminders and maintenance updates</p>
-          </div>
-          <div className="flex-1 overflow-y-auto p-3 space-y-4">
-            <div>
-              <div className="flex items-center justify-between gap-2 mb-2">
-                <h3 className="text-xs font-semibold uppercase tracking-wide text-amber-400">
-                  Rent reminders
-                </h3>
-                {outstandingRent.length > 0 && (
-                  <button
-                    type="button"
-                    onClick={() => handleRentReminder()}
-                    disabled={actionId === -1}
-                    className="text-[10px] px-2 py-1 rounded border border-emerald-600/60 text-emerald-300 hover:bg-emerald-900/30 disabled:opacity-50"
-                  >
-                    {actionId === -1 ? "Sending..." : "Remind all"}
-                  </button>
+        {isTenantPortal && (
+          <section className="rounded-xl border border-zinc-600/60 bg-zinc-800/90 flex flex-col min-h-[300px] xl:min-h-0">
+            <div className="px-4 py-3 border-b border-zinc-600/60">
+              <h2 className="font-semibold text-sm text-zinc-100">Quick actions</h2>
+              <p className="text-xs text-zinc-400 mt-1">Rent reminders and maintenance updates</p>
+            </div>
+            <div className="flex-1 overflow-y-auto p-3 space-y-4">
+              <div>
+                <div className="flex items-center justify-between gap-2 mb-2">
+                  <h3 className="text-xs font-semibold uppercase tracking-wide text-amber-400">
+                    Rent reminders
+                  </h3>
+                  {outstandingRent.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => handleRentReminder()}
+                      disabled={actionId === -1}
+                      className="text-[10px] px-2 py-1 rounded border border-emerald-600/60 text-emerald-300 hover:bg-emerald-900/30 disabled:opacity-50"
+                    >
+                      {actionId === -1 ? "Sending..." : "Remind all"}
+                    </button>
+                  )}
+                </div>
+                {outstandingRent.length === 0 ? (
+                  <p className="text-xs text-zinc-500">No outstanding rent payments.</p>
+                ) : (
+                  <ul className="space-y-2">
+                    {outstandingRent.slice(0, 8).map((payment) => (
+                      <li
+                        key={payment.id}
+                        className="rounded-lg border border-zinc-700/60 bg-zinc-900/40 p-2 text-xs"
+                      >
+                        <div className="font-medium text-zinc-200">{payment.tenant_name}</div>
+                        <div className="text-zinc-400">
+                          {payment.property_name} · {formatCurrency(payment.rent_due)} ·{" "}
+                          {payment.status}
+                        </div>
+                        <div className="flex gap-2 mt-2">
+                          <button
+                            type="button"
+                            onClick={() => handlePreviewRentReminder(payment)}
+                            className="text-[10px] px-2 py-1 rounded border border-zinc-600 text-zinc-300 hover:bg-zinc-700/60"
+                          >
+                            Preview
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleRentReminder(payment.id)}
+                            disabled={actionId === payment.id}
+                            className="text-[10px] px-2 py-1 rounded border border-emerald-600/60 text-emerald-300 hover:bg-emerald-900/30 disabled:opacity-50"
+                          >
+                            {actionId === payment.id ? "Sending..." : "Send"}
+                          </button>
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
                 )}
               </div>
-              {outstandingRent.length === 0 ? (
-                <p className="text-xs text-zinc-500">No outstanding rent payments.</p>
-              ) : (
-                <ul className="space-y-2">
-                  {outstandingRent.slice(0, 8).map((payment) => (
-                    <li
-                      key={payment.id}
-                      className="rounded-lg border border-zinc-700/60 bg-zinc-900/40 p-2 text-xs"
-                    >
-                      <div className="font-medium text-zinc-200">{payment.tenant_name}</div>
-                      <div className="text-zinc-400">
-                        {payment.property_name} · {formatCurrency(payment.rent_due)} ·{" "}
-                        {payment.status}
-                      </div>
-                      <div className="flex gap-2 mt-2">
-                        <button
-                          type="button"
-                          onClick={() => handlePreviewRentReminder(payment)}
-                          className="text-[10px] px-2 py-1 rounded border border-zinc-600 text-zinc-300 hover:bg-zinc-700/60"
-                        >
-                          Preview
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => handleRentReminder(payment.id)}
-                          disabled={actionId === payment.id}
-                          className="text-[10px] px-2 py-1 rounded border border-emerald-600/60 text-emerald-300 hover:bg-emerald-900/30 disabled:opacity-50"
-                        >
-                          {actionId === payment.id ? "Sending..." : "Send"}
-                        </button>
-                      </div>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
 
-            <div>
-              <h3 className="text-xs font-semibold uppercase tracking-wide text-amber-400 mb-2">
-                Maintenance updates
-              </h3>
-              {openMaintenance.length === 0 ? (
-                <p className="text-xs text-zinc-500">No open maintenance requests.</p>
-              ) : (
-                <ul className="space-y-2">
-                  {openMaintenance.slice(0, 8).map((item) => (
-                    <li
-                      key={item.id}
-                      className="rounded-lg border border-zinc-700/60 bg-zinc-900/40 p-2 text-xs"
-                    >
-                      <div className="font-medium text-zinc-200">{item.property_name}</div>
-                      <div className="text-zinc-400 truncate">{item.description}</div>
-                      <div className="text-zinc-500">{item.status}</div>
-                      <div className="flex gap-2 mt-2">
-                        <button
-                          type="button"
-                          onClick={() => handlePreviewMaintenance(item)}
-                          className="text-[10px] px-2 py-1 rounded border border-zinc-600 text-zinc-300 hover:bg-zinc-700/60"
-                        >
-                          Preview
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => handleMaintenanceNotify(item.id)}
-                          disabled={actionId === item.id}
-                          className="text-[10px] px-2 py-1 rounded border border-emerald-600/60 text-emerald-300 hover:bg-emerald-900/30 disabled:opacity-50"
-                        >
-                          {actionId === item.id ? "Sending..." : "Notify"}
-                        </button>
-                      </div>
-                    </li>
-                  ))}
-                </ul>
-              )}
+              <div>
+                <h3 className="text-xs font-semibold uppercase tracking-wide text-amber-400 mb-2">
+                  Maintenance updates
+                </h3>
+                {openMaintenance.length === 0 ? (
+                  <p className="text-xs text-zinc-500">No open maintenance requests.</p>
+                ) : (
+                  <ul className="space-y-2">
+                    {openMaintenance.slice(0, 8).map((item) => (
+                      <li
+                        key={item.id}
+                        className="rounded-lg border border-zinc-700/60 bg-zinc-900/40 p-2 text-xs"
+                      >
+                        <div className="font-medium text-zinc-200">{item.property_name}</div>
+                        <div className="text-zinc-400 truncate">{item.description}</div>
+                        <div className="text-zinc-500">{item.status}</div>
+                        <div className="flex gap-2 mt-2">
+                          <button
+                            type="button"
+                            onClick={() => handlePreviewMaintenance(item)}
+                            className="text-[10px] px-2 py-1 rounded border border-zinc-600 text-zinc-300 hover:bg-zinc-700/60"
+                          >
+                            Preview
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleMaintenanceNotify(item.id)}
+                            disabled={actionId === item.id}
+                            className="text-[10px] px-2 py-1 rounded border border-emerald-600/60 text-emerald-300 hover:bg-emerald-900/30 disabled:opacity-50"
+                          >
+                            {actionId === item.id ? "Sending..." : "Notify"}
+                          </button>
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
             </div>
-          </div>
-        </section>
+          </section>
+        )}
       </div>
     </div>
   );

@@ -46,8 +46,12 @@ export const NAV_TABS_BEFORE_MANAGEMENT: { id: SheetTab; label: string }[] = [
 ];
 
 export const NAV_TABS_AFTER_MANAGEMENT: { id: SheetTab; label: string }[] = [
-  { id: "communication", label: "Communication" },
   { id: "reports", label: "Reports" },
+];
+
+export const COMMUNICATION_TABS: { id: SheetTab; label: string }[] = [
+  { id: "communication_tenant", label: "Tenant" },
+  { id: "communication_investor", label: "Investor" },
 ];
 
 export const SHEET_TABS: { id: SheetTab; label: string }[] = [
@@ -55,6 +59,7 @@ export const SHEET_TABS: { id: SheetTab; label: string }[] = [
   ...NAV_TABS_BEFORE_MANAGEMENT,
   ...MANAGEMENT_TABS,
   ...INVESTOR_TABS,
+  ...COMMUNICATION_TABS,
   ...NAV_TABS_AFTER_MANAGEMENT,
 ];
 
@@ -64,6 +69,10 @@ export function isManagementTab(tab: SheetTab): boolean {
 
 export function isInvestorTab(tab: SheetTab): boolean {
   return INVESTOR_TABS.some((item) => item.id === tab);
+}
+
+export function isCommunicationTab(tab: SheetTab): boolean {
+  return COMMUNICATION_TABS.some((item) => item.id === tab);
 }
 
 export function isSettingsTab(tab: SheetTab): boolean {
@@ -562,7 +571,8 @@ export function getColumnsForTab(tab: SheetTab): ColumnDef[] {
     case "available":
     case "dashboard":
     case "reports":
-    case "communication":
+    case "communication_tenant":
+    case "communication_investor":
     case "sms_setup":
       return [];
     default:

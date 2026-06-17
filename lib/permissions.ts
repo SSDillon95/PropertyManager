@@ -7,6 +7,7 @@ export const ADMIN_ONLY_TABS: SheetTab[] = [
   "reports",
   "users",
   "sms_setup",
+  "communication_investor",
 ];
 
 export function isAdminRole(role: UserRole): boolean {
@@ -41,14 +42,30 @@ export function investorTabsForRole(
   ];
 }
 
-export function navTabsAfterManagementForRole(
+export const COMMUNICATION_TABS: { id: SheetTab; label: string }[] = [
+  { id: "communication_tenant", label: "Tenant" },
+  { id: "communication_investor", label: "Investor" },
+];
+
+export function communicationTabsForRole(
   role: UserRole
 ): { id: SheetTab; label: string }[] {
   const tabs: { id: SheetTab; label: string }[] = [
-    { id: "communication", label: "Communication" },
+    { id: "communication_tenant", label: "Tenant" },
   ];
   if (isAdminRole(role)) {
-    tabs.push({ id: "reports", label: "Reports" });
+    tabs.push({ id: "communication_investor", label: "Investor" });
   }
   return tabs;
+}
+
+export function isCommunicationTab(tab: SheetTab): boolean {
+  return tab === "communication_tenant" || tab === "communication_investor";
+}
+
+export function navTabsAfterManagementForRole(
+  role: UserRole
+): { id: SheetTab; label: string }[] {
+  if (!isAdminRole(role)) return [];
+  return [{ id: "reports", label: "Reports" }];
 }

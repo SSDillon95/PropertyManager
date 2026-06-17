@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import type { SmsContactType } from "./types";
 
 export function jsonOk<T>(data: T, status = 200) {
   return NextResponse.json({ success: true, data }, { status });
@@ -22,6 +23,12 @@ export async function handleRoute<T>(
 
 export function parseArchivedParam(request: Request): boolean {
   return new URL(request.url).searchParams.get("archived") === "1";
+}
+
+export function parseContactTypeParam(request: Request): SmsContactType | null {
+  const value = new URL(request.url).searchParams.get("contact_type");
+  if (value === "tenant" || value === "investor") return value;
+  return null;
 }
 
 export function parseIdParam(request: Request): number {

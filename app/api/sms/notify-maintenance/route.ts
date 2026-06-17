@@ -38,6 +38,7 @@ export async function POST(request: Request) {
   const result = await sendSmsMessage({
     phone: tenant.phone,
     body: smsBody,
+    contact_type: "tenant",
     tenant_id: tenant.id,
     tenant_name: tenantDisplayName(tenant),
     property_name: item.property_name,

@@ -25,6 +25,7 @@ import {
   getPropertyFormSections,
   PROPERTY_STATUS_OPTIONS,
   PROPERTY_TYPE_OPTIONS,
+  isCommunicationTab,
   isInvestorTab,
   isManagementTab,
   isSettingsTab,
@@ -35,6 +36,7 @@ import {
 } from "@/lib/columns";
 import {
   canAccessTab,
+  communicationTabsForRole,
   investorTabsForRole,
   navTabsAfterManagementForRole,
   settingsTabsForRole,
@@ -65,7 +67,8 @@ function apiFetch(input: RequestInfo | URL, init?: RequestInit) {
 const VIEW_ONLY_TABS: SheetTab[] = [
   "dashboard",
   "reports",
-  "communication",
+  "communication_tenant",
+  "communication_investor",
   "available",
   "sms_setup",
 ];
@@ -76,7 +79,12 @@ function isViewOnlyTab(tab: SheetTab): boolean {
 
 type DataTab = Exclude<
   SheetTab,
-  "dashboard" | "reports" | "communication" | "available" | "sms_setup"
+  | "dashboard"
+  | "reports"
+  | "communication_tenant"
+  | "communication_investor"
+  | "available"
+  | "sms_setup"
 >;
 
 function asDataTab(tab: SheetTab): DataTab {
@@ -221,6 +229,13 @@ export default function PropertyManagerApp() {
   } | null>(null);
   const investorButtonRef = useRef<HTMLButtonElement>(null);
   const investorDropdownRef = useRef<HTMLDivElement>(null);
+  const [communicationMenuOpen, setCommunicationMenuOpen] = useState(false);
+  const [communicationMenuPosition, setCommunicationMenuPosition] = useState<{
+    top: number;
+    left: number;
+  } | null>(null);
+  const communicationButtonRef = useRef<HTMLButtonElement>(null);
+  const communicationDropdownRef = useRef<HTMLDivElement>(null);
   const [settingsMenuOpen, setSettingsMenuOpen] = useState(false);
   const [settingsMenuPosition, setSettingsMenuPosition] = useState<{
     top: number;
@@ -256,6 +271,10 @@ export default function PropertyManagerApp() {
   );
   const visibleInvestorTabs = useMemo(
     () => investorTabsForRole(userRole),
+    [userRole]
+  );
+  const visibleCommunicationTabs = useMemo(
+    () => communicationTabsForRole(userRole),
     [userRole]
   );
 
@@ -485,8 +504,13 @@ export default function PropertyManagerApp() {
         setRows([]);
         return;
       }
-      if (activeTab === "communication") {
+      if (activeTab === "communication_tenant") {
         await Promise.all([loadTenants(), loadRentPayments(), loadMaintenanceRows()]);
+        setRows([]);
+        return;
+      }
+      if (activeTab === "communication_investor") {
+        await loadInvestors();
         setRows([]);
         return;
       }
@@ -755,6 +779,20 @@ export default function PropertyManagerApp() {
     setInvestorMenuPosition(null);
   }, []);
 
+  const updateCommunicationMenuPosition = useCallback(() => {
+    if (!communicationButtonRef.current) return;
+    const rect = communicationButtonRef.current.getBoundingClientRect();
+    setCommunicationMenuPosition({
+      top: rect.bottom + 4,
+      left: rect.left,
+    });
+  }, []);
+
+  const closeCommunicationMenu = useCallback(() => {
+    setCommunicationMenuOpen(false);
+    setCommunicationMenuPosition(null);
+  }, []);
+
   const toggleInvestorMenu = useCallback(() => {
     if (investorMenuOpen) {
       closeInvestorMenu();
@@ -763,9 +801,11 @@ export default function PropertyManagerApp() {
     setSettingsMenuOpen(false);
     setSettingsMenuPosition(null);
     closeManagementMenu();
+    closeCommunicationMenu();
     updateInvestorMenuPosition();
     setInvestorMenuOpen(true);
   }, [
+    closeCommunicationMenu,
     closeInvestorMenu,
     closeManagementMenu,
     investorMenuOpen,
@@ -780,13 +820,34 @@ export default function PropertyManagerApp() {
     setSettingsMenuOpen(false);
     setSettingsMenuPosition(null);
     closeInvestorMenu();
+    closeCommunicationMenu();
     updateManagementMenuPosition();
     setManagementMenuOpen(true);
   }, [
+    closeCommunicationMenu,
     closeInvestorMenu,
     closeManagementMenu,
     managementMenuOpen,
     updateManagementMenuPosition,
+  ]);
+
+  const toggleCommunicationMenu = useCallback(() => {
+    if (communicationMenuOpen) {
+      closeCommunicationMenu();
+      return;
+    }
+    setSettingsMenuOpen(false);
+    setSettingsMenuPosition(null);
+    closeManagementMenu();
+    closeInvestorMenu();
+    updateCommunicationMenuPosition();
+    setCommunicationMenuOpen(true);
+  }, [
+    closeCommunicationMenu,
+    closeInvestorMenu,
+    closeManagementMenu,
+    communicationMenuOpen,
+    updateCommunicationMenuPosition,
   ]);
 
   const updateSettingsMenuPosition = useCallback(() => {
@@ -810,9 +871,11 @@ export default function PropertyManagerApp() {
     }
     closeManagementMenu();
     closeInvestorMenu();
+    closeCommunicationMenu();
     updateSettingsMenuPosition();
     setSettingsMenuOpen(true);
   }, [
+    closeCommunicationMenu,
     closeInvestorMenu,
     closeManagementMenu,
     closeSettingsMenu,
@@ -871,6 +934,30 @@ export default function PropertyManagerApp() {
       window.removeEventListener("scroll", handleReposition, true);
     };
   }, [closeInvestorMenu, investorMenuOpen, updateInvestorMenuPosition]);
+
+  useEffect(() => {
+    if (!communicationMenuOpen) return;
+    updateCommunicationMenuPosition();
+    const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target as Node;
+      if (
+        communicationButtonRef.current?.contains(target) ||
+        communicationDropdownRef.current?.contains(target)
+      ) {
+        return;
+      }
+      closeCommunicationMenu();
+    };
+    const handleReposition = () => updateCommunicationMenuPosition();
+    document.addEventListener("mousedown", handleClickOutside);
+    window.addEventListener("resize", handleReposition);
+    window.addEventListener("scroll", handleReposition, true);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+      window.removeEventListener("resize", handleReposition);
+      window.removeEventListener("scroll", handleReposition, true);
+    };
+  }, [closeCommunicationMenu, communicationMenuOpen, updateCommunicationMenuPosition]);
 
   useEffect(() => {
     if (!settingsMenuOpen) return;
@@ -1040,6 +1127,7 @@ export default function PropertyManagerApp() {
     setCapitalBusinessConfirm(null);
     closeManagementMenu();
     closeInvestorMenu();
+    closeCommunicationMenu();
     closeSettingsMenu();
     if (tab !== "investor_capital") setCapitalBusinessFilter("");
     setExpandedProperty(property);
@@ -1064,6 +1152,7 @@ export default function PropertyManagerApp() {
     setCapitalBusinessConfirm(null);
     closeManagementMenu();
     closeInvestorMenu();
+    closeCommunicationMenu();
     closeSettingsMenu();
     if (next !== "properties") {
       setPropertyBusinessFilter([]);
@@ -1562,6 +1651,24 @@ export default function PropertyManagerApp() {
                 </span>
               </button>
             )}
+            <button
+              ref={communicationButtonRef}
+              type="button"
+              onClick={toggleCommunicationMenu}
+              className={navTabClass(isCommunicationTab(tab) || communicationMenuOpen)}
+              aria-expanded={communicationMenuOpen}
+              aria-haspopup="menu"
+            >
+              Communication
+              <span
+                className={`text-[10px] leading-none transition-transform ${
+                  communicationMenuOpen ? "rotate-180" : ""
+                }`}
+                aria-hidden
+              >
+                ▼
+              </span>
+            </button>
             {visibleNavAfterManagement.map((sheet) => (
               <button
                 key={sheet.id}
@@ -1576,7 +1683,7 @@ export default function PropertyManagerApp() {
           <div className="flex items-center gap-2 sm:gap-3 shrink-0 pr-2 sm:pr-4 pl-3">
             {tab !== "dashboard" &&
               tab !== "reports" &&
-              tab !== "communication" &&
+              !isCommunicationTab(tab) &&
               tableRows.length > 0 && (
               <button
                 type="button"
@@ -1611,6 +1718,33 @@ export default function PropertyManagerApp() {
           </div>
         </div>
       </nav>
+      {communicationMenuOpen && communicationMenuPosition && (
+        <div
+          ref={communicationDropdownRef}
+          role="menu"
+          className="fixed z-[100] min-w-[11rem] rounded-lg border border-zinc-600/80 bg-zinc-800 py-1 shadow-2xl"
+          style={{
+            top: communicationMenuPosition.top,
+            left: communicationMenuPosition.left,
+          }}
+        >
+          {visibleCommunicationTabs.map((sheet) => (
+            <button
+              key={sheet.id}
+              type="button"
+              role="menuitem"
+              onClick={() => handleTabChange(sheet.id)}
+              className={`block w-full px-4 py-2.5 text-left text-sm transition ${
+                tab === sheet.id
+                  ? "bg-emerald-950/50 text-emerald-300"
+                  : "text-zinc-200 hover:bg-zinc-700/80 hover:text-zinc-100"
+              }`}
+            >
+              {sheet.label}
+            </button>
+          ))}
+        </div>
+      )}
       {investorMenuOpen && investorMenuPosition && (
         <div
           ref={investorDropdownRef}
@@ -1820,9 +1954,20 @@ export default function PropertyManagerApp() {
             investorPayouts={investorPayoutRows}
             investors={investors}
           />
-        ) : tab === "communication" ? (
+        ) : tab === "communication_tenant" ? (
           <CommunicationView
+            contactType="tenant"
             tenants={tenants}
+            investors={investors}
+            rentPayments={rentPayments}
+            maintenance={maintenanceRows}
+            onNotify={showMessage}
+          />
+        ) : tab === "communication_investor" ? (
+          <CommunicationView
+            contactType="investor"
+            tenants={tenants}
+            investors={investors}
             rentPayments={rentPayments}
             maintenance={maintenanceRows}
             onNotify={showMessage}

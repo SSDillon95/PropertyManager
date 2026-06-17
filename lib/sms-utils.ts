@@ -1,5 +1,5 @@
 import { formatCurrency } from "./format";
-import type { MaintenanceRecord, RentPayment, SmsMessage, Tenant } from "./types";
+import type { Investor, MaintenanceRecord, RentPayment, SmsMessage, Tenant } from "./types";
 
 export function normalizePhoneNumber(phone: string): string | null {
   const digits = phone.replace(/\D/g, "");
@@ -21,6 +21,23 @@ export function formatPhoneDisplay(phone: string): string {
 
 export function tenantSmsName(tenant: Pick<Tenant, "first_name" | "last_name">): string {
   return `${tenant.first_name} ${tenant.last_name}`.trim();
+}
+
+export function investorSmsName(investor: Pick<Investor, "investor_name">): string {
+  return investor.investor_name.trim();
+}
+
+export function findInvestorByPhone(investors: Investor[], phone: string): Investor | null {
+  const normalized = normalizePhoneNumber(phone);
+  if (!normalized) return null;
+  const targetDigits = normalized.replace(/\D/g, "");
+  return (
+    investors.find((investor) => {
+      if (!investor.phone) return false;
+      const investorDigits = normalizePhoneNumber(investor.phone)?.replace(/\D/g, "");
+      return investorDigits === targetDigits;
+    }) ?? null
+  );
 }
 
 export function findTenantByPhone(tenants: Tenant[], phone: string): Tenant | null {

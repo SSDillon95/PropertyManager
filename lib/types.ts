@@ -8,7 +8,8 @@ export type SheetTab =
   | "rent_ledger"
   | "expenses"
   | "maintenance"
-  | "communication"
+  | "communication_tenant"
+  | "communication_investor"
   | "investors"
   | "investor_capital"
   | "investor_payout"
@@ -217,6 +218,8 @@ export interface InvestorPayout {
   created_at: string;
 }
 
+export type SmsContactType = "tenant" | "investor";
+
 export type SmsDirection = "inbound" | "outbound";
 export type SmsMessageType =
   | "general"
@@ -247,9 +250,12 @@ export interface SmsSetupStatus {
 
 export interface SmsMessage {
   id: number;
+  contact_type: SmsContactType;
   direction: SmsDirection;
   tenant_id: number | null;
   tenant_name: string | null;
+  investor_id: number | null;
+  investor_name: string | null;
   property_name: string | null;
   phone_number: string;
   body: string;

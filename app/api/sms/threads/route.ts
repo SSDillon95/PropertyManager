@@ -1,22 +1,30 @@
 import { jsonError, jsonOk } from "@/lib/api-helpers";
 import { archiveSmsThread, restoreSmsThread } from "@/lib/db";
+import type { SmsContactType } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
+
+function parseContactType(value: unknown): SmsContactType | null {
+  if (value === "tenant" || value === "investor") return value;
+  return null;
+}
 
 export async function PATCH(request: Request) {
   try {
     const body = await request.json();
     const phone = String(body.phone ?? "").trim();
+    const contactType = parseContactType(body.contact_type ?? body.contactType);
     if (!phone) return jsonError("Phone number is required.", 400);
+    if (!contactType) return jsonError("contact_type must be tenant or investor.", 400);
 
     if (body.archived === true) {
-      await archiveSmsThread(phone);
-      return jsonOk({ phone, archived: true });
+      await archiveSmsThread(phone, contactType);
+      return jsonOk({ phone, contact_type: contactType, archived: true });
     }
 
     if (body.archived === false) {
-      await restoreSmsThread(phone);
-      return jsonOk({ phone, archived: false });
+      await restoreSmsThread(phone, contactType);
+      return jsonOk({ phone, contact_type: contactType, archived: false });
     }
 
     return jsonError("archived must be true or false.", 400);
