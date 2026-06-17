@@ -2,6 +2,7 @@
 
 import { getPropertyFormSections } from "@/lib/columns";
 import { formatCellValue } from "@/lib/format";
+import { entryCodeButtonLabel } from "@/lib/property-entry-code";
 import type { ColumnDef } from "@/lib/columns";
 import type { Property } from "@/lib/types";
 
@@ -9,6 +10,7 @@ interface PropertyDetailPanelProps {
   property: Property;
   onCollapse: () => void;
   onEdit: () => void;
+  onEntryCode: () => void;
 }
 
 function PropertyFieldGrid({
@@ -38,6 +40,7 @@ export default function PropertyDetailPanel({
   property,
   onCollapse,
   onEdit,
+  onEntryCode,
 }: PropertyDetailPanelProps) {
   const sections = getPropertyFormSections();
 
@@ -59,6 +62,13 @@ export default function PropertyDetailPanel({
             className="text-xs px-3 py-1.5 rounded-lg border border-sky-600/60 bg-sky-950/40 text-sky-300 hover:bg-sky-900/50"
           >
             Edit
+          </button>
+          <button
+            type="button"
+            onClick={onEntryCode}
+            className="text-xs px-3 py-1.5 rounded-lg border border-red-600/60 bg-red-950/40 text-red-300 hover:bg-red-900/50"
+          >
+            {entryCodeButtonLabel(property.entry_code)}
           </button>
           <button
             type="button"

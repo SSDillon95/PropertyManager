@@ -15,6 +15,7 @@ import {
   nextCapitalId,
   nextPayoutSequence,
 } from "@/lib/investor-records";
+import { normalizeEntryCode } from "@/lib/property-entry-code";
 import {
   getColumnsForTab,
   getInvestorFormSections,
@@ -207,6 +208,11 @@ export default function PropertyManagerApp() {
   const [investorCapitalRows, setInvestorCapitalRows] = useState<InvestorPayout[]>([]);
   const [profitabilityProperty, setProfitabilityProperty] = useState<Property | null>(null);
   const [expandedProperty, setExpandedProperty] = useState<Property | null>(null);
+  const [entryCodeModal, setEntryCodeModal] = useState<{
+    property: Property;
+    draft: string;
+  } | null>(null);
+  const [entryCodeSaving, setEntryCodeSaving] = useState(false);
   const [sessionUser, setSessionUser] = useState<SessionUser | null>(null);
 
   const userRole = sessionUser?.role ?? "standard";
@@ -869,6 +875,62 @@ export default function PropertyManagerApp() {
     setExpandedProperty(null);
   };
 
+  const applyPropertyUpdate = (property: Property) => {
+    const saved = property as unknown as Record<string, unknown>;
+    setRows((prev) => prev.map((row) => (Number(row.id) === property.id ? saved : row)));
+    setProperties((prev) => prev.map((item) => (item.id === property.id ? property : item)));
+    if (expandedProperty?.id === property.id) {
+      setExpandedProperty(property);
+    }
+    if (entryCodeModal?.property.id === property.id) {
+      setEntryCodeModal((prev) =>
+        prev ? { ...prev, property, draft: property.entry_code ?? "" } : prev
+      );
+    }
+  };
+
+  const openEntryCodeModal = (row: Record<string, unknown>) => {
+    const property = row as unknown as Property;
+    setEntryCodeModal({
+      property,
+      draft: property.entry_code ?? "",
+    });
+  };
+
+  const closeEntryCodeModal = () => {
+    if (entryCodeSaving) return;
+    setEntryCodeModal(null);
+  };
+
+  const saveEntryCode = async () => {
+    if (!entryCodeModal) return;
+    let entryCode: string | null;
+    try {
+      entryCode = normalizeEntryCode(entryCodeModal.draft);
+    } catch (error) {
+      showMessage("error", (error as Error).message);
+      return;
+    }
+
+    setEntryCodeSaving(true);
+    try {
+      const res = await apiFetch(`/api/properties?id=${entryCodeModal.property.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ entry_code: entryCode }),
+      });
+      const json = await res.json();
+      if (!json.success) throw new Error(json.error || "Save failed");
+      applyPropertyUpdate(json.data as Property);
+      showMessage("success", entryCode ? "Entry code saved." : "Entry code cleared.");
+      setEntryCodeModal(null);
+    } catch (error) {
+      showMessage("error", (error as Error).message);
+    } finally {
+      setEntryCodeSaving(false);
+    }
+  };
+
   const handleTabChange = async (next: SheetTab) => {
     if (!canAccessTab(userRole, next)) {
       showMessage("error", "You do not have access to that section.");
@@ -877,6 +939,7 @@ export default function PropertyManagerApp() {
     setShowArchived(false);
     setFormOpen(false);
     setExpandedProperty(null);
+    setEntryCodeModal(null);
     setCapitalBusinessConfirm(null);
     closeManagementMenu();
     closeInvestorMenu();
@@ -1503,6 +1566,66 @@ export default function PropertyManagerApp() {
       )}
       </div>
 
+      {entryCodeModal && (
+        <div
+          className="fixed inset-0 z-[200] flex items-center justify-center bg-black/70 p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="entry-code-modal-title"
+        >
+          <div className="w-full max-w-md rounded-xl border-2 border-red-600 bg-zinc-900 shadow-2xl overflow-hidden">
+            <div className="bg-red-950 px-5 py-4 border-b border-red-700">
+              <h3 id="entry-code-modal-title" className="text-lg font-semibold text-red-300">
+                Entry Code
+              </h3>
+              <p className="text-sm text-red-200/80 mt-1">{entryCodeModal.property.property_name}</p>
+            </div>
+            <div className="px-5 py-4 space-y-3">
+              <label className="block">
+                <span className="text-xs font-semibold uppercase tracking-wide text-amber-400 mb-1 block">
+                  Numeric Code
+                </span>
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  pattern="[0-9]*"
+                  value={entryCodeModal.draft}
+                  onChange={(e) =>
+                    setEntryCodeModal((prev) =>
+                      prev ? { ...prev, draft: e.target.value.replace(/\D/g, "") } : prev
+                    )
+                  }
+                  className="form-field"
+                  placeholder="Enter numeric entry code"
+                  autoFocus
+                />
+              </label>
+              <p className="text-xs text-zinc-400">
+                Leave blank and save to clear the entry code for this property.
+              </p>
+            </div>
+            <div className="flex justify-end gap-2 px-5 pb-5">
+              <button
+                type="button"
+                onClick={closeEntryCodeModal}
+                disabled={entryCodeSaving}
+                className="px-4 py-2 rounded-lg border border-zinc-600 bg-zinc-800 text-zinc-200 text-sm hover:bg-zinc-700 disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={saveEntryCode}
+                disabled={entryCodeSaving}
+                className="px-4 py-2 rounded-lg bg-red-600 hover:bg-red-500 text-white text-sm font-medium disabled:opacity-50"
+              >
+                {entryCodeSaving ? "Saving..." : "Save"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {capitalBusinessConfirm && (
         <div
           className="fixed inset-0 z-[200] flex items-center justify-center bg-black/70 p-4"
@@ -1806,6 +1929,7 @@ export default function PropertyManagerApp() {
                   property={expandedProperty}
                   onCollapse={() => setExpandedProperty(null)}
                   onEdit={() => openEditForm(expandedProperty as unknown as Record<string, unknown>)}
+                  onEntryCode={() => openEntryCodeModal(expandedProperty as unknown as Record<string, unknown>)}
                 />
               )}
               <SpreadsheetTable
@@ -1825,6 +1949,9 @@ export default function PropertyManagerApp() {
                 showEdit={!showArchived}
                 onEdit={openEditForm}
                 editingId={editingId}
+                showEntryCode={tab === "properties" && !showArchived}
+                onEntryCode={openEntryCodeModal}
+                entryCodeActionId={entryCodeSaving ? entryCodeModal?.property.id ?? null : null}
               />
               {tab === "investor_capital" && !showArchived && investorPayoutTableSummaries.length > 0 && (
                 <div className="mt-5 space-y-3">

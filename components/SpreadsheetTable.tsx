@@ -2,6 +2,7 @@
 
 import type { ColumnDef } from "@/lib/columns";
 import { formatCellValue } from "@/lib/format";
+import { entryCodeButtonLabel } from "@/lib/property-entry-code";
 
 interface SpreadsheetTableProps {
   columns: ColumnDef[];
@@ -20,6 +21,9 @@ interface SpreadsheetTableProps {
   showEdit?: boolean;
   onEdit?: (row: Record<string, unknown>) => void;
   editingId?: number | null;
+  showEntryCode?: boolean;
+  onEntryCode?: (row: Record<string, unknown>) => void;
+  entryCodeActionId?: number | null;
 }
 
 export default function SpreadsheetTable({
@@ -39,6 +43,9 @@ export default function SpreadsheetTable({
   showEdit = false,
   onEdit,
   editingId = null,
+  showEntryCode = false,
+  onEntryCode,
+  entryCodeActionId = null,
 }: SpreadsheetTableProps) {
   if (rows.length === 0) {
     return (
@@ -72,7 +79,7 @@ export default function SpreadsheetTable({
               ))}
               <th
                 className={`px-3 py-2 text-left font-semibold text-xs uppercase tracking-wide ${
-                  showPrintForm || showEdit ? "min-w-[7.5rem]" : "min-w-[5.5rem]"
+                  showPrintForm || showEdit || showEntryCode ? "min-w-[9.5rem]" : "min-w-[5.5rem]"
                 }`}
               >
                 Actions
@@ -147,6 +154,20 @@ export default function SpreadsheetTable({
                           }`}
                         >
                           {editingId === Number(row.id) ? "..." : "Edit"}
+                        </button>
+                      )}
+                      {showEntryCode && (
+                        <button
+                          type="button"
+                          onClick={() => onEntryCode?.(row)}
+                          disabled={entryCodeActionId === Number(row.id)}
+                          className="text-xs px-2 py-1 rounded-md border border-red-600/60 bg-red-950/40 text-red-300 hover:bg-red-900/50 whitespace-nowrap disabled:opacity-50"
+                        >
+                          {entryCodeActionId === Number(row.id)
+                            ? "..."
+                            : entryCodeButtonLabel(
+                                typeof row.entry_code === "string" ? row.entry_code : null
+                              )}
                         </button>
                       )}
                       {showPrintForm && (

@@ -90,6 +90,7 @@ const SQLITE_SCHEMA = `
     monthly_rent REAL,
     status TEXT DEFAULT 'Vacant',
     notes TEXT,
+    entry_code TEXT,
     archived INTEGER NOT NULL DEFAULT 0,
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
   );
@@ -327,6 +328,7 @@ async function initSchema(): Promise<void> {
         monthly_rent REAL,
         status TEXT DEFAULT 'Vacant',
         notes TEXT,
+        entry_code TEXT,
         created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
       )
     `;
@@ -511,6 +513,7 @@ async function initSchema(): Promise<void> {
     await sql`ALTER TABLE properties ADD COLUMN IF NOT EXISTS insurance_carrier_name TEXT`;
     await sql`ALTER TABLE properties ADD COLUMN IF NOT EXISTS insurance_policy_number TEXT`;
     await sql`ALTER TABLE properties ADD COLUMN IF NOT EXISTS attorney TEXT`;
+    await sql`ALTER TABLE properties ADD COLUMN IF NOT EXISTS entry_code TEXT`;
     await sql`ALTER TABLE tenants ADD COLUMN IF NOT EXISTS archived BOOLEAN NOT NULL DEFAULT FALSE`;
     await sql`ALTER TABLE leases ADD COLUMN IF NOT EXISTS archived BOOLEAN NOT NULL DEFAULT FALSE`;
     await sql`ALTER TABLE rent_payments ADD COLUMN IF NOT EXISTS archived BOOLEAN NOT NULL DEFAULT FALSE`;
@@ -575,6 +578,7 @@ async function initSchema(): Promise<void> {
     db.exec("ALTER TABLE properties ADD COLUMN insurance_policy_number TEXT");
   }
   if (!hasCol("attorney")) db.exec("ALTER TABLE properties ADD COLUMN attorney TEXT");
+  if (!hasCol("entry_code")) db.exec("ALTER TABLE properties ADD COLUMN entry_code TEXT");
   if (hasCol("property_id") && hasCol("legal_id")) {
     db.exec(
       "UPDATE properties SET legal_id = property_id WHERE legal_id IS NULL AND property_id IS NOT NULL"
@@ -800,6 +804,7 @@ function mapProperty(row: Record<string, unknown>): Property {
     monthly_rent: num(row.monthly_rent),
     status: String(row.status ?? "Vacant"),
     notes: str(row.notes),
+    entry_code: str(row.entry_code),
     created_at: String(row.created_at),
   };
 }
@@ -1206,6 +1211,30 @@ export async function restoreProperty(id: number): Promise<void> {
   const db = await getSqliteDb();
   db.prepare("UPDATE properties SET archived = 0 WHERE id = ?").run(id);
   db.close();
+}
+
+export async function updatePropertyEntryCode(
+  id: number,
+  entry_code: string | null
+): Promise<Property> {
+  await ensureSchema();
+  if (usePostgres) {
+    const sql = await getPostgresSql();
+    const rows = await sql`
+      UPDATE properties SET entry_code = ${entry_code}
+      WHERE id = ${id}
+      RETURNING *
+    `;
+    if (!rows[0]) throw new Error("Property not found.");
+    return mapProperty(rows[0] as Record<string, unknown>);
+  }
+  const db = await getSqliteDb();
+  const row = db
+    .prepare("UPDATE properties SET entry_code = ? WHERE id = ? RETURNING *")
+    .get(entry_code, id);
+  db.close();
+  if (!row) throw new Error("Property not found.");
+  return mapProperty(row as Record<string, unknown>);
 }
 
 export async function listTenants(archived = false): Promise<Tenant[]> {

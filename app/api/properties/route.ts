@@ -4,7 +4,9 @@ import {
   listProperties,
   restoreProperty,
   updateProperty,
+  updatePropertyEntryCode,
 } from "@/lib/db";
+import { normalizeEntryCode } from "@/lib/property-entry-code";
 import {
   handleRoute,
   jsonError,
@@ -62,6 +64,7 @@ export async function POST(request: Request) {
       monthly_rent: body.monthly_rent != null ? Number(body.monthly_rent) : null,
       status: String(body.status ?? "Vacant"),
       notes: body.notes ?? null,
+      entry_code: null,
     });
     return jsonOk(property, 201);
   } catch (error) {
@@ -113,6 +116,7 @@ export async function PUT(request: Request) {
       monthly_rent: body.monthly_rent != null ? Number(body.monthly_rent) : null,
       status: String(body.status ?? "Vacant"),
       notes: body.notes ?? null,
+      entry_code: null,
     });
     return jsonOk(property);
   } catch (error) {
@@ -135,6 +139,15 @@ export async function PATCH(request: Request) {
   try {
     const id = parseIdParam(request);
     if (!id) return jsonError("Property id is required.");
+    const rawBody = await request.text();
+    if (rawBody.trim()) {
+      const body = JSON.parse(rawBody) as { entry_code?: string | null };
+      if (Object.prototype.hasOwnProperty.call(body, "entry_code")) {
+        const entryCode = normalizeEntryCode(body.entry_code ?? "");
+        const property = await updatePropertyEntryCode(id, entryCode);
+        return jsonOk(property);
+      }
+    }
     await restoreProperty(id);
     return jsonOk({ restored: true });
   } catch (error) {

@@ -77,6 +77,7 @@ export interface Property {
   monthly_rent: number | null;
   status: string;
   notes: string | null;
+  entry_code: string | null;
   created_at: string;
 }
 
