@@ -8,6 +8,7 @@ import AvailableView from "@/components/AvailableView";
 import MultiSelectFilter from "@/components/MultiSelectFilter";
 import PropertyDetailPanel from "@/components/PropertyDetailPanel";
 import ReportsView from "@/components/ReportsView";
+import SmsSetupView from "@/components/SmsSetupView";
 import SpreadsheetTable from "@/components/SpreadsheetTable";
 import { loanSummaryFromPayout } from "@/lib/investor-payout-summary";
 import {
@@ -61,13 +62,22 @@ function apiFetch(input: RequestInfo | URL, init?: RequestInit) {
   return fetch(input, { cache: "no-store", ...init });
 }
 
-const VIEW_ONLY_TABS: SheetTab[] = ["dashboard", "reports", "communication", "available"];
+const VIEW_ONLY_TABS: SheetTab[] = [
+  "dashboard",
+  "reports",
+  "communication",
+  "available",
+  "sms_setup",
+];
 
 function isViewOnlyTab(tab: SheetTab): boolean {
   return VIEW_ONLY_TABS.includes(tab);
 }
 
-type DataTab = Exclude<SheetTab, "dashboard" | "reports" | "communication" | "available">;
+type DataTab = Exclude<
+  SheetTab,
+  "dashboard" | "reports" | "communication" | "available" | "sms_setup"
+>;
 
 function asDataTab(tab: SheetTab): DataTab {
   return tab as DataTab;
@@ -477,6 +487,10 @@ export default function PropertyManagerApp() {
       }
       if (activeTab === "communication") {
         await Promise.all([loadTenants(), loadRentPayments(), loadMaintenanceRows()]);
+        setRows([]);
+        return;
+      }
+      if (activeTab === "sms_setup") {
         setRows([]);
         return;
       }
@@ -1819,6 +1833,8 @@ export default function PropertyManagerApp() {
             leases={leases}
             onPropertySelect={openPropertyDetail}
           />
+        ) : tab === "sms_setup" ? (
+          <SmsSetupView onNotify={showMessage} />
         ) : (
           <div className="space-y-6">
             {!showArchived && formOpen && (

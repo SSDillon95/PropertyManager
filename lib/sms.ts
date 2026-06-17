@@ -1,6 +1,7 @@
-import { createSmsMessage } from "./db";
+import { createSmsMessage, getSmsSettings } from "./db";
+import { credentialsFromSettings } from "./sms-setup";
 import { normalizePhoneNumber } from "./sms-utils";
-import type { SmsMessage, SmsMessageType } from "./types";
+import type { SmsConfigSource, SmsMessage, SmsMessageType } from "./types";
 
 export {
   buildMaintenanceMessage,
@@ -17,25 +18,35 @@ export {
 export interface SmsConfig {
   configured: boolean;
   fromNumber: string | null;
+  source: SmsConfigSource;
 }
 
-export function getSmsConfig(): SmsConfig {
-  const accountSid = process.env.TWILIO_ACCOUNT_SID?.trim();
-  const authToken = process.env.TWILIO_AUTH_TOKEN?.trim();
-  const fromNumber = process.env.TWILIO_PHONE_NUMBER?.trim() ?? null;
+export async function resolveSmsCredentials(): Promise<{
+  accountSid: string | null;
+  authToken: string | null;
+  fromNumber: string | null;
+  source: SmsConfigSource;
+}> {
+  const settings = await getSmsSettings();
+  return credentialsFromSettings(settings);
+}
+
+export async function getSmsConfig(): Promise<SmsConfig> {
+  const credentials = await resolveSmsCredentials();
   return {
-    configured: Boolean(accountSid && authToken && fromNumber),
-    fromNumber,
+    configured: Boolean(
+      credentials.accountSid && credentials.authToken && credentials.fromNumber
+    ),
+    fromNumber: credentials.fromNumber,
+    source: credentials.source,
   };
 }
 
 async function sendViaTwilio(to: string, body: string): Promise<{ sid: string }> {
-  const accountSid = process.env.TWILIO_ACCOUNT_SID?.trim();
-  const authToken = process.env.TWILIO_AUTH_TOKEN?.trim();
-  const from = process.env.TWILIO_PHONE_NUMBER?.trim();
+  const { accountSid, authToken, fromNumber: from } = await resolveSmsCredentials();
   if (!accountSid || !authToken || !from) {
     throw new Error(
-      "SMS is not configured. Set TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, and TWILIO_PHONE_NUMBER."
+      "SMS is not configured. Open SMS Setup from the gear menu and add your Twilio credentials."
     );
   }
 
@@ -75,7 +86,7 @@ export async function sendSmsMessage(input: SendSmsInput): Promise<SmsMessage> {
   const phone = normalizePhoneNumber(input.phone);
   if (!phone) throw new Error("A valid phone number is required.");
 
-  const config = getSmsConfig();
+  const config = await getSmsConfig();
   if (!config.configured) {
     return createSmsMessage({
       direction: "outbound",
@@ -90,7 +101,7 @@ export async function sendSmsMessage(input: SendSmsInput): Promise<SmsMessage> {
       related_id: input.related_id ?? null,
       related_type: input.related_type ?? null,
       error_message:
-        "SMS is not configured. Set TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, and TWILIO_PHONE_NUMBER.",
+        "SMS is not configured. Open SMS Setup from the gear menu and add your Twilio credentials.",
     });
   }
 

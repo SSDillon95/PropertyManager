@@ -4,12 +4,13 @@ import { getSmsConfig } from "@/lib/sms";
 
 export async function GET() {
   const messages = await listSmsMessages();
-  const config = getSmsConfig();
+  const config = await getSmsConfig();
   return jsonOk({
     messages,
     config: {
       configured: config.configured,
       fromNumber: config.fromNumber,
+      source: config.source,
     },
   });
 }

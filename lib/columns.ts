@@ -32,6 +32,7 @@ export const SETTINGS_TABS: { id: SheetTab; label: string }[] = [
   { id: "tenants", label: "Tenants" },
   { id: "investors", label: "Investor" },
   { id: "users", label: "User Setup" },
+  { id: "sms_setup", label: "SMS Setup" },
 ];
 
 export const INVESTOR_TABS: { id: SheetTab; label: string }[] = [
@@ -70,7 +71,8 @@ export function isSettingsTab(tab: SheetTab): boolean {
     tab === "businesses" ||
     tab === "tenants" ||
     tab === "investors" ||
-    tab === "users"
+    tab === "users" ||
+    tab === "sms_setup"
   );
 }
 
@@ -561,6 +563,7 @@ export function getColumnsForTab(tab: SheetTab): ColumnDef[] {
     case "dashboard":
     case "reports":
     case "communication":
+    case "sms_setup":
       return [];
     default:
       return [];

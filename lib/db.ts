@@ -12,6 +12,7 @@ import type {
   Property,
   RentPayment,
   SmsMessage,
+  SmsSettings,
   Tenant,
   UserRole,
 } from "./types";
@@ -258,6 +259,14 @@ const SQLITE_SCHEMA = `
     role TEXT NOT NULL DEFAULT 'standard',
     status TEXT NOT NULL DEFAULT 'Active',
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+
+  CREATE TABLE IF NOT EXISTS sms_settings (
+    id INTEGER PRIMARY KEY CHECK (id = 1),
+    account_sid TEXT,
+    auth_token TEXT,
+    phone_number TEXT,
+    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
   );
 `;
 
@@ -549,6 +558,15 @@ async function initSchema(): Promise<void> {
         created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
       )
     `;
+    await sql`
+      CREATE TABLE IF NOT EXISTS sms_settings (
+        id INTEGER PRIMARY KEY CHECK (id = 1),
+        account_sid TEXT,
+        auth_token TEXT,
+        phone_number TEXT,
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `;
     return;
   }
 
@@ -719,6 +737,20 @@ async function initSchema(): Promise<void> {
         role TEXT NOT NULL DEFAULT 'standard',
         status TEXT NOT NULL DEFAULT 'Active',
         created_at TEXT NOT NULL DEFAULT (datetime('now'))
+      )
+    `);
+  }
+  const smsSettingsTable = db
+    .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='sms_settings'")
+    .get();
+  if (!smsSettingsTable) {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS sms_settings (
+        id INTEGER PRIMARY KEY CHECK (id = 1),
+        account_sid TEXT,
+        auth_token TEXT,
+        phone_number TEXT,
+        updated_at TEXT NOT NULL DEFAULT (datetime('now'))
       )
     `);
   }
@@ -2274,6 +2306,82 @@ export async function listSmsMessages(phone?: string): Promise<SmsMessage[]> {
     : db.prepare("SELECT * FROM sms_messages ORDER BY created_at DESC").all();
   db.close();
   return rows.map((r) => mapSmsMessage(r as Record<string, unknown>));
+}
+
+function mapSmsSettings(row: Record<string, unknown>): SmsSettings {
+  return {
+    account_sid: row.account_sid != null ? String(row.account_sid) : null,
+    auth_token: row.auth_token != null ? String(row.auth_token) : null,
+    phone_number: row.phone_number != null ? String(row.phone_number) : null,
+    updated_at: String(row.updated_at),
+  };
+}
+
+export async function getSmsSettings(): Promise<SmsSettings | null> {
+  await ensureSchema();
+  if (usePostgres) {
+    const sql = await getPostgresSql();
+    const rows = await sql`SELECT * FROM sms_settings WHERE id = 1 LIMIT 1`;
+    if (!rows[0]) return null;
+    return mapSmsSettings(rows[0] as Record<string, unknown>);
+  }
+  const db = await getSqliteDb();
+  const row = db.prepare("SELECT * FROM sms_settings WHERE id = 1").get();
+  db.close();
+  return row ? mapSmsSettings(row as Record<string, unknown>) : null;
+}
+
+export async function upsertSmsSettings(data: {
+  account_sid: string;
+  auth_token?: string | null;
+  phone_number: string;
+}): Promise<SmsSettings> {
+  await ensureSchema();
+  const existing = await getSmsSettings();
+  const accountSid = data.account_sid.trim();
+  const phoneNumber = data.phone_number.trim();
+  const authToken = data.auth_token?.trim()
+    ? data.auth_token.trim()
+    : existing?.auth_token?.trim() ?? null;
+
+  if (!accountSid) throw new Error("Twilio Account SID is required.");
+  if (!phoneNumber) throw new Error("Twilio phone number is required.");
+  if (!authToken) throw new Error("Twilio Auth Token is required.");
+
+  if (usePostgres) {
+    const sql = await getPostgresSql();
+    const rows = await sql`
+      INSERT INTO sms_settings (id, account_sid, auth_token, phone_number, updated_at)
+      VALUES (1, ${accountSid}, ${authToken}, ${phoneNumber}, NOW())
+      ON CONFLICT (id) DO UPDATE SET
+        account_sid = EXCLUDED.account_sid,
+        auth_token = EXCLUDED.auth_token,
+        phone_number = EXCLUDED.phone_number,
+        updated_at = NOW()
+      RETURNING *
+    `;
+    return mapSmsSettings(rows[0] as Record<string, unknown>);
+  }
+
+  const db = await getSqliteDb();
+  const row = db
+    .prepare(
+      `INSERT INTO sms_settings (id, account_sid, auth_token, phone_number, updated_at)
+       VALUES (1, @account_sid, @auth_token, @phone_number, datetime('now'))
+       ON CONFLICT(id) DO UPDATE SET
+         account_sid = excluded.account_sid,
+         auth_token = excluded.auth_token,
+         phone_number = excluded.phone_number,
+         updated_at = datetime('now')
+       RETURNING *`
+    )
+    .get({
+      account_sid: accountSid,
+      auth_token: authToken,
+      phone_number: phoneNumber,
+    });
+  db.close();
+  return mapSmsSettings(row as Record<string, unknown>);
 }
 
 export async function createSmsMessage(

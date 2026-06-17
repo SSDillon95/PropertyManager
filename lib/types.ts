@@ -13,7 +13,8 @@ export type SheetTab =
   | "investor_capital"
   | "investor_payout"
   | "reports"
-  | "users";
+  | "users"
+  | "sms_setup";
 
 export type UserRole = "admin" | "standard";
 
@@ -224,6 +225,25 @@ export type SmsMessageType =
   | "maintenance_reply";
 export type SmsStatus = "queued" | "sent" | "delivered" | "failed" | "received";
 export type SmsRelatedType = "rent_payment" | "maintenance" | null;
+
+export interface SmsSettings {
+  account_sid: string | null;
+  auth_token: string | null;
+  phone_number: string | null;
+  updated_at: string;
+}
+
+export type SmsConfigSource = "database" | "environment" | "none";
+
+export interface SmsSetupStatus {
+  accountSid: string;
+  phoneNumber: string;
+  hasAuthToken: boolean;
+  configured: boolean;
+  webhookUrl: string;
+  configSource: SmsConfigSource;
+  updatedAt: string | null;
+}
 
 export interface SmsMessage {
   id: number;

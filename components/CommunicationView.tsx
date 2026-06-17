@@ -22,6 +22,7 @@ interface CommunicationViewProps {
 interface SmsConfig {
   configured: boolean;
   fromNumber: string | null;
+  source?: "database" | "environment" | "none";
 }
 
 interface ThreadView {
@@ -332,12 +333,10 @@ export default function CommunicationView({
 
       {!config.configured && (
         <div className="rounded-xl border border-amber-700/60 bg-amber-950/30 px-4 py-3 text-sm text-amber-200">
-          SMS is not configured. Set{" "}
-          <code className="text-amber-100">TWILIO_ACCOUNT_SID</code>,{" "}
-          <code className="text-amber-100">TWILIO_AUTH_TOKEN</code>, and{" "}
-          <code className="text-amber-100">TWILIO_PHONE_NUMBER</code> in your environment.
-          Outbound texts will be logged but not delivered until configured. Inbound replies require
-          the Twilio webhook pointed at <code className="text-amber-100">/api/sms/webhook</code>.
+          SMS is not configured. Open <span className="text-amber-100">SMS Setup</span> from the
+          gear menu and add your Twilio Account SID, Auth Token, and phone number. Outbound texts
+          will be logged but not delivered until configured. Inbound replies require the Twilio
+          webhook URL shown in SMS Setup.
         </div>
       )}
 

@@ -6,6 +6,7 @@ export const ADMIN_ONLY_TABS: SheetTab[] = [
   "investor_payout",
   "reports",
   "users",
+  "sms_setup",
 ];
 
 export function isAdminRole(role: UserRole): boolean {
@@ -25,6 +26,7 @@ export function settingsTabsForRole(role: UserRole): { id: SheetTab; label: stri
   if (isAdminRole(role)) {
     tabs.push({ id: "investors", label: "Investor" });
     tabs.push({ id: "users", label: "User Setup" });
+    tabs.push({ id: "sms_setup", label: "SMS Setup" });
   }
   return tabs;
 }
