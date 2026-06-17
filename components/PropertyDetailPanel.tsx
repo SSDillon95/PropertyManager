@@ -1,7 +1,8 @@
 "use client";
 
-import { PROPERTY_COLUMNS } from "@/lib/columns";
+import { getPropertyFormSections } from "@/lib/columns";
 import { formatCellValue } from "@/lib/format";
+import type { ColumnDef } from "@/lib/columns";
 import type { Property } from "@/lib/types";
 
 interface PropertyDetailPanelProps {
@@ -10,11 +11,36 @@ interface PropertyDetailPanelProps {
   onEdit: () => void;
 }
 
+function PropertyFieldGrid({
+  columns,
+  property,
+}: {
+  columns: ColumnDef[];
+  property: Property;
+}) {
+  return (
+    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+      {columns.map((col) => (
+        <div key={col.key} className="min-w-0">
+          <div className="text-xs font-semibold uppercase tracking-wide text-amber-400 mb-1">
+            {col.label}
+          </div>
+          <div className="text-sm text-zinc-100 break-words">
+            {formatCellValue(property[col.key as keyof Property], col.type) || "—"}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export default function PropertyDetailPanel({
   property,
   onCollapse,
   onEdit,
 }: PropertyDetailPanelProps) {
+  const sections = getPropertyFormSections();
+
   return (
     <section className="rounded-xl border border-emerald-600/40 bg-zinc-800/95 p-4 sm:p-6 mb-4">
       <div className="flex items-start justify-between gap-3 mb-4">
@@ -43,20 +69,25 @@ export default function PropertyDetailPanel({
           </button>
         </div>
       </div>
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-        {PROPERTY_COLUMNS.map((col) => (
-          <div key={col.key} className="min-w-0">
-            <div className="text-xs font-semibold uppercase tracking-wide text-amber-400 mb-1">
-              {col.label}
-            </div>
-            <div className="text-sm text-zinc-100 break-words">
-              {formatCellValue(
-                property[col.key as keyof Property],
-                col.type
-              ) || "—"}
-            </div>
-          </div>
-        ))}
+      <div className="space-y-5">
+        <div className="rounded-xl border-2 border-emerald-700/50 bg-zinc-900/40 p-4 sm:p-5">
+          <h4 className="text-xs font-semibold uppercase tracking-wide text-emerald-300 mb-4">
+            Property Information
+          </h4>
+          <PropertyFieldGrid columns={sections.informationColumns} property={property} />
+        </div>
+        <div className="rounded-xl border border-zinc-600/70 bg-zinc-800/50 p-4 sm:p-5">
+          <h4 className="text-xs font-semibold uppercase tracking-wide text-zinc-400 mb-4">
+            Property Cost
+          </h4>
+          <PropertyFieldGrid columns={sections.costColumns} property={property} />
+        </div>
+        <div className="rounded-xl border border-zinc-600/70 bg-zinc-800/50 p-4 sm:p-5">
+          <h4 className="text-xs font-semibold uppercase tracking-wide text-zinc-400 mb-4">
+            Financial
+          </h4>
+          <PropertyFieldGrid columns={sections.financialColumns} property={property} />
+        </div>
       </div>
     </section>
   );

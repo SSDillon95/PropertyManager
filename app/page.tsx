@@ -18,6 +18,7 @@ import {
 import {
   getColumnsForTab,
   getInvestorFormSections,
+  getPropertyFormSections,
   isInvestorTab,
   isManagementTab,
   isSettingsTab,
@@ -226,6 +227,12 @@ export default function PropertyManagerApp() {
   const investorFormSections = useMemo(() => {
     if (tab === "investor_capital" || tab === "investor_payout") {
       return getInvestorFormSections(tab);
+    }
+    return null;
+  }, [tab]);
+  const propertyFormSections = useMemo(() => {
+    if (tab === "properties") {
+      return getPropertyFormSections();
     }
     return null;
   }, [tab]);
@@ -1633,6 +1640,33 @@ export default function PropertyManagerApp() {
                       </h3>
                       <div className={formGridClass}>
                         {investorFormSections.autoColumns.map((col) => renderFormField(col))}
+                      </div>
+                    </div>
+                  </div>
+                ) : propertyFormSections ? (
+                  <div className="space-y-5">
+                    <div className="rounded-xl border-2 border-emerald-700/50 bg-zinc-900/40 p-4 sm:p-5">
+                      <h3 className="text-xs font-semibold uppercase tracking-wide text-emerald-300 mb-4">
+                        Property Information
+                      </h3>
+                      <div className={formGridClass}>
+                        {propertyFormSections.informationColumns.map((col) => renderFormField(col))}
+                      </div>
+                    </div>
+                    <div className="rounded-xl border border-zinc-600/70 bg-zinc-800/50 p-4 sm:p-5">
+                      <h3 className="text-xs font-semibold uppercase tracking-wide text-zinc-400 mb-4">
+                        Property Cost
+                      </h3>
+                      <div className={formGridClass}>
+                        {propertyFormSections.costColumns.map((col) => renderFormField(col))}
+                      </div>
+                    </div>
+                    <div className="rounded-xl border border-zinc-600/70 bg-zinc-800/50 p-4 sm:p-5">
+                      <h3 className="text-xs font-semibold uppercase tracking-wide text-zinc-400 mb-4">
+                        Financial
+                      </h3>
+                      <div className={formGridClass}>
+                        {propertyFormSections.financialColumns.map((col) => renderFormField(col))}
                       </div>
                     </div>
                   </div>

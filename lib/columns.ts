@@ -97,7 +97,7 @@ export const BUSINESS_COLUMNS: ColumnDef[] = [
   { key: "notes", label: "Notes", type: "text", width: "200px" },
 ];
 
-export const PROPERTY_COLUMNS: ColumnDef[] = [
+const PROPERTY_COLUMN_DEFS: ColumnDef[] = [
   { key: "legal_id", label: "Legal ID", type: "text", required: true, width: "100px" },
   { key: "business_name", label: "Business", type: "business", width: "160px" },
   { key: "property_name", label: "Property Name", type: "text", required: true, width: "160px" },
@@ -119,6 +119,17 @@ export const PROPERTY_COLUMNS: ColumnDef[] = [
   { key: "bathrooms", label: "Bathrooms", type: "number", width: "90px" },
   { key: "sq_ft", label: "Sq Ft", type: "number", width: "80px" },
   { key: "year_built", label: "Year Built", type: "number", width: "90px" },
+  {
+    key: "status",
+    label: "Status",
+    type: "select",
+    options: ["Occupied", "Vacant", "Under Renovation", "For Sale"],
+    width: "130px",
+  },
+  { key: "insurance_carrier_name", label: "Insurance Carrier Name", type: "text", width: "160px" },
+  { key: "insurance_policy_number", label: "Insurance Policy Number", type: "text", width: "160px" },
+  { key: "attorney", label: "Attorney", type: "text", width: "150px" },
+  { key: "notes", label: "Notes", type: "text", width: "200px" },
   { key: "purchase_date", label: "Purchase Date", type: "date", width: "120px" },
   { key: "purchase_price", label: "Purchase Price", type: "currency", width: "120px" },
   { key: "rehab_amount", label: "Rehab Amount", type: "currency", width: "120px" },
@@ -129,20 +140,65 @@ export const PROPERTY_COLUMNS: ColumnDef[] = [
   { key: "monthly_mortgage", label: "Monthly Mortgage", type: "currency", width: "130px" },
   { key: "annual_property_tax", label: "Annual Property Tax", type: "currency", width: "140px" },
   { key: "annual_insurance", label: "Annual Insurance", type: "currency", width: "130px" },
-  { key: "insurance_carrier_name", label: "Insurance Carrier Name", type: "text", width: "160px" },
-  { key: "insurance_policy_number", label: "Insurance Policy Number", type: "text", width: "160px" },
-  { key: "attorney", label: "Attorney", type: "text", width: "150px" },
-  { key: "monthly_hoa", label: "Monthly HOA", type: "currency", width: "110px" },
   { key: "monthly_rent", label: "Monthly Rent", type: "currency", width: "120px" },
-  {
-    key: "status",
-    label: "Status",
-    type: "select",
-    options: ["Occupied", "Vacant", "Under Renovation", "For Sale"],
-    width: "130px",
-  },
-  { key: "notes", label: "Notes", type: "text", width: "200px" },
 ];
+
+const PROPERTY_INFORMATION_KEYS = [
+  "legal_id",
+  "business_name",
+  "property_name",
+  "address",
+  "city",
+  "state",
+  "zip",
+  "property_type",
+  "units",
+  "bedrooms",
+  "bathrooms",
+  "sq_ft",
+  "year_built",
+  "lien_holder",
+  "account_number",
+  "insurance_carrier_name",
+  "insurance_policy_number",
+  "attorney",
+  "status",
+  "notes",
+] as const;
+
+const PROPERTY_COST_KEYS = [
+  "purchase_date",
+  "purchase_price",
+  "rehab_amount",
+  "rehab_price",
+] as const;
+
+const PROPERTY_FINANCIAL_KEYS = [
+  "current_value",
+  "loan_amount",
+  "mortgage_balance",
+  "monthly_mortgage",
+  "annual_property_tax",
+  "annual_insurance",
+  "monthly_rent",
+] as const;
+
+export const PROPERTY_COLUMNS = orderColumnsByKeys(
+  [...PROPERTY_INFORMATION_KEYS, ...PROPERTY_COST_KEYS, ...PROPERTY_FINANCIAL_KEYS],
+  PROPERTY_COLUMN_DEFS
+);
+
+export function getPropertyFormSections(): {
+  informationColumns: ColumnDef[];
+  costColumns: ColumnDef[];
+  financialColumns: ColumnDef[];
+} {
+  return {
+    informationColumns: orderColumnsByKeys(PROPERTY_INFORMATION_KEYS, PROPERTY_COLUMN_DEFS),
+    costColumns: orderColumnsByKeys(PROPERTY_COST_KEYS, PROPERTY_COLUMN_DEFS),
+    financialColumns: orderColumnsByKeys(PROPERTY_FINANCIAL_KEYS, PROPERTY_COLUMN_DEFS),
+  };
+}
 
 export const TENANT_COLUMNS: ColumnDef[] = [
   { key: "tenant_id", label: "Tenant ID", type: "text", required: true, width: "100px" },
