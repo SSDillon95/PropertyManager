@@ -5,7 +5,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import InvestorPayoutSummaryPanel from "@/components/InvestorPayoutSummaryPanel";
 import CommunicationView from "@/components/CommunicationView";
 import AvailableView from "@/components/AvailableView";
-import MultiSelectFilter from "@/components/MultiSelectFilter";
+import PropertyFilters from "@/components/PropertyFilters";
 import PropertyDetailPanel from "@/components/PropertyDetailPanel";
 import ReportsView from "@/components/ReportsView";
 import GmailSetupView from "@/components/GmailSetupView";
@@ -42,7 +42,15 @@ import {
   navTabsAfterManagementForRole,
   settingsTabsForRole,
 } from "@/lib/permissions";
-import { formatCurrency, todayIso } from "@/lib/format";
+import {
+  CURRENCY_PLACEHOLDER,
+  formatCurrency,
+  formatCurrencyInput,
+  normalizeCurrencyInput,
+  parseCurrencyValue,
+  sanitizeCurrencyTyping,
+  todayIso,
+} from "@/lib/format";
 import { requestReportPdf } from "@/lib/pdf-client";
 import { propertyProfitability } from "@/lib/profitability";
 import { rentDetailsForProperty, tenantDisplayName } from "@/lib/rent-ledger";
@@ -163,6 +171,8 @@ function rowToForm(
     const value = row[col.key];
     if (value == null || value === "") {
       form[col.key] = "";
+    } else if (col.type === "currency") {
+      form[col.key] = formatCurrencyInput(value as number | string);
     } else {
       form[col.key] = String(value);
     }
@@ -181,7 +191,9 @@ function payloadFromForm(
       payload[col.key] = null;
       continue;
     }
-    if (col.type === "number" || col.type === "currency") {
+    if (col.type === "currency") {
+      payload[col.key] = parseCurrencyValue(raw);
+    } else if (col.type === "number") {
       payload[col.key] = Number(raw);
     } else {
       payload[col.key] = raw;
@@ -210,9 +222,7 @@ export default function PropertyManagerApp() {
   const [propertyBusinessFilter, setPropertyBusinessFilter] = useState<string[]>([]);
   const [propertyTypeFilter, setPropertyTypeFilter] = useState<string[]>([]);
   const [propertyStatusFilter, setPropertyStatusFilter] = useState<string[]>([]);
-  const [openPropertyFilter, setOpenPropertyFilter] = useState<
-    "business" | "type" | "status" | null
-  >(null);
+  const [propertyFilterOpen, setPropertyFilterOpen] = useState(false);
   const propertyFiltersRef = useRef<HTMLDivElement>(null);
   const [capitalBusinessFilter, setCapitalBusinessFilter] = useState("");
   const [capitalBusinessConfirm, setCapitalBusinessConfirm] = useState<{
@@ -607,7 +617,7 @@ export default function PropertyManagerApp() {
       setForm((prev) => ({
         ...prev,
         property_name: propertyName,
-        rent_due: rentDue != null ? String(rentDue) : "",
+        rent_due: rentDue != null ? formatCurrencyInput(rentDue) : "",
         tenant_name: tenantName,
         unit: unit ?? "",
       }));
@@ -987,14 +997,14 @@ export default function PropertyManagerApp() {
   }, [closeSettingsMenu, settingsMenuOpen, updateSettingsMenuPosition]);
 
   useEffect(() => {
-    if (!openPropertyFilter) return;
+    if (!propertyFilterOpen) return;
     const handleClickOutside = (event: MouseEvent) => {
       if (propertyFiltersRef.current?.contains(event.target as Node)) return;
-      setOpenPropertyFilter(null);
+      setPropertyFilterOpen(false);
     };
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, [openPropertyFilter]);
+  }, [propertyFilterOpen]);
 
   const togglePropertyFilter = (
     setter: React.Dispatch<React.SetStateAction<string[]>>,
@@ -1009,13 +1019,8 @@ export default function PropertyManagerApp() {
     setPropertyBusinessFilter([]);
     setPropertyTypeFilter([]);
     setPropertyStatusFilter([]);
-    setOpenPropertyFilter(null);
+    setPropertyFilterOpen(false);
   };
-
-  const hasActivePropertyFilters =
-    propertyBusinessFilter.length > 0 ||
-    propertyTypeFilter.length > 0 ||
-    propertyStatusFilter.length > 0;
 
   useEffect(() => {
     if (!isViewOnlyTab(tab)) {
@@ -1161,7 +1166,7 @@ export default function PropertyManagerApp() {
       setPropertyBusinessFilter([]);
       setPropertyTypeFilter([]);
       setPropertyStatusFilter([]);
-      setOpenPropertyFilter(null);
+      setPropertyFilterOpen(false);
     }
     if (next !== "investor_capital") setCapitalBusinessFilter("");
     setTab(next);
@@ -1508,16 +1513,58 @@ export default function PropertyManagerApp() {
             </option>
           ))}
         </select>
+      ) : col.type === "currency" ? (
+        <input
+          type="text"
+          inputMode="decimal"
+          value={
+            tab === "investor_payout" && col.key === "payout_id" && !editingId
+              ? nextPayoutIdPreview || form[col.key] || ""
+              : tab === "investor_capital" && col.key === "payout_id" && !editingId
+                ? nextCapitalIdPreview || form[col.key] || ""
+                : (form[col.key] ?? "")
+          }
+          readOnly={
+            (tab === "rent_ledger" &&
+              col.key === "tenant_name" &&
+              Boolean(form.property_name)) ||
+            (tab === "investor_payout" && col.key === "payout_id") ||
+            (tab === "investor_capital" && col.key === "payout_id") ||
+            (tab === "investor_capital" &&
+              (col.key === "business_address" || col.key === "property_address")) ||
+            (tab === "investor_payout" &&
+              col.key === "property_name" &&
+              Boolean(form.capital_id))
+          }
+          onChange={(e) =>
+            setForm((prev) => ({
+              ...prev,
+              [col.key]: sanitizeCurrencyTyping(e.target.value),
+            }))
+          }
+          onBlur={(e) =>
+            setForm((prev) => ({
+              ...prev,
+              [col.key]: normalizeCurrencyInput(e.target.value),
+            }))
+          }
+          placeholder={CURRENCY_PLACEHOLDER}
+          className={`form-field ${
+            (tab === "rent_ledger" && col.key === "tenant_name" && form.property_name) ||
+            (tab === "investor_payout" &&
+              (col.key === "payout_id" ||
+                (col.key === "property_name" && form.capital_id))) ||
+            (tab === "investor_capital" &&
+              (col.key === "payout_id" ||
+                col.key === "business_address" ||
+                col.key === "property_address"))
+              ? "text-zinc-400 cursor-not-allowed bg-zinc-700/50"
+              : ""
+          }`}
+        />
       ) : (
         <input
-          type={
-            col.type === "date"
-              ? "date"
-              : col.type === "number" || col.type === "currency"
-                ? "number"
-                : "text"
-          }
-          step={col.type === "currency" ? "0.01" : undefined}
+          type={col.type === "date" ? "date" : col.type === "number" ? "number" : "text"}
           value={
             tab === "investor_payout" && col.key === "payout_id" && !editingId
               ? nextPayoutIdPreview || form[col.key] || ""
@@ -2131,57 +2178,27 @@ export default function PropertyManagerApp() {
                 </h2>
                 <div className="flex items-center gap-2 flex-wrap">
                   {tab === "properties" && !showArchived && (
-                    <div
-                      ref={propertyFiltersRef}
-                      className="flex items-center gap-2 flex-wrap"
-                    >
-                      <MultiSelectFilter
-                        label="Filter by business"
-                        emptyLabel="All businesses"
-                        options={propertyBusinessOptions}
-                        selected={propertyBusinessFilter}
-                        onToggle={(value) =>
+                    <div ref={propertyFiltersRef}>
+                      <PropertyFilters
+                        businessOptions={propertyBusinessOptions}
+                        businessSelected={propertyBusinessFilter}
+                        onBusinessToggle={(value) =>
                           togglePropertyFilter(setPropertyBusinessFilter, value)
                         }
-                        onClear={() => setPropertyBusinessFilter([])}
-                        open={openPropertyFilter === "business"}
-                        onOpenChange={(open) =>
-                          setOpenPropertyFilter(open ? "business" : null)
+                        typeOptions={PROPERTY_TYPE_OPTIONS}
+                        typeSelected={propertyTypeFilter}
+                        onTypeToggle={(value) =>
+                          togglePropertyFilter(setPropertyTypeFilter, value)
                         }
-                        selectedCountLabel="businesses"
-                        minWidthClass="min-w-[10rem]"
+                        statusOptions={PROPERTY_STATUS_OPTIONS}
+                        statusSelected={propertyStatusFilter}
+                        onStatusToggle={(value) =>
+                          togglePropertyFilter(setPropertyStatusFilter, value)
+                        }
+                        onClearAll={clearAllPropertyFilters}
+                        open={propertyFilterOpen}
+                        onOpenChange={setPropertyFilterOpen}
                       />
-                      <MultiSelectFilter
-                        label="Filter by property type"
-                        emptyLabel="All property types"
-                        options={PROPERTY_TYPE_OPTIONS}
-                        selected={propertyTypeFilter}
-                        onToggle={(value) => togglePropertyFilter(setPropertyTypeFilter, value)}
-                        onClear={() => setPropertyTypeFilter([])}
-                        open={openPropertyFilter === "type"}
-                        onOpenChange={(open) => setOpenPropertyFilter(open ? "type" : null)}
-                        selectedCountLabel="types"
-                      />
-                      <MultiSelectFilter
-                        label="Filter by status"
-                        emptyLabel="All statuses"
-                        options={PROPERTY_STATUS_OPTIONS}
-                        selected={propertyStatusFilter}
-                        onToggle={(value) => togglePropertyFilter(setPropertyStatusFilter, value)}
-                        onClear={() => setPropertyStatusFilter([])}
-                        open={openPropertyFilter === "status"}
-                        onOpenChange={(open) => setOpenPropertyFilter(open ? "status" : null)}
-                        selectedCountLabel="statuses"
-                      />
-                      {hasActivePropertyFilters && (
-                        <button
-                          type="button"
-                          onClick={clearAllPropertyFilters}
-                          className="text-xs px-3 py-1.5 rounded-lg border border-amber-600/60 bg-amber-950/40 text-amber-300 hover:bg-amber-900/50 whitespace-nowrap"
-                        >
-                          Clear all filters
-                        </button>
-                      )}
                     </div>
                   )}
                   {tab === "investor_capital" && !showArchived && (
