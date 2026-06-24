@@ -1478,7 +1478,6 @@ export default function PropertyManagerApp() {
                 ? "Select property..."
                 : "No properties — add one in Properties tab"
             }
-            disabled={editingId != null}
             searchPlaceholder="Search properties..."
             emptyMessage="No properties match your search"
           />
