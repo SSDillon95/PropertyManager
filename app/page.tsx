@@ -718,9 +718,9 @@ export default function PropertyManagerApp() {
     setForm((prev) => ({ ...prev, [fieldKey]: propertyName }));
   };
 
-  const handlePropertyInvestorSelect = (investorName: string) => {
+  const applyPropertyInvestorFromProperty = (propertyName: string) => {
     if (tab !== "properties") return;
-    if (!investorName) {
+    if (!propertyName.trim()) {
       setForm((prev) => ({
         ...prev,
         investor_name: "",
@@ -728,20 +728,11 @@ export default function PropertyManagerApp() {
       }));
       return;
     }
-    setForm((prev) => ({
-      ...prev,
-      investor_name: investorName,
-      lien_holder: investorName,
-    }));
-  };
-
-  const applyPropertyInvestorFromProperty = (propertyName: string) => {
     const linkedInvestor = findInvestorByProperty(investors, propertyName);
-    if (!linkedInvestor) return;
     setForm((prev) => ({
       ...prev,
-      investor_name: linkedInvestor.investor_name,
-      lien_holder: linkedInvestor.investor_name,
+      investor_name: linkedInvestor?.investor_name ?? "",
+      lien_holder: linkedInvestor?.investor_name ?? "",
     }));
   };
 
@@ -1296,7 +1287,7 @@ export default function PropertyManagerApp() {
       ) {
         return false;
       }
-      if (tab === "properties" && c.key === "lien_holder") {
+      if (tab === "properties" && (c.key === "lien_holder" || c.key === "investor_name")) {
         return false;
       }
       if (tab === "investors" && c.key === "investor_id") {
@@ -1595,22 +1586,18 @@ export default function PropertyManagerApp() {
       ) : col.type === "investor" ? (
         <select
           value={form[col.key] ?? ""}
-          onChange={(e) => {
-            if (tab === "properties") {
-              handlePropertyInvestorSelect(e.target.value);
-              return;
-            }
-            setForm((prev) => ({ ...prev, [col.key]: e.target.value }));
-          }}
-          disabled={tab === "investor_payout" || tab === "investor_capital"}
+          onChange={(e) => setForm((prev) => ({ ...prev, [col.key]: e.target.value }))}
+          disabled={
+            tab === "investor_payout" || tab === "investor_capital" || tab === "properties"
+          }
           className={`form-select ${
-            tab === "investor_payout" || tab === "investor_capital"
+            tab === "investor_payout" || tab === "investor_capital" || tab === "properties"
               ? "text-zinc-400 cursor-not-allowed bg-zinc-700/50"
               : ""
           }`}
         >
           <option value="">
-            {tab === "investor_capital"
+            {tab === "investor_capital" || tab === "properties"
               ? form.property_name
                 ? "No investor linked to this property"
                 : "Auto-filled from property"
@@ -2236,9 +2223,9 @@ export default function PropertyManagerApp() {
                   )}
                   {tab === "properties" && (
                     <p className="text-xs text-zinc-400 mt-1">
-                      Assign each property to a business using the Business dropdown. Select an
-                      investor from the Investor tab to auto-fill Lien Holder. Add businesses and
-                      investors first if needed.
+                      Assign each property to a business using the Business dropdown. Investor and
+                      Lien Holder auto-fill from the investor linked to this property on the
+                      Investor tab.
                     </p>
                   )}
                   {tab === "investor_capital" && (
