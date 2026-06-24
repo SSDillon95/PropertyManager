@@ -10,6 +10,7 @@ import PropertyDetailPanel from "@/components/PropertyDetailPanel";
 import ReportsView from "@/components/ReportsView";
 import GmailSetupView from "@/components/GmailSetupView";
 import SmsSetupView from "@/components/SmsSetupView";
+import SearchableMultiSelect from "@/components/SearchableMultiSelect";
 import SearchableSelect from "@/components/SearchableSelect";
 import SpreadsheetTable from "@/components/SpreadsheetTable";
 import { loanSummaryFromPayout } from "@/lib/investor-payout-summary";
@@ -17,6 +18,8 @@ import {
   capitalOptionLabel,
   findInvestorByProperty,
   formatBusinessAddress,
+  formatInvestorPropertyNames,
+  parseInvestorPropertyNames,
   isCapitalRecord,
   nextCapitalId,
   nextInvestorId,
@@ -1509,6 +1512,30 @@ export default function PropertyManagerApp() {
             searchPlaceholder="Search properties..."
             emptyMessage="No properties match your search"
           />
+        ) : tab === "investors" ? (
+          <SearchableMultiSelect
+            values={parseInvestorPropertyNames(form[col.key])}
+            onChange={(selected) =>
+              setForm((prev) => ({
+                ...prev,
+                [col.key]: formatInvestorPropertyNames(selected),
+              }))
+            }
+            options={properties.map((property) => ({
+              value: property.property_name,
+              label: property.property_name,
+              sublabel: [property.address, property.city, property.state]
+                .filter(Boolean)
+                .join(", ") || undefined,
+            }))}
+            placeholder={
+              properties.length
+                ? "Select properties..."
+                : "No properties — add one in Properties tab"
+            }
+            searchPlaceholder="Search properties..."
+            emptyMessage="No properties match your search"
+          />
         ) : (
           <select
             value={form[col.key] ?? ""}
@@ -2230,6 +2257,7 @@ export default function PropertyManagerApp() {
                   {tab === "investors" && (
                     <p className="text-xs text-zinc-400 mt-1">
                       Investor ID is assigned automatically (1, 2, 3…) and cannot be changed.
+                      Select one or more properties from the searchable properties dropdown.
                     </p>
                   )}
                   {tab === "users" && (

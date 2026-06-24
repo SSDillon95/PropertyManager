@@ -413,7 +413,7 @@ export const INVESTOR_COLUMNS: ColumnDef[] = [
   { key: "city", label: "City", type: "text", width: "120px" },
   { key: "state", label: "State", type: "text", width: "70px" },
   { key: "zip", label: "ZIP", type: "text", width: "80px" },
-  { key: "property_name", label: "Property", type: "property", width: "150px" },
+  { key: "property_name", label: "Properties", type: "property", width: "180px" },
   { key: "ownership_pct", label: "Ownership %", type: "number", width: "100px" },
   {
     key: "status",

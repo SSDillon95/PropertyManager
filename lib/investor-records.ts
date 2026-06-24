@@ -1,7 +1,35 @@
 import type { Business, Investor, InvestorPayout, InvestorRecordKind } from "./types";
 
+export const INVESTOR_PROPERTY_SEPARATOR = ";";
+
 function normalizePropertyName(value: string | null | undefined): string {
   return value?.trim().toLowerCase() ?? "";
+}
+
+export function parseInvestorPropertyNames(value: string | null | undefined): string[] {
+  if (!value?.trim()) return [];
+  return value
+    .split(INVESTOR_PROPERTY_SEPARATOR)
+    .map((part) => part.trim())
+    .filter(Boolean);
+}
+
+export function formatInvestorPropertyNames(names: string[]): string {
+  return names
+    .map((name) => name.trim())
+    .filter(Boolean)
+    .join(`${INVESTOR_PROPERTY_SEPARATOR} `);
+}
+
+export function investorMatchesProperty(
+  investor: Pick<Investor, "property_name">,
+  propertyName: string
+): boolean {
+  const target = normalizePropertyName(propertyName);
+  if (!target) return false;
+  return parseInvestorPropertyNames(investor.property_name).some(
+    (name) => normalizePropertyName(name) === target
+  );
 }
 
 export function findInvestorByProperty(
@@ -12,9 +40,7 @@ export function findInvestorByProperty(
   if (!target) return null;
   return (
     investors.find(
-      (investor) =>
-        investor.status === "Active" &&
-        normalizePropertyName(investor.property_name) === target
+      (investor) => investor.status === "Active" && investorMatchesProperty(investor, propertyName)
     ) ?? null
   );
 }
