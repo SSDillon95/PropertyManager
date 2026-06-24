@@ -2292,21 +2292,46 @@ export default function PropertyManagerApp() {
 
             <section>
               <div className="flex items-center justify-between gap-3 mb-3 flex-wrap">
-                <h2 className="font-semibold text-lg">
-                  {showArchived ? "Archive — " : ""}
-                  {SHEET_TABS.find((s) => s.id === tab)?.label} ({tableRows.length}
-                  {((tab === "properties" &&
-                    (propertyBusinessFilter.length > 0 ||
-                      propertyTypeFilter.length > 0 ||
-                      propertyStatusFilter.length > 0 ||
-                      propertySearchQuery.trim().length > 0)) ||
-                    (tab === "investor_capital" && capitalBusinessFilter)) &&
-                  rows.length !== tableRows.length
-                    ? ` of ${rows.length}`
-                    : ""}
-                  )
-                </h2>
-                <div className="flex items-center gap-2 flex-wrap">
+                <div className="flex items-center gap-3 flex-wrap flex-1 min-w-0">
+                  <h2 className="font-semibold text-lg shrink-0">
+                    {showArchived ? "Archive — " : ""}
+                    {SHEET_TABS.find((s) => s.id === tab)?.label} ({tableRows.length}
+                    {((tab === "properties" &&
+                      (propertyBusinessFilter.length > 0 ||
+                        propertyTypeFilter.length > 0 ||
+                        propertyStatusFilter.length > 0 ||
+                        propertySearchQuery.trim().length > 0)) ||
+                      (tab === "investor_capital" && capitalBusinessFilter)) &&
+                    rows.length !== tableRows.length
+                      ? ` of ${rows.length}`
+                      : ""}
+                    )
+                  </h2>
+                  {tab === "properties" && (
+                    <label className="flex-1 min-w-[12rem] max-w-md">
+                      <span className="sr-only">Search properties</span>
+                      <div className="relative">
+                        <input
+                          type="search"
+                          value={propertySearchQuery}
+                          onChange={(event) => setPropertySearchQuery(event.target.value)}
+                          placeholder="Search all fields..."
+                          className="form-field py-1.5 h-9 pr-20 w-full"
+                        />
+                        {propertySearchQuery.trim().length > 0 && (
+                          <button
+                            type="button"
+                            onClick={() => setPropertySearchQuery("")}
+                            className="absolute right-2 top-1/2 -translate-y-1/2 text-xs px-2 py-1 rounded border border-zinc-600 text-zinc-300 hover:bg-zinc-700/80"
+                          >
+                            Clear
+                          </button>
+                        )}
+                      </div>
+                    </label>
+                  )}
+                </div>
+                <div className="flex items-center gap-2 flex-wrap shrink-0">
                   {tab === "properties" && !showArchived && (
                     <div ref={propertyFiltersRef}>
                       <PropertyFilters
@@ -2390,31 +2415,6 @@ export default function PropertyManagerApp() {
                   )}
                 </div>
               </div>
-              {tab === "properties" && (
-                <div className="mb-3">
-                  <label className="block">
-                    <span className="sr-only">Search properties</span>
-                    <div className="relative">
-                      <input
-                        type="search"
-                        value={propertySearchQuery}
-                        onChange={(event) => setPropertySearchQuery(event.target.value)}
-                        placeholder="Search all fields..."
-                        className="form-field pr-20"
-                      />
-                      {propertySearchQuery.trim().length > 0 && (
-                        <button
-                          type="button"
-                          onClick={() => setPropertySearchQuery("")}
-                          className="absolute right-2 top-1/2 -translate-y-1/2 text-xs px-2 py-1 rounded border border-zinc-600 text-zinc-300 hover:bg-zinc-700/80"
-                        >
-                          Clear
-                        </button>
-                      )}
-                    </div>
-                  </label>
-                </div>
-              )}
               {tab === "properties" && expandedProperty && (
                 <PropertyDetailPanel
                   property={expandedProperty}
