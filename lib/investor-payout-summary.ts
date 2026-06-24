@@ -86,7 +86,7 @@ export function computeInvestorPayoutLoanSummary(
   if (daysHeld == null) return null;
 
   const totalInterest12Months = round2(amountLoaned * annualRate);
-  const interestCostPerDayExact = totalInterest12Months / daysInYear;
+  const interestCostPerDayExact = (amountLoaned / daysInYear) * annualRate;
   const interestCostPerDay = round2(interestCostPerDayExact);
   const interestWithoutKicker = round2(interestCostPerDayExact * daysHeld);
   const kicker = round2(input.kicker ?? 0);

@@ -14,6 +14,7 @@ import SpreadsheetTable from "@/components/SpreadsheetTable";
 import { loanSummaryFromPayout } from "@/lib/investor-payout-summary";
 import {
   capitalOptionLabel,
+  findInvestorByProperty,
   formatBusinessAddress,
   isCapitalRecord,
   nextCapitalId,
@@ -373,6 +374,20 @@ export default function PropertyManagerApp() {
       (property) => property.business_name === form.business_name
     );
   }, [tab, form.business_name, properties]);
+  const capitalLinkedInvestor = useMemo(() => {
+    if (tab !== "investor_capital" || !form.property_name?.trim()) return null;
+    return findInvestorByProperty(investors, form.property_name);
+  }, [tab, form.property_name, investors]);
+  const capitalFormInvestors = useMemo(() => {
+    const active = investors.filter((investor) => investor.status === "Active");
+    if (tab !== "investor_capital" || !form.property_name?.trim()) return active;
+    const linked = active.filter(
+      (investor) =>
+        investor.property_name?.trim().toLowerCase() ===
+        form.property_name.trim().toLowerCase()
+    );
+    return linked.length > 0 ? linked : active;
+  }, [tab, form.property_name, investors]);
   const businessFilterOptions = useMemo(
     () =>
       businesses
@@ -653,10 +668,7 @@ export default function PropertyManagerApp() {
       const linkedBusiness = property?.business_name
         ? businesses.find((business) => business.business_name === property.business_name)
         : undefined;
-      const linkedInvestor = investors.find(
-        (investor) =>
-          investor.property_name === propertyName && investor.status === "Active"
-      );
+      const linkedInvestor = findInvestorByProperty(investors, propertyName);
       setForm((prev) => ({
         ...prev,
         property_name: propertyName,
@@ -665,7 +677,7 @@ export default function PropertyManagerApp() {
         business_address: linkedBusiness
           ? formatBusinessAddress(linkedBusiness)
           : prev.business_address,
-        investor_name: linkedInvestor?.investor_name ?? prev.investor_name,
+        investor_name: linkedInvestor?.investor_name ?? "",
       }));
       return;
     }
@@ -1050,6 +1062,7 @@ export default function PropertyManagerApp() {
 
   const openEntryForm = () => {
     setEditingId(null);
+    if (tab === "investor_capital") void loadInvestors();
     const nextForm = emptyForm(columns);
     if (tab === "investor_capital" || tab === "investor_payout") nextForm.days_in_year = "365";
     if (tab === "investor_capital" && capitalBusinessFilter) {
@@ -1474,17 +1487,25 @@ export default function PropertyManagerApp() {
         <select
           value={form[col.key] ?? ""}
           onChange={(e) => setForm((prev) => ({ ...prev, [col.key]: e.target.value }))}
-          disabled={tab === "investor_payout"}
+          disabled={
+            tab === "investor_payout" ||
+            (tab === "investor_capital" && Boolean(capitalLinkedInvestor))
+          }
           className={`form-select ${
-            tab === "investor_payout" ? "text-zinc-400 cursor-not-allowed bg-zinc-700/50" : ""
+            tab === "investor_payout" ||
+            (tab === "investor_capital" && Boolean(capitalLinkedInvestor))
+              ? "text-zinc-400 cursor-not-allowed bg-zinc-700/50"
+              : ""
           }`}
         >
           <option value="">
-            {investors.length
-              ? "Select investor..."
-              : "No investors — add one on the Investor tab"}
+            {tab === "investor_capital" && form.property_name && !capitalLinkedInvestor
+              ? "No investor linked to this property"
+              : (tab === "investor_capital" ? capitalFormInvestors : investors).length
+                ? "Select investor..."
+                : "No investors — add one on the Investor tab"}
           </option>
-          {investors
+          {(tab === "investor_capital" ? capitalFormInvestors : investors)
             .filter((investor) => investor.status === "Active")
             .map((investor) => (
               <option key={investor.id} value={investor.investor_name}>
@@ -2086,8 +2107,8 @@ export default function PropertyManagerApp() {
                   {tab === "investor_capital" && (
                     <p className="text-xs text-zinc-400 mt-1">
                       Select the business and property for this capital investment. Capital ID is
-                      assigned automatically. Property and addresses are populated from your
-                      selections and cannot be edited here.
+                      assigned automatically. Property, addresses, and the investor tied to that
+                      property are populated from your selections.
                     </p>
                   )}
                   {tab === "investor_payout" && (

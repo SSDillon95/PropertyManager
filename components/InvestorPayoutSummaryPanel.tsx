@@ -62,7 +62,7 @@ function SummaryGrid({ summary }: { summary: InvestorPayoutLoanSummary }) {
               <td className="px-3 py-2 text-right text-zinc-100">
                 {formatCurrency(summary.amount_loaned)}
               </td>
-              <td className="px-3 py-2 text-zinc-400">12 Months</td>
+              <td className="px-3 py-2 text-zinc-400">APR</td>
               <td className="px-3 py-2 text-right text-zinc-100">
                 {formatRate(summary.annual_interest_rate)}
               </td>
@@ -74,7 +74,12 @@ function SummaryGrid({ summary }: { summary: InvestorPayoutLoanSummary }) {
             <tr className="border-b border-zinc-700/60">
               <td className="px-3 py-2 text-zinc-400">Days in Year</td>
               <td className="px-3 py-2 text-right text-zinc-100">{summary.days_in_year}</td>
-              <td className="px-3 py-2 text-zinc-400">Interest Cost / Day</td>
+              <td className="px-3 py-2 text-zinc-400">
+                Interest Cost / Day
+                <span className="block text-[10px] text-zinc-500 font-normal">
+                  (Capital ÷ Days in Year) × APR
+                </span>
+              </td>
               <td className="px-3 py-2 text-right text-zinc-100">
                 {formatMoneyPrecise(summary.interest_cost_per_day)}
               </td>
@@ -122,7 +127,7 @@ export default function InvestorPayoutSummaryPanel({
       <div className="rounded-xl border border-zinc-600/60 bg-zinc-800/90 p-4">
         <h3 className="text-sm font-semibold text-emerald-300 mb-2">{title}</h3>
         <p className="text-sm text-zinc-400">
-          Enter capital received, 12-month rate (e.g. 12%), loan date, and sell estimate to
+          Enter capital received, APR (e.g. 12%), loan date, and sell estimate to
           calculate payout totals.
         </p>
       </div>

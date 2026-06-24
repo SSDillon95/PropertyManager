@@ -1,4 +1,23 @@
-import type { Business, InvestorPayout, InvestorRecordKind } from "./types";
+import type { Business, Investor, InvestorPayout, InvestorRecordKind } from "./types";
+
+function normalizePropertyName(value: string | null | undefined): string {
+  return value?.trim().toLowerCase() ?? "";
+}
+
+export function findInvestorByProperty(
+  investors: Investor[],
+  propertyName: string
+): Investor | null {
+  const target = normalizePropertyName(propertyName);
+  if (!target) return null;
+  return (
+    investors.find(
+      (investor) =>
+        investor.status === "Active" &&
+        normalizePropertyName(investor.property_name) === target
+    ) ?? null
+  );
+}
 
 export function isCapitalRecord(record: Pick<InvestorPayout, "record_kind">): boolean {
   return record.record_kind !== "payout";
