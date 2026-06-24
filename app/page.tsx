@@ -19,6 +19,8 @@ import {
   findInvestorByProperty,
   formatBusinessAddress,
   formatInvestorPropertyNames,
+  getClaimedInvestorPropertyNames,
+  isInvestorPropertyClaimed,
   parseInvestorPropertyNames,
   isCapitalRecord,
   nextCapitalId,
@@ -407,6 +409,10 @@ export default function PropertyManagerApp() {
     if (tab !== "investor_capital" || editingId != null) return "";
     return String(nextCapitalId(rows.map((row) => row as unknown as InvestorPayout)));
   }, [tab, editingId, rows]);
+  const investorClaimedProperties = useMemo(() => {
+    if (tab !== "investors") return new Set<string>();
+    return getClaimedInvestorPropertyNames(investors, editingId);
+  }, [tab, investors, editingId]);
   const nextInvestorIdPreview = useMemo(() => {
     if (tab !== "investors" || editingId != null) return "";
     const byInvestorId = new Map<string, Pick<Investor, "investor_id">>();
@@ -1119,6 +1125,9 @@ export default function PropertyManagerApp() {
   const openEditForm = async (row: Record<string, unknown>) => {
     setEditingId(Number(row.id));
     const nextForm = rowToForm(row, columns);
+    if (tab === "investors") {
+      await loadInvestors(true);
+    }
     if (tab === "properties") {
       const investorRows = investors.length > 0 ? investors : await loadInvestors();
       const linkedInvestor = findInvestorByProperty(investorRows, nextForm.property_name);
@@ -1512,13 +1521,21 @@ export default function PropertyManagerApp() {
                 [col.key]: formatInvestorPropertyNames(selected),
               }))
             }
-            options={properties.map((property) => ({
-              value: property.property_name,
-              label: property.property_name,
-              sublabel: [property.address, property.city, property.state]
-                .filter(Boolean)
-                .join(", ") || undefined,
-            }))}
+            options={properties.map((property) => {
+              const claimed = isInvestorPropertyClaimed(
+                investorClaimedProperties,
+                property.property_name
+              );
+              return {
+                value: property.property_name,
+                label: property.property_name,
+                sublabel: [property.address, property.city, property.state]
+                  .filter(Boolean)
+                  .join(", ") || undefined,
+                disabled: claimed,
+                disabledReason: claimed ? "Linked to another investor" : undefined,
+              };
+            })}
             placeholder={
               properties.length
                 ? "Select properties..."
@@ -2244,7 +2261,8 @@ export default function PropertyManagerApp() {
                   {tab === "investors" && (
                     <p className="text-xs text-zinc-400 mt-1">
                       Investor ID is assigned automatically (1, 2, 3…) and cannot be changed.
-                      Select one or more properties from the searchable properties dropdown.
+                      Select one or more properties; properties already linked to another investor
+                      are grayed out and cannot be selected.
                     </p>
                   )}
                   {tab === "users" && (

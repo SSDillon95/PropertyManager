@@ -6,6 +6,8 @@ export interface SearchableSelectOption {
   value: string;
   label: string;
   sublabel?: string;
+  disabled?: boolean;
+  disabledReason?: string;
 }
 
 interface SearchableSelectProps {

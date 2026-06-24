@@ -32,6 +32,27 @@ export function investorMatchesProperty(
   );
 }
 
+export function getClaimedInvestorPropertyNames(
+  investors: Investor[],
+  excludeInvestorId?: number | null
+): Set<string> {
+  const claimed = new Set<string>();
+  for (const investor of investors) {
+    if (excludeInvestorId != null && investor.id === excludeInvestorId) continue;
+    for (const name of parseInvestorPropertyNames(investor.property_name)) {
+      claimed.add(normalizePropertyName(name));
+    }
+  }
+  return claimed;
+}
+
+export function isInvestorPropertyClaimed(
+  claimed: Set<string>,
+  propertyName: string
+): boolean {
+  return claimed.has(normalizePropertyName(propertyName));
+}
+
 export function findInvestorByProperty(
   investors: Investor[],
   propertyName: string

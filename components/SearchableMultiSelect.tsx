@@ -62,6 +62,8 @@ export default function SearchableMultiSelect({
   }, [open]);
 
   const toggleValue = (optionValue: string) => {
+    const option = options.find((item) => item.value === optionValue);
+    if (option?.disabled && !values.includes(optionValue)) return;
     if (values.includes(optionValue)) {
       onChange(values.filter((value) => value !== optionValue));
       return;
@@ -113,26 +115,43 @@ export default function SearchableMultiSelect({
             ) : (
               filteredOptions.map((option) => {
                 const checked = values.includes(option.value);
+                const isDisabled = Boolean(option.disabled) && !checked;
                 return (
                   <label
                     key={option.value}
-                    className={`flex items-start gap-2 px-3 py-2 text-sm hover:bg-zinc-700/70 cursor-pointer ${
-                      checked ? "bg-emerald-900/20" : ""
-                    }`}
+                    className={`flex items-start gap-2 px-3 py-2 text-sm ${
+                      isDisabled
+                        ? "opacity-50 cursor-not-allowed"
+                        : "hover:bg-zinc-700/70 cursor-pointer"
+                    } ${checked ? "bg-emerald-900/20" : ""}`}
                   >
                     <input
                       type="checkbox"
                       checked={checked}
+                      disabled={isDisabled}
                       onChange={() => toggleValue(option.value)}
-                      className="mt-0.5 rounded border-zinc-500"
+                      className="mt-0.5 rounded border-zinc-500 disabled:cursor-not-allowed"
                     />
                     <span className="min-w-0">
-                      <span className={checked ? "text-emerald-300" : "text-zinc-200"}>
+                      <span
+                        className={
+                          checked
+                            ? "text-emerald-300"
+                            : isDisabled
+                              ? "text-zinc-500"
+                              : "text-zinc-200"
+                        }
+                      >
                         {option.label}
                       </span>
                       {option.sublabel ? (
                         <span className="block text-xs text-zinc-400 truncate">
                           {option.sublabel}
+                        </span>
+                      ) : null}
+                      {isDisabled && option.disabledReason ? (
+                        <span className="block text-xs text-zinc-500 truncate">
+                          {option.disabledReason}
                         </span>
                       ) : null}
                     </span>
