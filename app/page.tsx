@@ -19,6 +19,7 @@ import {
   formatBusinessAddress,
   isCapitalRecord,
   nextCapitalId,
+  nextInvestorId,
   nextPayoutSequence,
 } from "@/lib/investor-records";
 import { normalizeEntryCode } from "@/lib/property-entry-code";
@@ -403,6 +404,20 @@ export default function PropertyManagerApp() {
     if (tab !== "investor_capital" || editingId != null) return "";
     return String(nextCapitalId(rows.map((row) => row as unknown as InvestorPayout)));
   }, [tab, editingId, rows]);
+  const nextInvestorIdPreview = useMemo(() => {
+    if (tab !== "investors" || editingId != null) return "";
+    const byInvestorId = new Map<string, Pick<Investor, "investor_id">>();
+    for (const investor of investors) {
+      byInvestorId.set(investor.investor_id, investor);
+    }
+    for (const row of rows) {
+      const investorId = row.investor_id;
+      if (investorId != null && investorId !== "") {
+        byInvestorId.set(String(investorId), { investor_id: String(investorId) });
+      }
+    }
+    return String(nextInvestorId([...byInvestorId.values()]));
+  }, [tab, editingId, investors, rows]);
 
   const propertyBusinessOptions = useMemo(() => {
     const names = new Set<string>();
@@ -506,15 +521,21 @@ export default function PropertyManagerApp() {
     if (json.success) setMaintenanceRows(json.data);
   }, []);
 
-  const loadInvestors = useCallback(async (): Promise<Investor[]> => {
+  const loadInvestors = useCallback(async (includeArchived = false): Promise<Investor[]> => {
     const res = await apiFetch("/api/investors");
     const json = await res.json();
-    if (json.success) {
-      const data = json.data as Investor[];
-      setInvestors(data);
-      return data;
+    if (!json.success) return [];
+    const active = json.data as Investor[];
+    if (!includeArchived) {
+      setInvestors(active);
+      return active;
     }
-    return [];
+    const archivedRes = await apiFetch("/api/investors?archived=1");
+    const archivedJson = await archivedRes.json();
+    const archived = archivedJson.success ? (archivedJson.data as Investor[]) : [];
+    const combined = [...active, ...archived];
+    setInvestors(combined);
+    return combined;
   }, []);
 
   const loadInvestorPayoutRows = useCallback(async () => {
@@ -583,7 +604,7 @@ export default function PropertyManagerApp() {
         await Promise.all([loadProperties(), loadTenants(), loadLeases()]);
       }
       if (activeTab === "investors") {
-        await loadProperties();
+        await Promise.all([loadProperties(), loadInvestors(true)]);
       }
       if (
         activeTab === "expenses" ||
@@ -1092,6 +1113,7 @@ export default function PropertyManagerApp() {
   const openEntryForm = () => {
     setEditingId(null);
     if (tab === "investor_capital" || tab === "properties") void loadInvestors();
+    if (tab === "investors") void loadInvestors(true);
     const nextForm = emptyForm(formColumns);
     if (tab === "investor_capital" || tab === "investor_payout") nextForm.days_in_year = "365";
 
@@ -1274,6 +1296,9 @@ export default function PropertyManagerApp() {
       if (tab === "properties" && c.key === "lien_holder") {
         return false;
       }
+      if (tab === "investors" && c.key === "investor_id") {
+        return false;
+      }
       return c.required && !form[c.key]?.trim();
     });
     if (missing) {
@@ -1293,6 +1318,9 @@ export default function PropertyManagerApp() {
       let payload: Record<string, unknown> = isInvestorRecordTab(tab)
         ? buildInvestorRecordPayload(tab, form, columns, editingId, rows)
         : payloadFromForm(form, columns);
+      if (tab === "investors" && !isEdit) {
+        payload.investor_id = form.investor_id?.trim() || nextInvestorIdPreview;
+      }
       if (tab === "users") {
         if (!isEdit && !form.password?.trim()) {
           showMessage("error", "Password is required for new users.");
@@ -1687,7 +1715,9 @@ export default function PropertyManagerApp() {
               ? nextPayoutIdPreview || form[col.key] || ""
               : tab === "investor_capital" && col.key === "payout_id" && !editingId
                 ? nextCapitalIdPreview || form[col.key] || ""
-                : (form[col.key] ?? "")
+                : tab === "investors" && col.key === "investor_id" && !editingId
+                  ? nextInvestorIdPreview || form[col.key] || ""
+                  : (form[col.key] ?? "")
           }
           readOnly={
             (tab === "rent_ledger" &&
@@ -1700,7 +1730,8 @@ export default function PropertyManagerApp() {
             (tab === "investor_payout" &&
               col.key === "property_name" &&
               Boolean(form.capital_id)) ||
-            (tab === "properties" && col.key === "lien_holder")
+            (tab === "properties" && col.key === "lien_holder") ||
+            (tab === "investors" && col.key === "investor_id")
           }
           onChange={(e) => {
             const nextValue = e.target.value;
@@ -1714,9 +1745,11 @@ export default function PropertyManagerApp() {
             col.key === "payout_id" &&
             !editingId
               ? "Auto-assigned"
-              : tab === "properties" && col.key === "lien_holder"
-                ? "Auto-filled from investor"
-                : undefined
+              : tab === "investors" && col.key === "investor_id" && !editingId
+                ? "Auto-assigned"
+                : tab === "properties" && col.key === "lien_holder"
+                  ? "Auto-filled from investor"
+                  : undefined
           }
           className={`form-field ${
             (tab === "rent_ledger" && col.key === "tenant_name" && form.property_name) ||
@@ -1727,7 +1760,8 @@ export default function PropertyManagerApp() {
               (col.key === "payout_id" ||
                 col.key === "business_address" ||
                 col.key === "property_address")) ||
-            (tab === "properties" && col.key === "lien_holder")
+            (tab === "properties" && col.key === "lien_holder") ||
+            (tab === "investors" && col.key === "investor_id")
               ? "text-zinc-400 cursor-not-allowed bg-zinc-700/50"
               : ""
           }`}
@@ -2191,6 +2225,11 @@ export default function PropertyManagerApp() {
                     <p className="text-xs text-zinc-400 mt-1">
                       Select a capital record first. Payout ID is assigned automatically (1, 2, 3…)
                       per capital.
+                    </p>
+                  )}
+                  {tab === "investors" && (
+                    <p className="text-xs text-zinc-400 mt-1">
+                      Investor ID is assigned automatically (1, 2, 3…) and cannot be changed.
                     </p>
                   )}
                   {tab === "users" && (

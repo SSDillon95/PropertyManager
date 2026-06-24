@@ -75,3 +75,12 @@ export function nextCapitalId(
     .filter((value) => Number.isFinite(value) && value > 0);
   return ids.length > 0 ? Math.max(...ids) + 1 : 1;
 }
+
+export function nextInvestorId(
+  investors: Array<Pick<Investor, "investor_id">>
+): number {
+  const ids = investors
+    .map((investor) => Number(investor.investor_id))
+    .filter((value) => Number.isFinite(value) && value > 0);
+  return ids.length > 0 ? Math.max(...ids) + 1 : 1;
+}
