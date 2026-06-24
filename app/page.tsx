@@ -696,6 +696,8 @@ export default function PropertyManagerApp() {
           business_name: "",
           business_address: "",
           investor_name: "",
+          loan_date: "",
+          amount_loaned: "",
         }));
         return;
       }
@@ -718,6 +720,9 @@ export default function PropertyManagerApp() {
           ? formatBusinessAddress(linkedBusiness)
           : prev.business_address,
         investor_name: linkedInvestor?.investor_name ?? "",
+        loan_date: property?.purchase_date ?? "",
+        amount_loaned:
+          property?.loan_amount != null ? formatCurrencyInput(property.loan_amount) : "",
       }));
       return;
     }
@@ -1133,11 +1138,24 @@ export default function PropertyManagerApp() {
         nextForm.investor_name = linkedInvestor.investor_name;
       }
     }
-    if (tab === "investor_capital" && nextForm.business_name && !nextForm.business_address) {
-      const business = businesses.find(
-        (item) => item.business_name === nextForm.business_name
-      );
-      if (business) nextForm.business_address = formatBusinessAddress(business);
+    if (tab === "investor_capital") {
+      if (nextForm.business_name && !nextForm.business_address) {
+        const business = businesses.find(
+          (item) => item.business_name === nextForm.business_name
+        );
+        if (business) nextForm.business_address = formatBusinessAddress(business);
+      }
+      if (nextForm.property_name) {
+        const property = properties.find(
+          (item) => item.property_name === nextForm.property_name
+        );
+        if (property?.purchase_date) {
+          nextForm.loan_date = property.purchase_date;
+        }
+        if (property?.loan_amount != null) {
+          nextForm.amount_loaned = formatCurrencyInput(property.loan_amount);
+        }
+      }
     }
     if (tab === "users") nextForm.password = "";
     setForm(nextForm);
@@ -1683,7 +1701,9 @@ export default function PropertyManagerApp() {
             (tab === "investor_payout" && col.key === "payout_id") ||
             (tab === "investor_capital" && col.key === "payout_id") ||
             (tab === "investor_capital" &&
-              (col.key === "business_address" || col.key === "property_address")) ||
+              (col.key === "business_address" ||
+                col.key === "property_address" ||
+                col.key === "amount_loaned")) ||
             (tab === "investor_payout" &&
               col.key === "property_name" &&
               Boolean(form.capital_id))
@@ -1709,7 +1729,8 @@ export default function PropertyManagerApp() {
             (tab === "investor_capital" &&
               (col.key === "payout_id" ||
                 col.key === "business_address" ||
-                col.key === "property_address"))
+                col.key === "property_address" ||
+                col.key === "amount_loaned"))
               ? "text-zinc-400 cursor-not-allowed bg-zinc-700/50"
               : ""
           }`}
@@ -1753,7 +1774,9 @@ export default function PropertyManagerApp() {
             (tab === "investor_payout" && col.key === "payout_id") ||
             (tab === "investor_capital" && col.key === "payout_id") ||
             (tab === "investor_capital" &&
-              (col.key === "business_address" || col.key === "property_address")) ||
+              (col.key === "business_address" ||
+                col.key === "property_address" ||
+                col.key === "loan_date")) ||
             (tab === "investor_payout" &&
               col.key === "property_name" &&
               Boolean(form.capital_id)) ||
@@ -1783,7 +1806,8 @@ export default function PropertyManagerApp() {
             (tab === "investor_capital" &&
               (col.key === "payout_id" ||
                 col.key === "business_address" ||
-                col.key === "property_address")) ||
+                col.key === "property_address" ||
+                col.key === "loan_date")) ||
             (tab === "investors" && col.key === "investor_id")
               ? "text-zinc-400 cursor-not-allowed bg-zinc-700/50"
               : ""
@@ -2238,9 +2262,9 @@ export default function PropertyManagerApp() {
                   )}
                   {tab === "investor_capital" && (
                     <p className="text-xs text-zinc-400 mt-1">
-                      Select a property for this capital investment. Business, investor, and
-                      addresses are auto-filled from that property. Capital ID is assigned
-                      automatically.
+                      Select a property for this capital investment. Business, investor, addresses,
+                      loan date (purchase date), and capital received (loan amount) are
+                      auto-filled. Capital ID is assigned automatically.
                     </p>
                   )}
                   {tab === "investor_payout" && (
