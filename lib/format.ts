@@ -40,6 +40,54 @@ export function sanitizeCurrencyTyping(value: string): string {
   return value.replace(/[^0-9.$,-]/g, "");
 }
 
+export const PERCENT_PLACEHOLDER = "0%";
+
+export function formatPercent(value: number | null | undefined): string {
+  if (value == null || Number.isNaN(value)) return "";
+  const pct = value * 100;
+  const text = Number.isInteger(pct) ? pct.toFixed(0) : pct.toFixed(2).replace(/\.?0+$/, "");
+  return `${text}%`;
+}
+
+export function parsePercentValue(value: string): number | null {
+  const trimmed = value.trim().replace(/%/g, "");
+  if (!trimmed) return null;
+  const normalized = trimmed.replace(/[^0-9.-]/g, "");
+  if (!normalized || normalized === "-" || normalized === "." || normalized === "-.") {
+    return null;
+  }
+  const num = Number(normalized);
+  if (!Number.isFinite(num)) return null;
+  return num / 100;
+}
+
+export function formatPercentInput(value: number | string | null | undefined): string {
+  if (value == null || value === "") return "";
+  if (typeof value === "number") return formatPercent(value);
+  const str = String(value).trim();
+  if (!str) return "";
+  if (str.includes("%")) {
+    const parsed = parsePercentValue(str);
+    return parsed == null ? "" : formatPercent(parsed);
+  }
+  const direct = Number(str);
+  if (!Number.isFinite(direct)) return "";
+  if (direct > 0 && direct <= 1) return formatPercent(direct);
+  return formatPercent(direct / 100);
+}
+
+export function normalizePercentInput(value: string): string {
+  const trimmed = value.trim();
+  if (!trimmed) return "";
+  const num = parsePercentValue(trimmed);
+  if (num == null || Number.isNaN(num)) return "";
+  return formatPercent(num);
+}
+
+export function sanitizePercentTyping(value: string): string {
+  return value.replace(/[^0-9.%\-]/g, "");
+}
+
 export function formatCellValue(
   value: unknown,
   type:
@@ -47,6 +95,7 @@ export function formatCellValue(
     | "number"
     | "date"
     | "currency"
+    | "percent"
     | "select"
     | "property"
     | "tenant"
@@ -56,6 +105,7 @@ export function formatCellValue(
 ): string {
   if (value == null || value === "") return "";
   if (type === "currency") return formatCurrency(Number(value));
+  if (type === "percent") return formatPercent(Number(value));
   if (type === "number") return String(value);
   return String(value);
 }

@@ -46,9 +46,14 @@ import {
   CURRENCY_PLACEHOLDER,
   formatCurrency,
   formatCurrencyInput,
+  formatPercentInput,
   normalizeCurrencyInput,
+  normalizePercentInput,
   parseCurrencyValue,
+  parsePercentValue,
+  PERCENT_PLACEHOLDER,
   sanitizeCurrencyTyping,
+  sanitizePercentTyping,
   todayIso,
 } from "@/lib/format";
 import { requestReportPdf } from "@/lib/pdf-client";
@@ -155,7 +160,9 @@ function emptyForm(columns: ColumnDef[]): Record<string, string> {
   const form: Record<string, string> = {};
   for (const col of columns) {
     if (col.type === "date") form[col.key] = todayIso();
-    else if (col.type === "number" || col.type === "currency") form[col.key] = "";
+    else if (col.type === "number" || col.type === "currency" || col.type === "percent") {
+      form[col.key] = "";
+    }
     else if (col.type === "select" && col.options?.length) form[col.key] = col.options[0];
     else form[col.key] = "";
   }
@@ -173,6 +180,8 @@ function rowToForm(
       form[col.key] = "";
     } else if (col.type === "currency") {
       form[col.key] = formatCurrencyInput(value as number | string);
+    } else if (col.type === "percent") {
+      form[col.key] = formatPercentInput(value as number | string);
     } else {
       form[col.key] = String(value);
     }
@@ -193,6 +202,8 @@ function payloadFromForm(
     }
     if (col.type === "currency") {
       payload[col.key] = parseCurrencyValue(raw);
+    } else if (col.type === "percent") {
+      payload[col.key] = parsePercentValue(raw);
     } else if (col.type === "number") {
       payload[col.key] = Number(raw);
     } else {
@@ -312,11 +323,11 @@ export default function PropertyManagerApp() {
       sell_estimate_date: form.sell_estimate_date || null,
       investor_name: form.investor_name || null,
       attorney: form.attorney || null,
-      amount_loaned: form.amount_loaned ? Number(form.amount_loaned) : null,
+      amount_loaned: form.amount_loaned ? parseCurrencyValue(form.amount_loaned) : null,
       annual_interest_rate: form.annual_interest_rate
-        ? Number(form.annual_interest_rate)
+        ? parsePercentValue(form.annual_interest_rate)
         : null,
-      kicker: form.kicker ? Number(form.kicker) : null,
+      kicker: form.kicker ? parseCurrencyValue(form.kicker) : null,
       days_in_year: form.days_in_year ? Number(form.days_in_year) : 365,
     };
   }, [tab, formOpen, form]);
@@ -1561,6 +1572,26 @@ export default function PropertyManagerApp() {
               ? "text-zinc-400 cursor-not-allowed bg-zinc-700/50"
               : ""
           }`}
+        />
+      ) : col.type === "percent" ? (
+        <input
+          type="text"
+          inputMode="decimal"
+          value={form[col.key] ?? ""}
+          onChange={(e) =>
+            setForm((prev) => ({
+              ...prev,
+              [col.key]: sanitizePercentTyping(e.target.value),
+            }))
+          }
+          onBlur={(e) =>
+            setForm((prev) => ({
+              ...prev,
+              [col.key]: normalizePercentInput(e.target.value),
+            }))
+          }
+          placeholder={PERCENT_PLACEHOLDER}
+          className="form-field"
         />
       ) : (
         <input

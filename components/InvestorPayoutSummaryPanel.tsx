@@ -122,7 +122,7 @@ export default function InvestorPayoutSummaryPanel({
       <div className="rounded-xl border border-zinc-600/60 bg-zinc-800/90 p-4">
         <h3 className="text-sm font-semibold text-emerald-300 mb-2">{title}</h3>
         <p className="text-sm text-zinc-400">
-          Enter capital received, 12-month rate (e.g. 0.12), loan date, and sell estimate to
+          Enter capital received, 12-month rate (e.g. 12%), loan date, and sell estimate to
           calculate payout totals.
         </p>
       </div>

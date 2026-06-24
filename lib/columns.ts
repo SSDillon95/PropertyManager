@@ -8,6 +8,7 @@ export interface ColumnDef {
     | "number"
     | "date"
     | "currency"
+    | "percent"
     | "select"
     | "property"
     | "tenant"
@@ -411,7 +412,7 @@ const INVESTOR_CAPITAL_COLUMN_DEFS: ColumnDef[] = [
   { key: "sell_estimate_date", label: "Sell Estimate", type: "date", width: "120px" },
   { key: "attorney", label: "Attorney", type: "text", width: "130px" },
   { key: "amount_loaned", label: "Capital Received", type: "currency", width: "120px" },
-  { key: "annual_interest_rate", label: "12-Mo Rate", type: "number", width: "100px" },
+  { key: "annual_interest_rate", label: "12-Mo Rate", type: "percent", width: "100px" },
   { key: "kicker", label: "Kicker", type: "currency", width: "100px" },
   { key: "days_in_year", label: "Days in Year", type: "number", width: "100px" },
   { key: "notes", label: "Notes", type: "text", width: "200px" },
