@@ -319,6 +319,21 @@ export default function PropertyManagerApp() {
     }
     return null;
   }, [tab]);
+  const formColumns = useMemo(() => {
+    if (propertyFormSections) {
+      return [
+        ...propertyFormSections.informationColumns,
+        ...propertyFormSections.financialColumns,
+      ];
+    }
+    if (investorFormSections) {
+      return [
+        ...investorFormSections.inputColumns,
+        ...investorFormSections.autoColumns,
+      ];
+    }
+    return columns;
+  }, [columns, propertyFormSections, investorFormSections]);
   const investorPayoutFormSummary = useMemo(() => {
     if (tab !== "investor_capital" || !formOpen) return null;
     return {
@@ -376,26 +391,6 @@ export default function PropertyManagerApp() {
     columns,
     capitalBusinessFilter,
   ]);
-  const capitalFormProperties = useMemo(() => {
-    if (tab !== "investor_capital" || !form.business_name?.trim()) return properties;
-    return properties.filter(
-      (property) => property.business_name === form.business_name
-    );
-  }, [tab, form.business_name, properties]);
-  const capitalLinkedInvestor = useMemo(() => {
-    if (tab !== "investor_capital" || !form.property_name?.trim()) return null;
-    return findInvestorByProperty(investors, form.property_name);
-  }, [tab, form.property_name, investors]);
-  const capitalFormInvestors = useMemo(() => {
-    const active = investors.filter((investor) => investor.status === "Active");
-    if (tab !== "investor_capital" || !form.property_name?.trim()) return active;
-    const linked = active.filter(
-      (investor) =>
-        investor.property_name?.trim().toLowerCase() ===
-        form.property_name.trim().toLowerCase()
-    );
-    return linked.length > 0 ? linked : active;
-  }, [tab, form.property_name, investors]);
   const businessFilterOptions = useMemo(
     () =>
       businesses
@@ -511,10 +506,15 @@ export default function PropertyManagerApp() {
     if (json.success) setMaintenanceRows(json.data);
   }, []);
 
-  const loadInvestors = useCallback(async () => {
+  const loadInvestors = useCallback(async (): Promise<Investor[]> => {
     const res = await apiFetch("/api/investors");
     const json = await res.json();
-    if (json.success) setInvestors(json.data);
+    if (json.success) {
+      const data = json.data as Investor[];
+      setInvestors(data);
+      return data;
+    }
+    return [];
   }, []);
 
   const loadInvestorPayoutRows = useCallback(async () => {
@@ -571,7 +571,7 @@ export default function PropertyManagerApp() {
         return;
       }
       if (activeTab === "properties") {
-        await loadBusinesses();
+        await Promise.all([loadBusinesses(), loadInvestors()]);
       }
       if (activeTab === "tenants") {
         await loadProperties();
@@ -663,6 +663,8 @@ export default function PropertyManagerApp() {
           ...prev,
           property_name: "",
           property_address: "",
+          business_name: "",
+          business_address: "",
           investor_name: "",
         }));
         return;
@@ -692,6 +694,33 @@ export default function PropertyManagerApp() {
     setForm((prev) => ({ ...prev, [fieldKey]: propertyName }));
   };
 
+  const handlePropertyInvestorSelect = (investorName: string) => {
+    if (tab !== "properties") return;
+    if (!investorName) {
+      setForm((prev) => ({
+        ...prev,
+        investor_name: "",
+        lien_holder: "",
+      }));
+      return;
+    }
+    setForm((prev) => ({
+      ...prev,
+      investor_name: investorName,
+      lien_holder: investorName,
+    }));
+  };
+
+  const applyPropertyInvestorFromProperty = (propertyName: string) => {
+    const linkedInvestor = findInvestorByProperty(investors, propertyName);
+    if (!linkedInvestor) return;
+    setForm((prev) => ({
+      ...prev,
+      investor_name: linkedInvestor.investor_name,
+      lien_holder: linkedInvestor.investor_name,
+    }));
+  };
+
   const applyCapitalBusinessSelection = (businessName: string) => {
     if (!businessName) {
       setForm((prev) => ({
@@ -716,20 +745,8 @@ export default function PropertyManagerApp() {
   };
 
   const handleBusinessSelect = (businessName: string) => {
-    if (tab !== "investor_capital") {
-      setForm((prev) => ({ ...prev, business_name: businessName }));
-      return;
-    }
-    const previousBusiness = form.business_name;
-    const hasSelectedProperty = Boolean(form.property_name?.trim());
-    const isBusinessChange = businessName !== previousBusiness;
-
-    if (hasSelectedProperty && isBusinessChange) {
-      setCapitalBusinessConfirm({ businessName });
-      return;
-    }
-
-    applyCapitalBusinessSelection(businessName);
+    if (tab === "investor_capital") return;
+    setForm((prev) => ({ ...prev, business_name: businessName }));
   };
 
   const confirmCapitalBusinessChange = () => {
@@ -1056,42 +1073,51 @@ export default function PropertyManagerApp() {
 
   useEffect(() => {
     if (!isViewOnlyTab(tab)) {
-      setForm(emptyForm(columns));
+      setForm(emptyForm(formColumns));
       setFormOpen(false);
       setEditingId(null);
     }
     if (tab !== "properties") {
       setPropertySearchQuery("");
     }
-  }, [tab, columns]);
+  }, [tab, formColumns]);
 
   const closeForm = () => {
     setFormOpen(false);
     setEditingId(null);
     setCapitalBusinessConfirm(null);
-    setForm(emptyForm(columns));
+    setForm(emptyForm(formColumns));
   };
 
   const openEntryForm = () => {
     setEditingId(null);
-    if (tab === "investor_capital") void loadInvestors();
-    const nextForm = emptyForm(columns);
+    if (tab === "investor_capital" || tab === "properties") void loadInvestors();
+    const nextForm = emptyForm(formColumns);
     if (tab === "investor_capital" || tab === "investor_payout") nextForm.days_in_year = "365";
-    if (tab === "investor_capital" && capitalBusinessFilter) {
-      const business = businesses.find(
-        (item) => item.business_name === capitalBusinessFilter
-      );
-      nextForm.business_name = capitalBusinessFilter;
-      nextForm.business_address = business ? formatBusinessAddress(business) : "";
-    }
+
     if (tab === "users") nextForm.password = "";
     setForm(nextForm);
     setFormOpen(true);
   };
 
-  const openEditForm = (row: Record<string, unknown>) => {
+  const openEditForm = async (row: Record<string, unknown>) => {
     setEditingId(Number(row.id));
     const nextForm = rowToForm(row, columns);
+    if (tab === "properties") {
+      const investorRows = investors.length > 0 ? investors : await loadInvestors();
+      const linkedInvestor = findInvestorByProperty(investorRows, nextForm.property_name);
+      if (linkedInvestor) {
+        nextForm.investor_name = linkedInvestor.investor_name;
+        nextForm.lien_holder = linkedInvestor.investor_name;
+      } else if (nextForm.lien_holder) {
+        const investorByName = investorRows.find(
+          (investor) => investor.investor_name === nextForm.lien_holder
+        );
+        if (investorByName) {
+          nextForm.investor_name = investorByName.investor_name;
+        }
+      }
+    }
     if (tab === "investor_capital" && nextForm.business_name && !nextForm.business_address) {
       const business = businesses.find(
         (item) => item.business_name === nextForm.business_name
@@ -1232,7 +1258,7 @@ export default function PropertyManagerApp() {
     e.preventDefault();
     if (isViewOnlyTab(tab)) return;
 
-    const missing = columns.find((c) => {
+    const missing = formColumns.find((c) => {
       if (
         tab === "investor_payout" &&
         (c.key === "payout_id" || c.key === "property_name" || c.key === "investor_name")
@@ -1243,6 +1269,9 @@ export default function PropertyManagerApp() {
         tab === "investor_capital" &&
         (c.key === "payout_id" || c.key === "business_address")
       ) {
+        return false;
+      }
+      if (tab === "properties" && c.key === "lien_holder") {
         return false;
       }
       return c.required && !form[c.key]?.trim();
@@ -1437,7 +1466,7 @@ export default function PropertyManagerApp() {
           <SearchableSelect
             value={form[col.key] ?? ""}
             onChange={(propertyName) => handlePropertySelect(propertyName, col.key)}
-            options={capitalFormProperties.map((property) => ({
+            options={properties.map((property) => ({
               value: property.property_name,
               label: property.property_name,
               sublabel: [property.address, property.city, property.state]
@@ -1445,13 +1474,11 @@ export default function PropertyManagerApp() {
                 .join(", ") || undefined,
             }))}
             placeholder={
-              !form.business_name
-                ? "Select business first..."
-                : capitalFormProperties.length
-                  ? "Select property..."
-                  : "No properties — add one in Properties tab"
+              properties.length
+                ? "Select property..."
+                : "No properties — add one in Properties tab"
             }
-            disabled={editingId != null || Boolean(form.property_name)}
+            disabled={editingId != null}
             searchPlaceholder="Search properties..."
             emptyMessage="No properties match your search"
           />
@@ -1514,26 +1541,30 @@ export default function PropertyManagerApp() {
       ) : col.type === "investor" ? (
         <select
           value={form[col.key] ?? ""}
-          onChange={(e) => setForm((prev) => ({ ...prev, [col.key]: e.target.value }))}
-          disabled={
-            tab === "investor_payout" ||
-            (tab === "investor_capital" && Boolean(capitalLinkedInvestor))
-          }
+          onChange={(e) => {
+            if (tab === "properties") {
+              handlePropertyInvestorSelect(e.target.value);
+              return;
+            }
+            setForm((prev) => ({ ...prev, [col.key]: e.target.value }));
+          }}
+          disabled={tab === "investor_payout" || tab === "investor_capital"}
           className={`form-select ${
-            tab === "investor_payout" ||
-            (tab === "investor_capital" && Boolean(capitalLinkedInvestor))
+            tab === "investor_payout" || tab === "investor_capital"
               ? "text-zinc-400 cursor-not-allowed bg-zinc-700/50"
               : ""
           }`}
         >
           <option value="">
-            {tab === "investor_capital" && form.property_name && !capitalLinkedInvestor
-              ? "No investor linked to this property"
-              : (tab === "investor_capital" ? capitalFormInvestors : investors).length
+            {tab === "investor_capital"
+              ? form.property_name
+                ? "No investor linked to this property"
+                : "Auto-filled from property"
+              : investors.length
                 ? "Select investor..."
                 : "No investors — add one on the Investor tab"}
           </option>
-          {(tab === "investor_capital" ? capitalFormInvestors : investors)
+          {investors
             .filter((investor) => investor.status === "Active")
             .map((investor) => (
               <option key={investor.id} value={investor.investor_name}>
@@ -1546,12 +1577,19 @@ export default function PropertyManagerApp() {
         <select
           value={form[col.key] ?? ""}
           onChange={(e) => handleBusinessSelect(e.target.value)}
-          className="form-select"
+          disabled={tab === "investor_capital"}
+          className={`form-select ${
+            tab === "investor_capital" ? "text-zinc-400 cursor-not-allowed bg-zinc-700/50" : ""
+          }`}
         >
           <option value="">
-            {businesses.length
-              ? "Select business..."
-              : "No businesses — add one on the Business tab"}
+            {tab === "investor_capital"
+              ? form.property_name
+                ? "No business linked to this property"
+                : "Auto-filled from property"
+              : businesses.length
+                ? "Select business..."
+                : "No businesses — add one on the Business tab"}
           </option>
           {businesses
             .filter((business) => business.status === "Active")
@@ -1662,15 +1700,24 @@ export default function PropertyManagerApp() {
               (col.key === "business_address" || col.key === "property_address")) ||
             (tab === "investor_payout" &&
               col.key === "property_name" &&
-              Boolean(form.capital_id))
+              Boolean(form.capital_id)) ||
+            (tab === "properties" && col.key === "lien_holder")
           }
-          onChange={(e) => setForm((prev) => ({ ...prev, [col.key]: e.target.value }))}
+          onChange={(e) => {
+            const nextValue = e.target.value;
+            setForm((prev) => ({ ...prev, [col.key]: nextValue }));
+            if (tab === "properties" && col.key === "property_name") {
+              applyPropertyInvestorFromProperty(nextValue);
+            }
+          }}
           placeholder={
             (tab === "investor_payout" || tab === "investor_capital") &&
             col.key === "payout_id" &&
             !editingId
               ? "Auto-assigned"
-              : undefined
+              : tab === "properties" && col.key === "lien_holder"
+                ? "Auto-filled from investor"
+                : undefined
           }
           className={`form-field ${
             (tab === "rent_ledger" && col.key === "tenant_name" && form.property_name) ||
@@ -1680,7 +1727,8 @@ export default function PropertyManagerApp() {
             (tab === "investor_capital" &&
               (col.key === "payout_id" ||
                 col.key === "business_address" ||
-                col.key === "property_address"))
+                col.key === "property_address")) ||
+            (tab === "properties" && col.key === "lien_holder")
               ? "text-zinc-400 cursor-not-allowed bg-zinc-700/50"
               : ""
           }`}
@@ -2128,15 +2176,16 @@ export default function PropertyManagerApp() {
                   )}
                   {tab === "properties" && (
                     <p className="text-xs text-zinc-400 mt-1">
-                      Assign each property to a business using the Business dropdown. Add
-                      businesses on the Business tab first.
+                      Assign each property to a business using the Business dropdown. Select an
+                      investor from the Investor tab to auto-fill Lien Holder. Add businesses and
+                      investors first if needed.
                     </p>
                   )}
                   {tab === "investor_capital" && (
                     <p className="text-xs text-zinc-400 mt-1">
-                      Select the business and property for this capital investment. Capital ID is
-                      assigned automatically. Property, addresses, and the investor tied to that
-                      property are populated from your selections.
+                      Select a property for this capital investment. Business, investor, and
+                      addresses are auto-filled from that property. Capital ID is assigned
+                      automatically.
                     </p>
                   )}
                   {tab === "investor_payout" && (

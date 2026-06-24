@@ -131,6 +131,7 @@ const PROPERTY_COLUMN_DEFS: ColumnDef[] = [
   { key: "legal_id", label: "Legal ID", type: "text", required: true, width: "100px" },
   { key: "business_name", label: "Business", type: "business", width: "160px" },
   { key: "property_name", label: "Property Name", type: "text", required: true, width: "160px" },
+  { key: "investor_name", label: "Investor", type: "investor", required: true, width: "150px" },
   { key: "lien_holder", label: "Lien Holder", type: "text", width: "150px" },
   { key: "account_number", label: "Account Number", type: "text", width: "130px" },
   { key: "address", label: "Address", type: "text", required: true, width: "180px" },
@@ -210,6 +211,30 @@ const PROPERTY_FINANCIAL_KEYS = [
   "monthly_rent",
 ] as const;
 
+const PROPERTY_FORM_INFORMATION_KEYS = [
+  "legal_id",
+  "business_name",
+  "property_name",
+  "address",
+  "city",
+  "state",
+  "zip",
+  "property_type",
+  "units",
+  "bedrooms",
+  "bathrooms",
+  "sq_ft",
+  "year_built",
+  "investor_name",
+  "lien_holder",
+  "account_number",
+  "insurance_carrier_name",
+  "insurance_policy_number",
+  "attorney",
+  "status",
+  "notes",
+] as const;
+
 export const PROPERTY_COLUMNS = orderColumnsByKeys(
   [...PROPERTY_INFORMATION_KEYS, ...PROPERTY_FINANCIAL_KEYS],
   PROPERTY_COLUMN_DEFS
@@ -220,7 +245,7 @@ export function getPropertyFormSections(): {
   financialColumns: ColumnDef[];
 } {
   return {
-    informationColumns: orderColumnsByKeys(PROPERTY_INFORMATION_KEYS, PROPERTY_COLUMN_DEFS),
+    informationColumns: orderColumnsByKeys(PROPERTY_FORM_INFORMATION_KEYS, PROPERTY_COLUMN_DEFS),
     financialColumns: orderColumnsByKeys(PROPERTY_FINANCIAL_KEYS, PROPERTY_COLUMN_DEFS),
   };
 }
@@ -420,8 +445,8 @@ const INVESTOR_CAPITAL_COLUMN_DEFS: ColumnDef[] = [
 
 const INVESTOR_CAPITAL_INPUT_KEYS = [
   "date",
-  "business_name",
   "property_name",
+  "business_name",
   "investor_name",
   "loan_date",
   "sell_estimate_date",
