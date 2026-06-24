@@ -26,6 +26,7 @@ interface SpreadsheetTableProps {
   entryCodeActionId?: number | null;
   stickyActions?: boolean;
   showActionsColumn?: boolean;
+  emptyMessage?: string;
 }
 
 const STICKY_LEFT_SHADOW = "shadow-[8px_0_12px_-6px_rgba(0,0,0,0.55)]";
@@ -60,6 +61,7 @@ export default function SpreadsheetTable({
   entryCodeActionId = null,
   stickyActions = false,
   showActionsColumn = true,
+  emptyMessage,
 }: SpreadsheetTableProps) {
   const actionsHeaderClass = `px-3 py-2 text-left font-semibold text-xs uppercase tracking-wide ${
     showPrintForm || showEdit || showEntryCode ? "min-w-[9.5rem]" : "min-w-[5.5rem]"
@@ -95,9 +97,10 @@ export default function SpreadsheetTable({
   if (rows.length === 0) {
     return (
       <div className="rounded-xl border border-zinc-600/60 bg-zinc-800/90 p-8 text-center text-zinc-400">
-        {archiveMode
-          ? "No archived rows. Archive a row from the active list to see it here."
-          : "No rows yet. Click Add Row to enter your first record."}
+        {emptyMessage ??
+          (archiveMode
+            ? "No archived rows. Archive a row from the active list to see it here."
+            : "No rows yet. Click Add Row to enter your first record.")}
       </div>
     );
   }

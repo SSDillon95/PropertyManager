@@ -10,6 +10,7 @@ import PropertyDetailPanel from "@/components/PropertyDetailPanel";
 import ReportsView from "@/components/ReportsView";
 import GmailSetupView from "@/components/GmailSetupView";
 import SmsSetupView from "@/components/SmsSetupView";
+import SearchableSelect from "@/components/SearchableSelect";
 import SpreadsheetTable from "@/components/SpreadsheetTable";
 import { loanSummaryFromPayout } from "@/lib/investor-payout-summary";
 import {
@@ -58,6 +59,7 @@ import {
   todayIso,
 } from "@/lib/format";
 import { requestReportPdf } from "@/lib/pdf-client";
+import { propertyRowMatchesSearch } from "@/lib/property-search";
 import { propertyProfitability } from "@/lib/profitability";
 import { rentDetailsForProperty, tenantDisplayName } from "@/lib/rent-ledger";
 import type {
@@ -235,6 +237,7 @@ export default function PropertyManagerApp() {
   const [propertyTypeFilter, setPropertyTypeFilter] = useState<string[]>([]);
   const [propertyStatusFilter, setPropertyStatusFilter] = useState<string[]>([]);
   const [propertyFilterOpen, setPropertyFilterOpen] = useState(false);
+  const [propertySearchQuery, setPropertySearchQuery] = useState("");
   const propertyFiltersRef = useRef<HTMLDivElement>(null);
   const [capitalBusinessFilter, setCapitalBusinessFilter] = useState("");
   const [capitalBusinessConfirm, setCapitalBusinessConfirm] = useState<{
@@ -353,6 +356,9 @@ export default function PropertyManagerApp() {
         ) {
           return false;
         }
+        if (!propertyRowMatchesSearch(row, propertySearchQuery, columns)) {
+          return false;
+        }
         return true;
       });
     }
@@ -366,6 +372,8 @@ export default function PropertyManagerApp() {
     propertyBusinessFilter,
     propertyTypeFilter,
     propertyStatusFilter,
+    propertySearchQuery,
+    columns,
     capitalBusinessFilter,
   ]);
   const capitalFormProperties = useMemo(() => {
@@ -1042,6 +1050,7 @@ export default function PropertyManagerApp() {
     setPropertyBusinessFilter([]);
     setPropertyTypeFilter([]);
     setPropertyStatusFilter([]);
+    setPropertySearchQuery("");
     setPropertyFilterOpen(false);
   };
 
@@ -1050,6 +1059,9 @@ export default function PropertyManagerApp() {
       setForm(emptyForm(columns));
       setFormOpen(false);
       setEditingId(null);
+    }
+    if (tab !== "properties") {
+      setPropertySearchQuery("");
     }
   }, [tab, columns]);
 
@@ -1421,35 +1433,51 @@ export default function PropertyManagerApp() {
         {col.required ? " *" : ""}
       </span>
       {col.type === "property" ? (
-        <select
-          value={form[col.key] ?? ""}
-          onChange={(e) => handlePropertySelect(e.target.value, col.key)}
-          disabled={
-            tab === "investor_payout" ||
-            (tab === "investor_capital" &&
-              (editingId != null || Boolean(form.property_name)))
-          }
-          className={`form-select ${
-            tab === "investor_payout" ||
-            (tab === "investor_capital" &&
-              (editingId != null || Boolean(form.property_name)))
-              ? "text-zinc-400 cursor-not-allowed bg-zinc-700/50"
-              : ""
-          }`}
-        >
-          <option value="">
-            {tab === "investor_capital" && !form.business_name
-              ? "Select business first..."
-              : (tab === "investor_capital" ? capitalFormProperties : properties).length
+        tab === "investor_capital" ? (
+          <SearchableSelect
+            value={form[col.key] ?? ""}
+            onChange={(propertyName) => handlePropertySelect(propertyName, col.key)}
+            options={capitalFormProperties.map((property) => ({
+              value: property.property_name,
+              label: property.property_name,
+              sublabel: [property.address, property.city, property.state]
+                .filter(Boolean)
+                .join(", ") || undefined,
+            }))}
+            placeholder={
+              !form.business_name
+                ? "Select business first..."
+                : capitalFormProperties.length
+                  ? "Select property..."
+                  : "No properties — add one in Properties tab"
+            }
+            disabled={editingId != null || Boolean(form.property_name)}
+            searchPlaceholder="Search properties..."
+            emptyMessage="No properties match your search"
+          />
+        ) : (
+          <select
+            value={form[col.key] ?? ""}
+            onChange={(e) => handlePropertySelect(e.target.value, col.key)}
+            disabled={tab === "investor_payout"}
+            className={`form-select ${
+              tab === "investor_payout"
+                ? "text-zinc-400 cursor-not-allowed bg-zinc-700/50"
+                : ""
+            }`}
+          >
+            <option value="">
+              {properties.length
                 ? "Select property..."
                 : "No properties — add one in Properties tab"}
-          </option>
-          {(tab === "investor_capital" ? capitalFormProperties : properties).map((property) => (
-            <option key={property.id} value={property.property_name}>
-              {property.property_name}
             </option>
-          ))}
-        </select>
+            {properties.map((property) => (
+              <option key={property.id} value={property.property_name}>
+                {property.property_name}
+              </option>
+            ))}
+          </select>
+        )
       ) : col.type === "tenant" ? (
         <select
           value={form[col.key] ?? ""}
@@ -2221,7 +2249,8 @@ export default function PropertyManagerApp() {
                   {((tab === "properties" &&
                     (propertyBusinessFilter.length > 0 ||
                       propertyTypeFilter.length > 0 ||
-                      propertyStatusFilter.length > 0)) ||
+                      propertyStatusFilter.length > 0 ||
+                      propertySearchQuery.trim().length > 0)) ||
                     (tab === "investor_capital" && capitalBusinessFilter)) &&
                   rows.length !== tableRows.length
                     ? ` of ${rows.length}`
@@ -2312,6 +2341,31 @@ export default function PropertyManagerApp() {
                   )}
                 </div>
               </div>
+              {tab === "properties" && (
+                <div className="mb-3">
+                  <label className="block">
+                    <span className="sr-only">Search properties</span>
+                    <div className="relative">
+                      <input
+                        type="search"
+                        value={propertySearchQuery}
+                        onChange={(event) => setPropertySearchQuery(event.target.value)}
+                        placeholder="Search all fields..."
+                        className="form-field pr-20"
+                      />
+                      {propertySearchQuery.trim().length > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => setPropertySearchQuery("")}
+                          className="absolute right-2 top-1/2 -translate-y-1/2 text-xs px-2 py-1 rounded border border-zinc-600 text-zinc-300 hover:bg-zinc-700/80"
+                        >
+                          Clear
+                        </button>
+                      )}
+                    </div>
+                  </label>
+                </div>
+              )}
               {tab === "properties" && expandedProperty && (
                 <PropertyDetailPanel
                   property={expandedProperty}
@@ -2325,6 +2379,13 @@ export default function PropertyManagerApp() {
               <SpreadsheetTable
                 columns={columns}
                 rows={tableRows}
+                emptyMessage={
+                  tab === "properties" && rows.length > 0
+                    ? propertySearchQuery.trim().length > 0
+                      ? "No properties match your search."
+                      : "No properties match the current filters."
+                    : undefined
+                }
                 archiveMode={showArchived}
                 onArchive={handleArchive}
                 onRestore={handleRestore}
