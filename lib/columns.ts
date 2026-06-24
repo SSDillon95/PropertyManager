@@ -226,7 +226,6 @@ const PROPERTY_FORM_INFORMATION_KEYS = [
   "sq_ft",
   "year_built",
   "investor_name",
-  "lien_holder",
   "account_number",
   "insurance_carrier_name",
   "insurance_policy_number",

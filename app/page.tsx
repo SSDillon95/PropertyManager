@@ -730,7 +730,6 @@ export default function PropertyManagerApp() {
       setForm((prev) => ({
         ...prev,
         investor_name: "",
-        lien_holder: "",
       }));
       return;
     }
@@ -738,7 +737,6 @@ export default function PropertyManagerApp() {
     setForm((prev) => ({
       ...prev,
       investor_name: linkedInvestor?.investor_name ?? "",
-      lien_holder: linkedInvestor?.investor_name ?? "",
     }));
   };
 
@@ -1133,14 +1131,6 @@ export default function PropertyManagerApp() {
       const linkedInvestor = findInvestorByProperty(investorRows, nextForm.property_name);
       if (linkedInvestor) {
         nextForm.investor_name = linkedInvestor.investor_name;
-        nextForm.lien_holder = linkedInvestor.investor_name;
-      } else if (nextForm.lien_holder) {
-        const investorByName = investorRows.find(
-          (investor) => investor.investor_name === nextForm.lien_holder
-        );
-        if (investorByName) {
-          nextForm.investor_name = investorByName.investor_name;
-        }
       }
     }
     if (tab === "investor_capital" && nextForm.business_name && !nextForm.business_address) {
@@ -1296,7 +1286,7 @@ export default function PropertyManagerApp() {
       ) {
         return false;
       }
-      if (tab === "properties" && (c.key === "lien_holder" || c.key === "investor_name")) {
+      if (tab === "properties" && c.key === "investor_name") {
         return false;
       }
       if (tab === "investors" && c.key === "investor_id") {
@@ -1323,6 +1313,12 @@ export default function PropertyManagerApp() {
         : payloadFromForm(form, columns);
       if (tab === "investors" && !isEdit) {
         payload.investor_id = form.investor_id?.trim() || nextInvestorIdPreview;
+      }
+      if (tab === "properties" && isEdit) {
+        const existing = rows.find((row) => Number(row.id) === editingId);
+        if (existing) {
+          payload.lien_holder = existing.lien_holder ?? null;
+        }
       }
       if (tab === "users") {
         if (!isEdit && !form.password?.trim()) {
@@ -1761,7 +1757,6 @@ export default function PropertyManagerApp() {
             (tab === "investor_payout" &&
               col.key === "property_name" &&
               Boolean(form.capital_id)) ||
-            (tab === "properties" && col.key === "lien_holder") ||
             (tab === "investors" && col.key === "investor_id")
           }
           onChange={(e) => {
@@ -1778,9 +1773,7 @@ export default function PropertyManagerApp() {
               ? "Auto-assigned"
               : tab === "investors" && col.key === "investor_id" && !editingId
                 ? "Auto-assigned"
-                : tab === "properties" && col.key === "lien_holder"
-                  ? "Auto-filled from investor"
-                  : undefined
+                : undefined
           }
           className={`form-field ${
             (tab === "rent_ledger" && col.key === "tenant_name" && form.property_name) ||
@@ -1791,7 +1784,6 @@ export default function PropertyManagerApp() {
               (col.key === "payout_id" ||
                 col.key === "business_address" ||
                 col.key === "property_address")) ||
-            (tab === "properties" && col.key === "lien_holder") ||
             (tab === "investors" && col.key === "investor_id")
               ? "text-zinc-400 cursor-not-allowed bg-zinc-700/50"
               : ""
@@ -2240,9 +2232,8 @@ export default function PropertyManagerApp() {
                   )}
                   {tab === "properties" && (
                     <p className="text-xs text-zinc-400 mt-1">
-                      Assign each property to a business using the Business dropdown. Investor and
-                      Lien Holder auto-fill from the investor linked to this property on the
-                      Investor tab.
+                      Assign each property to a business using the Business dropdown. Investor
+                      auto-fills from the investor linked to this property on the Investor tab.
                     </p>
                   )}
                   {tab === "investor_capital" && (
